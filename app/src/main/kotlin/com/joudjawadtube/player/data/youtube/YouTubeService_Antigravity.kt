@@ -1,0 +1,818 @@
+package com.joudjawadtube.player.data.youtube
+
+import com.joudjawadtube.player.data.local.SidecarSubtitle
+import com.joudjawadtube.player.data.local.YouTubeIdExtractor
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import org.json.JSONArray
+import org.json.JSONObject
+import java.io.BufferedReader
+import java.io.InputStreamReader
+import java.io.OutputStreamWriter
+import java.net.HttpURLConnection
+import java.net.URL
+import java.net.URLEncoder
+
+data class YouTubeVideoMetadata(
+    val videoId: String,
+    val title: String,
+    val author: String,
+    val durationMs: Long,
+    val thumbnailUrl: String,
+    val width: Int = 1920,
+    val height: Int = 1080
+)
+
+data class YouTubePlaylistMetadata(
+    val playlistId: String,
+    val title: String,
+    val author: String,
+    val thumbnailUrl: String,
+    val videos: List<YouTubeVideoMetadata>
+)
+
+data class ResolvedYouTubeStream(
+    val videoId: String,
+    val hlsManifestUrl: String? = null,
+    val progressiveUrl: String? = null,
+    val videoStreamUrl: String? = null,
+    val audioStreamUrl: String? = null,
+    val width: Int = 1920,
+    val height: Int = 1080,
+    val durationMs: Long = 0L,
+    val subtitles: List<SidecarSubtitle> = emptyList(),
+    val userAgent: String = "com.google.ios.youtubekids/9.40.0 (iPad14,1; U; CPU iOS 18_1_0 like Mac OS X;)"
+) {
+    val hasDirectStream: Boolean
+        get() = !hlsManifestUrl.isNullOrBlank() ||
+            !progressiveUrl.isNullOrBlank() ||
+            (!videoStreamUrl.isNullOrBlank() && !audioStreamUrl.isNullOrBlank())
+}
+
+sealed class ParsedYouTubeInput {
+    data class SingleVideo(val videoId: String, val originalUrl: String) : ParsedYouTubeInput()
+    data class Playlist(val playlistId: String, val initialVideoId: String?, val originalUrl: String) : ParsedYouTubeInput()
+    data class Invalid(val reason: String) : ParsedYouTubeInput()
+}
+
+object YouTubeService {
+
+    private val VIDEO_ID_REGEX = Regex("""(?:v=|youtu\.be/|shorts/|embed/|/v/)([a-zA-Z0-9_-]{11})""")
+    private val PLAYLIST_ID_REGEX = Regex("""[?&]list=([a-zA-Z0-9_-]+)""")
+    private val RAW_VIDEO_ID_REGEX = Regex("""^[a-zA-Z0-9_-]{11}$""")
+    private val RAW_PLAYLIST_ID_REGEX = Regex("""^(?:PL|UU|FL|OLAK5uy_|RD)[a-zA-Z0-9_-]{10,}$""")
+
+    fun parseInput(rawInput: String): ParsedYouTubeInput {
+        val text = rawInput.trim()
+        if (text.isBlank()) {
+            return ParsedYouTubeInput.Invalid("Please enter or paste a YouTube video or playlist link.")
+        }
+
+        // Extract first URL if shared text has title + URL
+        val urlToken = Regex("""https?://\S+""").find(text)?.value ?: text
+
+        val listMatch = PLAYLIST_ID_REGEX.find(urlToken)?.groupValues?.getOrNull(1)
+        val videoMatch = VIDEO_ID_REGEX.find(urlToken)?.groupValues?.getOrNull(1)
+
+        if (!listMatch.isNullOrBlank() && (urlToken.contains("/playlist") || videoMatch == null)) {
+            return ParsedYouTubeInput.Playlist(
+                playlistId = listMatch,
+                initialVideoId = videoMatch,
+                originalUrl = "https://www.youtube.com/playlist?list=$listMatch"
+            )
+        }
+
+        if (!listMatch.isNullOrBlank() && !videoMatch.isNullOrBlank()) {
+            // Link has both v= and list= -> import playlist and also identify initial video
+            return ParsedYouTubeInput.Playlist(
+                playlistId = listMatch,
+                initialVideoId = videoMatch,
+                originalUrl = "https://www.youtube.com/playlist?list=$listMatch"
+            )
+        }
+
+        if (!videoMatch.isNullOrBlank()) {
+            return ParsedYouTubeInput.SingleVideo(
+                videoId = videoMatch,
+                originalUrl = "https://www.youtube.com/watch?v=$videoMatch"
+            )
+        }
+
+        if (RAW_PLAYLIST_ID_REGEX.matches(urlToken)) {
+            return ParsedYouTubeInput.Playlist(
+                playlistId = urlToken,
+                initialVideoId = null,
+                originalUrl = "https://www.youtube.com/playlist?list=$urlToken"
+            )
+        }
+
+        if (RAW_VIDEO_ID_REGEX.matches(urlToken)) {
+            return ParsedYouTubeInput.SingleVideo(
+                videoId = urlToken,
+                originalUrl = "https://www.youtube.com/watch?v=$urlToken"
+            )
+        }
+
+        return ParsedYouTubeInput.Invalid("Could not recognize a valid YouTube video or playlist URL.")
+    }
+
+    /**
+     * Fetches single video metadata (title, channel, duration, HD thumbnail).
+     */
+    suspend fun fetchVideoDetails(videoId: String): YouTubeVideoMetadata? = withContext(Dispatchers.IO) {
+        // 1. Try InnerTube player for full duration & dimensions
+        val playerJson = callInnerTubePlayer(
+            videoId = videoId,
+            clientName = "WEB",
+            clientVersion = "2.20240726.00.00",
+            userAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+        )
+        val videoDetails = playerJson?.optJSONObject("videoDetails")
+        if (videoDetails != null) {
+            val title = videoDetails.optString("title").takeIf { it.isNotBlank() }
+            val author = videoDetails.optString("author").ifBlank { "YouTube" }
+            val lengthSec = videoDetails.optString("lengthSeconds").toLongOrNull() ?: 0L
+            if (!title.isNullOrBlank()) {
+                return@withContext YouTubeVideoMetadata(
+                    videoId = videoId,
+                    title = title,
+                    author = author,
+                    durationMs = lengthSec * 1000L,
+                    thumbnailUrl = YouTubeIdExtractor.buildYouTubeThumbnailUrl(videoId)
+                )
+            }
+        }
+
+        // 2. Fallback to YouTube oEmbed endpoint
+        runCatching {
+            val oembedUrl = "https://www.youtube.com/oembed?url=" +
+                URLEncoder.encode("https://www.youtube.com/watch?v=$videoId", "UTF-8") +
+                "&format=json"
+            val raw = httpGet(oembedUrl)
+            if (!raw.isNullOrBlank()) {
+                val obj = JSONObject(raw)
+                val title = obj.optString("title").ifBlank { "YouTube Video ($videoId)" }
+                val author = obj.optString("author_name").ifBlank { "YouTube" }
+                return@withContext YouTubeVideoMetadata(
+                    videoId = videoId,
+                    title = title,
+                    author = author,
+                    durationMs = 0L,
+                    thumbnailUrl = YouTubeIdExtractor.buildYouTubeThumbnailUrl(videoId)
+                )
+            }
+        }
+
+        YouTubeVideoMetadata(
+            videoId = videoId,
+            title = "YouTube Video ($videoId)",
+            author = "YouTube",
+            durationMs = 0L,
+            thumbnailUrl = YouTubeIdExtractor.buildYouTubeThumbnailUrl(videoId)
+        )
+    }
+
+    /**
+     * Fetches a full YouTube playlist and all its individual videos via InnerTube browse/next APIs.
+     * Supports modern lockupViewModel playlists, classic playlistVideoRenderer, and playlistPanelVideoRenderer.
+     */
+    suspend fun fetchPlaylist(playlistId: String): YouTubePlaylistMetadata? = withContext(Dispatchers.IO) {
+        val browseId = if (playlistId.startsWith("VL")) playlistId else "VL$playlistId"
+        val webBody = JSONObject().apply {
+            put("browseId", browseId)
+            put(
+                "context",
+                JSONObject().apply {
+                    put(
+                        "client",
+                        JSONObject().apply {
+                            put("clientName", "WEB")
+                            put("clientVersion", "2.20240726.00.00")
+                            put("hl", "en")
+                            put("gl", "US")
+                        }
+                    )
+                }
+            )
+        }
+
+        val responseStr = httpPostJson(
+            url = "https://www.youtube.com/youtubei/v1/browse?prettyPrint=false",
+            jsonBody = webBody.toString(),
+            userAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+        )
+
+        var playlistTitle: String? = null
+        var playlistAuthor: String? = null
+        val videos = mutableListOf<YouTubeVideoMetadata>()
+
+        if (!responseStr.isNullOrBlank()) {
+            runCatching {
+                val root = JSONObject(responseStr)
+                playlistTitle = extractPlaylistTitle(root)
+                playlistAuthor = extractPlaylistAuthor(root)
+                collectPlaylistVideosRecursive(
+                    node = root,
+                    defaultAuthor = playlistAuthor ?: "YouTube Playlist",
+                    sink = videos
+                )
+            }
+        }
+
+        // Fallback to /youtubei/v1/next (watch playlist panel) if browse returned no items
+        if (videos.isEmpty()) {
+            val nextBody = JSONObject().apply {
+                put("playlistId", playlistId)
+                put(
+                    "context",
+                    JSONObject().apply {
+                        put(
+                            "client",
+                            JSONObject().apply {
+                                put("clientName", "WEB")
+                                put("clientVersion", "2.20240726.00.00")
+                                put("hl", "en")
+                                put("gl", "US")
+                            }
+                        )
+                    }
+                )
+            }
+            val nextStr = httpPostJson(
+                url = "https://www.youtube.com/youtubei/v1/next?prettyPrint=false",
+                jsonBody = nextBody.toString(),
+                userAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+            )
+            if (!nextStr.isNullOrBlank()) {
+                runCatching {
+                    val nextRoot = JSONObject(nextStr)
+                    if (playlistTitle == null) playlistTitle = extractPlaylistTitle(nextRoot)
+                    if (playlistAuthor == null) playlistAuthor = extractPlaylistAuthor(nextRoot)
+                    collectPlaylistVideosRecursive(
+                        node = nextRoot,
+                        defaultAuthor = playlistAuthor ?: "YouTube Playlist",
+                        sink = videos
+                    )
+                }
+            }
+        }
+
+        val uniqueVideos = videos.distinctBy { it.videoId }
+        if (uniqueVideos.isEmpty()) return@withContext null
+
+        val finalTitle = playlistTitle ?: "YouTube Playlist ($playlistId)"
+        val finalAuthor = playlistAuthor ?: uniqueVideos.first().author.ifBlank { "YouTube Playlist" }
+        val thumb = uniqueVideos.firstOrNull()?.thumbnailUrl
+            ?: YouTubeIdExtractor.buildYouTubeThumbnailUrl(uniqueVideos.first().videoId)
+
+        YouTubePlaylistMetadata(
+            playlistId = playlistId,
+            title = finalTitle,
+            author = finalAuthor,
+            thumbnailUrl = thumb,
+            videos = uniqueVideos
+        )
+    }
+
+    /**
+     * Resolves direct playable video/audio/HLS streams for Media3 ExoPlayer.
+     * Prioritizes HLS (H.264 + AAC) and Android native H.264 streams that work for both Kids and general videos.
+     */
+    suspend fun resolveStreamForPlayback(videoId: String): ResolvedYouTubeStream = withContext(Dispatchers.IO) {
+        // Client 1: IOS_KIDS (returns 1080p H.264 + AAC HLS manifest m3u8 + adaptive formats for both Kids and general videos)
+        val iosKidsUa = "com.google.ios.youtubekids/9.40.0 (iPad14,1; U; CPU iOS 18_1_0 like Mac OS X;)"
+        val iosKidsJson = callInnerTubePlayer(
+            videoId = videoId,
+            clientName = "IOS_KIDS",
+            clientVersion = "9.40.0",
+            userAgent = iosKidsUa,
+            extraClientFields = mapOf(
+                "deviceMake" to "Apple",
+                "deviceModel" to "iPad14,1",
+                "osName" to "iOS",
+                "osVersion" to "18.1.0.22B83"
+            )
+        )
+        parseStreamingData(videoId, iosKidsJson, iosKidsUa)?.let { if (it.hasDirectStream) return@withContext it }
+
+        // Client 2: IOS 20.10.4 (returns HLS manifest m3u8 for general videos)
+        val iosUa = "com.google.ios.youtube/20.10.4 (iPhone16,2; U; CPU iOS 18_3_1 like Mac OS X;)"
+        val iosJson = callInnerTubePlayer(
+            videoId = videoId,
+            clientName = "IOS",
+            clientVersion = "20.10.4",
+            userAgent = iosUa,
+            extraClientFields = mapOf(
+                "deviceMake" to "Apple",
+                "deviceModel" to "iPhone16,2",
+                "osName" to "iOS",
+                "osVersion" to "18.3.1.22D72"
+            )
+        )
+        parseStreamingData(videoId, iosJson, iosUa)?.let { if (it.hasDirectStream) return@withContext it }
+
+        // Client 3: ANDROID 20.10.38 (returns progressive MP4 + 1080p H.264 adaptive formats for Kids and general videos)
+        val androidUa = "com.google.android.youtube/20.10.38 (Linux; U; Android 14) gzip"
+        val androidJson = callInnerTubePlayer(
+            videoId = videoId,
+            clientName = "ANDROID",
+            clientVersion = "20.10.38",
+            userAgent = androidUa,
+            extraClientFields = mapOf(
+                "androidSdkVersion" to 34,
+                "osName" to "Android",
+                "osVersion" to "14"
+            )
+        )
+        parseStreamingData(videoId, androidJson, androidUa)?.let { if (it.hasDirectStream) return@withContext it }
+
+        // Client 4: ANDROID_KIDS 9.40.00
+        val androidKidsUa = "com.google.android.apps.youtube.kids/9.40.00 (Linux; U; Android 14) gzip"
+        val androidKidsJson = callInnerTubePlayer(
+            videoId = videoId,
+            clientName = "ANDROID_KIDS",
+            clientVersion = "9.40.00",
+            userAgent = androidKidsUa,
+            extraClientFields = mapOf(
+                "androidSdkVersion" to 34,
+                "osName" to "Android",
+                "osVersion" to "14"
+            )
+        )
+        parseStreamingData(videoId, androidKidsJson, androidKidsUa)?.let { if (it.hasDirectStream) return@withContext it }
+
+        // Client 5: ANDROID_VR fallback
+        val vrUa = "com.google.android.apps.youtube.vr.oculus/1.60.19 (Linux; U; Android 12L; eureka-user Build/SQ3A.220605.009.A1) gzip"
+        val vrJson = callInnerTubePlayer(
+            videoId = videoId,
+            clientName = "ANDROID_VR",
+            clientVersion = "1.60.19",
+            userAgent = vrUa,
+            extraClientFields = mapOf(
+                "androidSdkVersion" to 32,
+                "osName" to "Android",
+                "osVersion" to "12L",
+                "deviceMake" to "Oculus",
+                "deviceModel" to "Quest 3"
+            )
+        )
+        parseStreamingData(videoId, vrJson, vrUa)?.let { if (it.hasDirectStream) return@withContext it }
+
+        ResolvedYouTubeStream(videoId = videoId)
+    }
+
+    /**
+     * Searches YouTube by video title to find the official YouTube videoId for thumbnail generation.
+     */
+    suspend fun searchVideoIdByTitle(rawTitle: String): String? = withContext(Dispatchers.IO) {
+        val cleanedQuery = cleanTitleForYouTubeSearch(rawTitle)
+        if (cleanedQuery.length < 3) return@withContext null
+
+        val body = JSONObject().apply {
+            put("query", cleanedQuery)
+            put(
+                "context",
+                JSONObject().apply {
+                    put(
+                        "client",
+                        JSONObject().apply {
+                            put("clientName", "WEB")
+                            put("clientVersion", "2.20240726.00.00")
+                        }
+                    )
+                }
+            )
+        }
+
+        val response = httpPostJson(
+            url = "https://www.youtube.com/youtubei/v1/search?prettyPrint=false",
+            jsonBody = body.toString(),
+            userAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+        ) ?: return@withContext null
+
+        // Fast regex scan for first videoRenderer -> videoId
+        val match = Regex(""""videoRenderer"\s*:\s*\{\s*"videoId"\s*:\s*"([a-zA-Z0-9_-]{11})"""").find(response)
+        match?.groupValues?.getOrNull(1)
+    }
+
+    fun cleanTitleForYouTubeSearch(rawTitle: String): String {
+        return rawTitle
+            .replace(Regex("""^\d{1,3}[\s._-]+"""), "") // Strip leading track numbers like "01-"
+            .replace('｜', ' ')
+            .replace('|', ' ')
+            .replace(Regex("""#\S+"""), "") // Strip hashtags
+            .replace(Regex("""\[[a-zA-Z0-9_-]{11}\]"""), "")
+            .replace(Regex("""\s+"""), " ")
+            .trim()
+    }
+
+    private fun parseStreamingData(
+        videoId: String,
+        playerJson: JSONObject?,
+        userAgent: String
+    ): ResolvedYouTubeStream? {
+        if (playerJson == null) return null
+        val streamingData = playerJson.optJSONObject("streamingData") ?: return null
+        val videoDetails = playerJson.optJSONObject("videoDetails")
+        val durationMs = (videoDetails?.optString("lengthSeconds")?.toLongOrNull() ?: 0L) * 1000L
+
+        val hlsUrl = streamingData.optString("hlsManifestUrl").takeIf { it.isNotBlank() }
+
+        var bestProgressiveUrl: String? = null
+        var bestProgressiveHeight = 0
+
+        val formats = streamingData.optJSONArray("formats")
+        if (formats != null) {
+            for (i in 0 until formats.length()) {
+                val fmt = formats.optJSONObject(i) ?: continue
+                val url = fmt.optString("url").takeIf { it.isNotBlank() } ?: continue
+                val h = fmt.optInt("height", 360)
+                if (h >= bestProgressiveHeight) {
+                    bestProgressiveHeight = h
+                    bestProgressiveUrl = url
+                }
+            }
+        }
+
+        var bestVideoUrl: String? = null
+        var bestVideoHeight = 0
+        var bestVideoWidth = 1920
+        var bestVideoIsAvc1 = false
+        var bestAudioUrl: String? = null
+        var bestAudioBitrate = 0
+
+        val adaptive = streamingData.optJSONArray("adaptiveFormats")
+        if (adaptive != null) {
+            for (i in 0 until adaptive.length()) {
+                val fmt = adaptive.optJSONObject(i) ?: continue
+                val url = fmt.optString("url").takeIf { it.isNotBlank() } ?: continue
+                val mime = fmt.optString("mimeType")
+                if (mime.startsWith("video/")) {
+                    // Skip AV1 (av01) as many TV hardware decoders fail or drop frames on AV1
+                    if (mime.contains("av01")) continue
+                    val h = fmt.optInt("height", 0)
+                    val w = fmt.optInt("width", 0)
+                    val isAvc1 = mime.contains("avc1")
+                    // Prefer H.264 (avc1) up to 1080p for guaranteed hardware decoding on all TVs
+                    val isBetter = when {
+                        bestVideoUrl == null -> h in 240..1080
+                        isAvc1 && !bestVideoIsAvc1 && h >= 480 && h <= 1080 -> true
+                        !isAvc1 && bestVideoIsAvc1 -> false
+                        else -> h in 360..1080 && (h > bestVideoHeight || (h == bestVideoHeight && isAvc1))
+                    }
+                    if (isBetter) {
+                        bestVideoHeight = h
+                        bestVideoWidth = if (w > 0) w else 1920
+                        bestVideoUrl = url
+                        bestVideoIsAvc1 = isAvc1
+                    }
+                } else if (mime.startsWith("audio/")) {
+                    val br = fmt.optInt("bitrate", 0)
+                    val isMp4a = mime.contains("mp4a") || mime.contains("audio/mp4")
+                    if (isMp4a && (bestAudioUrl == null || br > bestAudioBitrate)) {
+                        bestAudioBitrate = br
+                        bestAudioUrl = url
+                    } else if (bestAudioUrl == null) {
+                        bestAudioBitrate = br
+                        bestAudioUrl = url
+                    }
+                }
+            }
+        }
+
+        val subtitles = extractSubtitles(playerJson)
+
+        return ResolvedYouTubeStream(
+            videoId = videoId,
+            hlsManifestUrl = hlsUrl,
+            progressiveUrl = bestProgressiveUrl,
+            videoStreamUrl = bestVideoUrl,
+            audioStreamUrl = bestAudioUrl,
+            width = bestVideoWidth,
+            height = if (bestVideoHeight > 0) bestVideoHeight else bestProgressiveHeight.coerceAtLeast(720),
+            durationMs = durationMs,
+            subtitles = subtitles,
+            userAgent = userAgent
+        )
+    }
+
+    private fun extractSubtitles(playerJson: JSONObject): List<SidecarSubtitle> {
+        val list = mutableListOf<SidecarSubtitle>()
+        val captionTracks = playerJson
+            .optJSONObject("captions")
+            ?.optJSONObject("playerCaptionsTracklistRenderer")
+            ?.optJSONArray("captionTracks") ?: return emptyList()
+
+        for (i in 0 until captionTracks.length()) {
+            val track = captionTracks.optJSONObject(i) ?: continue
+            val baseUrl = track.optString("baseUrl").takeIf { it.isNotBlank() } ?: continue
+            val lang = track.optString("languageCode", "en")
+            val nameObj = track.optJSONObject("name")
+            val label = nameObj?.optString("simpleText")
+                ?: nameObj?.optJSONArray("runs")?.optJSONObject(0)?.optString("text")
+                ?: lang.uppercase()
+            val vttUrl = if (baseUrl.contains("fmt=")) baseUrl else "$baseUrl&fmt=vtt"
+            list.add(
+                SidecarSubtitle(
+                    uriOrPath = vttUrl,
+                    mimeType = "text/vtt",
+                    language = lang,
+                    label = label
+                )
+            )
+        }
+        return list
+    }
+
+    private fun callInnerTubePlayer(
+        videoId: String,
+        clientName: String,
+        clientVersion: String,
+        userAgent: String,
+        extraClientFields: Map<String, Any> = emptyMap()
+    ): JSONObject? {
+        val clientObj = JSONObject().apply {
+            put("clientName", clientName)
+            put("clientVersion", clientVersion)
+            put("hl", "en")
+            put("gl", "US")
+            for ((k, v) in extraClientFields) {
+                put(k, v)
+            }
+        }
+        val body = JSONObject().apply {
+            put("videoId", videoId)
+            put("context", JSONObject().put("client", clientObj))
+            put("contentCheckOk", true)
+            put("racyCheckOk", true)
+        }
+
+        val response = httpPostJson(
+            url = "https://www.youtube.com/youtubei/v1/player?prettyPrint=false",
+            jsonBody = body.toString(),
+            userAgent = userAgent
+        ) ?: return null
+
+        return runCatching { JSONObject(response) }.getOrNull()
+    }
+
+    private fun extractPlaylistTitle(root: JSONObject): String? {
+        root.optJSONObject("metadata")
+            ?.optJSONObject("playlistMetadataRenderer")
+            ?.optString("title")
+            ?.takeIf { it.isNotBlank() }
+            ?.let { return it }
+
+        root.optJSONObject("header")
+            ?.optJSONObject("pageHeaderRenderer")
+            ?.optString("pageTitle")
+            ?.takeIf { it.isNotBlank() }
+            ?.let { return it }
+
+        root.optJSONObject("header")
+            ?.optJSONObject("playlistHeaderRenderer")
+            ?.optJSONObject("title")
+            ?.optString("simpleText")
+            ?.takeIf { it.isNotBlank() }
+            ?.let { return it }
+
+        root.optJSONObject("contents")
+            ?.optJSONObject("twoColumnWatchNextResults")
+            ?.optJSONObject("playlist")
+            ?.optJSONObject("playlist")
+            ?.optString("title")
+            ?.takeIf { it.isNotBlank() }
+            ?.let { return it }
+
+        return null
+    }
+
+    private fun extractPlaylistAuthor(root: JSONObject): String? {
+        root.optJSONObject("header")
+            ?.optJSONObject("playlistHeaderRenderer")
+            ?.optJSONObject("ownerText")
+            ?.optJSONArray("runs")
+            ?.optJSONObject(0)
+            ?.optString("text")
+            ?.takeIf { it.isNotBlank() }
+            ?.let { return it }
+
+        val sidebarItems = root.optJSONObject("sidebar")
+            ?.optJSONObject("playlistSidebarRenderer")
+            ?.optJSONArray("items")
+        if (sidebarItems != null) {
+            for (i in 0 until sidebarItems.length()) {
+                val ownerText = sidebarItems.optJSONObject(i)
+                    ?.optJSONObject("playlistSidebarSecondaryInfoRenderer")
+                    ?.optJSONObject("videoOwner")
+                    ?.optJSONObject("videoOwnerRenderer")
+                    ?.optJSONObject("title")
+                    ?.optJSONArray("runs")
+                    ?.optJSONObject(0)
+                    ?.optString("text")
+                    ?.takeIf { it.isNotBlank() }
+                if (ownerText != null) return ownerText
+            }
+        }
+
+        return null
+    }
+
+    private fun collectPlaylistVideosRecursive(
+        node: Any?,
+        defaultAuthor: String,
+        sink: MutableList<YouTubeVideoMetadata>
+    ) {
+        when (node) {
+            is JSONObject -> {
+                // 1. Classic playlistVideoRenderer
+                val pvr = node.optJSONObject("playlistVideoRenderer")
+                if (pvr != null) {
+                    val vid = pvr.optString("videoId")
+                    if (vid.length == 11) {
+                        val title = pvr.optJSONObject("title")
+                            ?.optJSONArray("runs")
+                            ?.optJSONObject(0)
+                            ?.optString("text")
+                            ?: pvr.optJSONObject("title")?.optString("simpleText")
+                            ?: "Video $vid"
+                        val durationSec = pvr.optString("lengthSeconds").toLongOrNull()
+                        val durationMs = if (durationSec != null && durationSec > 0L) {
+                            durationSec * 1000L
+                        } else {
+                            parseDurationTextToMs(pvr.optJSONObject("lengthText")?.optString("simpleText"))
+                        }
+                        val author = pvr.optJSONObject("shortBylineText")
+                            ?.optJSONArray("runs")
+                            ?.optJSONObject(0)
+                            ?.optString("text")
+                            ?: defaultAuthor
+                        sink.add(
+                            YouTubeVideoMetadata(
+                                videoId = vid,
+                                title = title,
+                                author = author,
+                                durationMs = durationMs,
+                                thumbnailUrl = YouTubeIdExtractor.buildYouTubeThumbnailUrl(vid)
+                            )
+                        )
+                    }
+                }
+
+                // 2. Watch-next playlistPanelVideoRenderer
+                val ppvr = node.optJSONObject("playlistPanelVideoRenderer")
+                if (ppvr != null) {
+                    val vid = ppvr.optString("videoId")
+                    if (vid.length == 11) {
+                        val title = ppvr.optJSONObject("title")?.optString("simpleText")
+                            ?: ppvr.optJSONObject("title")?.optJSONArray("runs")?.optJSONObject(0)?.optString("text")
+                            ?: "Video $vid"
+                        val durationMs = parseDurationTextToMs(
+                            ppvr.optJSONObject("lengthText")?.optString("simpleText")
+                                ?: ppvr.optJSONObject("lengthText")?.optJSONArray("runs")?.optJSONObject(0)?.optString("text")
+                        )
+                        val author = ppvr.optJSONObject("shortBylineText")
+                            ?.optJSONArray("runs")
+                            ?.optJSONObject(0)
+                            ?.optString("text")
+                            ?: defaultAuthor
+                        sink.add(
+                            YouTubeVideoMetadata(
+                                videoId = vid,
+                                title = title,
+                                author = author,
+                                durationMs = durationMs,
+                                thumbnailUrl = YouTubeIdExtractor.buildYouTubeThumbnailUrl(vid)
+                            )
+                        )
+                    }
+                }
+
+                // 3. Modern YouTube 2025/2026 lockupViewModel (used by courses, music & modern playlists)
+                val lvm = node.optJSONObject("lockupViewModel")
+                if (lvm != null) {
+                    val vid = lvm.optString("contentId").takeIf { it.length == 11 }
+                        ?: lvm.optJSONObject("rendererContext")
+                            ?.optJSONObject("commandContext")
+                            ?.optJSONObject("onTap")
+                            ?.optJSONObject("innertubeCommand")
+                            ?.optJSONObject("watchEndpoint")
+                            ?.optString("videoId")
+                            ?.takeIf { it.length == 11 }
+                    if (vid != null) {
+                        val lockupMeta = lvm.optJSONObject("metadata")
+                            ?.optJSONObject("lockupMetadataViewModel")
+                        val title = lockupMeta?.optJSONObject("title")
+                            ?.optString("content")
+                            ?.takeIf { it.isNotBlank() }
+                            ?: "Video $vid"
+                        val author = lockupMeta?.optJSONObject("metadata")
+                            ?.optJSONObject("contentMetadataViewModel")
+                            ?.optJSONArray("metadataRows")
+                            ?.optJSONObject(0)
+                            ?.optJSONArray("metadataParts")
+                            ?.optJSONObject(0)
+                            ?.optJSONObject("text")
+                            ?.optString("content")
+                            ?.takeIf { it.isNotBlank() }
+                            ?: defaultAuthor
+                        val durationMs = extractDurationFromLockup(lvm)
+                        sink.add(
+                            YouTubeVideoMetadata(
+                                videoId = vid,
+                                title = title,
+                                author = author,
+                                durationMs = durationMs,
+                                thumbnailUrl = YouTubeIdExtractor.buildYouTubeThumbnailUrl(vid)
+                            )
+                        )
+                    }
+                }
+
+                val keys = node.keys()
+                while (keys.hasNext()) {
+                    val k = keys.next()
+                    if (k != "playlistVideoRenderer" && k != "playlistPanelVideoRenderer" && k != "lockupViewModel") {
+                        collectPlaylistVideosRecursive(node.opt(k), defaultAuthor, sink)
+                    }
+                }
+            }
+            is JSONArray -> {
+                for (i in 0 until node.length()) {
+                    collectPlaylistVideosRecursive(node.opt(i), defaultAuthor, sink)
+                }
+            }
+        }
+    }
+
+    private fun extractDurationFromLockup(lvm: JSONObject): Long {
+        val overlays = lvm.optJSONObject("contentImage")
+            ?.optJSONObject("thumbnailViewModel")
+            ?.optJSONArray("overlays") ?: return 0L
+        for (i in 0 until overlays.length()) {
+            val badges = overlays.optJSONObject(i)
+                ?.optJSONObject("thumbnailBottomOverlayViewModel")
+                ?.optJSONArray("badges") ?: continue
+            for (j in 0 until badges.length()) {
+                val text = badges.optJSONObject(j)
+                    ?.optJSONObject("thumbnailBadgeViewModel")
+                    ?.optString("text")
+                    ?.takeIf { it.isNotBlank() }
+                val parsed = parseDurationTextToMs(text)
+                if (parsed > 0L) return parsed
+            }
+        }
+        return 0L
+    }
+
+    private fun parseDurationTextToMs(raw: String?): Long {
+        if (raw.isNullOrBlank()) return 0L
+        val parts = raw.trim().split(":").mapNotNull { it.trim().toLongOrNull() }
+        val seconds = when (parts.size) {
+            3 -> parts[0] * 3600L + parts[1] * 60L + parts[2]
+            2 -> parts[0] * 60L + parts[1]
+            1 -> parts[0]
+            else -> 0L
+        }
+        return seconds * 1000L
+    }
+
+    private fun httpPostJson(url: String, jsonBody: String, userAgent: String): String? {
+        return runCatching {
+            val conn = (URL(url).openConnection() as HttpURLConnection).apply {
+                requestMethod = "POST"
+                connectTimeout = 8_000
+                readTimeout = 10_000
+                doOutput = true
+                setRequestProperty("Content-Type", "application/json")
+                setRequestProperty("Accept", "application/json")
+                setRequestProperty("User-Agent", userAgent)
+            }
+            OutputStreamWriter(conn.outputStream, Charsets.UTF_8).use { writer ->
+                writer.write(jsonBody)
+                writer.flush()
+            }
+            if (conn.responseCode in 200..299) {
+                BufferedReader(InputStreamReader(conn.inputStream, Charsets.UTF_8)).use { it.readText() }
+            } else {
+                null
+            }
+        }.getOrNull()
+    }
+
+    fun httpGet(url: String): String? {
+        return runCatching {
+            val conn = (URL(url).openConnection() as HttpURLConnection).apply {
+                requestMethod = "GET"
+                connectTimeout = 7_000
+                readTimeout = 8_000
+                setRequestProperty("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64)")
+            }
+            if (conn.responseCode in 200..299) {
+                BufferedReader(InputStreamReader(conn.inputStream, Charsets.UTF_8)).use { it.readText() }
+            } else {
+                null
+            }
+        }.getOrNull()
+    }
+}
