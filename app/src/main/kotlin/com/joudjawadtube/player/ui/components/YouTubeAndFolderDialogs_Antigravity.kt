@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -92,7 +93,8 @@ fun AddYouTubeLinkDialog(
     Dialog(onDismissRequest = { if (!isLoading) onDismiss() }) {
         Column(
             modifier = Modifier
-                .width(560.dp)
+                .fillMaxWidth(0.92f)
+                .widthIn(max = 560.dp)
                 .clip(RoundedCornerShape(16.dp))
                 .background(SmartTubeSidebarBg)
                 .border(1.5.dp, Color.White.copy(alpha = 0.14f), RoundedCornerShape(16.dp))
@@ -115,7 +117,7 @@ fun AddYouTubeLinkDialog(
                     )
                     Column {
                         Text(
-                            text = "Add YouTube Video or Playlist",
+                            text = "Add YouTube Video, Playlist, or Channel",
                             color = SmartTubeTextPrimary,
                             fontSize = 18.sp,
                             lineHeight = 22.sp,
@@ -124,7 +126,7 @@ fun AddYouTubeLinkDialog(
                             overflow = TextOverflow.Ellipsis
                         )
                         Text(
-                            text = "Paste a YouTube video or playlist link to play in-app and save for later",
+                            text = "Paste a YouTube video, playlist, or channel (@handle) link to play and save",
                             color = SmartTubeTextSecondary,
                             fontSize = 12.sp,
                             lineHeight = 16.sp,
@@ -316,7 +318,8 @@ fun TvFolderPickerDialog(
     Dialog(onDismissRequest = onDismiss) {
         Column(
             modifier = Modifier
-                .width(580.dp)
+                .fillMaxWidth(0.92f)
+                .widthIn(max = 580.dp)
                 .clip(RoundedCornerShape(16.dp))
                 .background(SmartTubeSidebarBg)
                 .border(1.5.dp, Color.White.copy(alpha = 0.14f), RoundedCornerShape(16.dp))
@@ -534,7 +537,8 @@ fun VideoOptionsDialog(
     Dialog(onDismissRequest = onDismiss) {
         Column(
             modifier = Modifier
-                .width(500.dp)
+                .fillMaxWidth(0.92f)
+                .widthIn(max = 500.dp)
                 .clip(RoundedCornerShape(16.dp))
                 .background(SmartTubeSidebarBg)
                 .border(1.5.dp, Color.White.copy(alpha = 0.14f), RoundedCornerShape(16.dp))

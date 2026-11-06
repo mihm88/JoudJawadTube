@@ -118,6 +118,7 @@ class CatalogViewModel(application: Application) : AndroidViewModel(application)
 
         val baseVideos = when (section) {
             SidebarSection.HOME -> snapshot.allVideos
+            SidebarSection.KIDS_PICKS -> emptyList()
             SidebarSection.YOUTUBE -> snapshot.youtubeVideos
             SidebarSection.CONTINUE_WATCHING -> snapshot.continueWatching
             SidebarSection.USB_DRIVES -> snapshot.usbVideos
@@ -149,6 +150,7 @@ class CatalogViewModel(application: Application) : AndroidViewModel(application)
                     if (matching.isEmpty()) null else row.copy(videos = matching)
                 }
             }
+            SidebarSection.KIDS_PICKS -> emptyList()
             SidebarSection.YOUTUBE -> {
                 val ytRows = mutableListOf<CategoryRow>()
                 val byPlaylist = queryFilteredVideos.filter { it.playlistId.isNotBlank() }.groupBy { it.playlistId }
@@ -505,6 +507,38 @@ class CatalogViewModel(application: Application) : AndroidViewModel(application)
     fun deleteYouTubePlaylist(playlistId: String) {
         viewModelScope.launch {
             repository.deleteYouTubePlaylist(playlistId)
+        }
+    }
+
+    fun deleteYouTubeChannel(channelId: String) {
+        viewModelScope.launch {
+            repository.deleteYouTubeChannel(channelId)
+        }
+    }
+
+    fun openOrImportKidsPlaylist(playlistId: String, playImmediately: Boolean = true) {
+        viewModelScope.launch {
+            _dialogState.value = _dialogState.value.copy(
+                isImportingYouTube = true,
+                youtubeStatusMessage = "Loading Kids Playlist..."
+            )
+            val res = repository.importYouTubeUrl("https://www.youtube.com/playlist?list=$playlistId")
+            _dialogState.value = _dialogState.value.copy(
+                isImportingYouTube = false,
+                youtubeStatusMessage = null
+            )
+            res.onSuccess { imported ->
+                if (playImmediately) {
+                    _activePlaybackSession.value = PlaybackSession(
+                        currentVideo = imported.firstVideo,
+                        playlist = imported.playlist
+                    )
+                }
+            }.onFailure { err ->
+                _dialogState.value = _dialogState.value.copy(
+                    youtubeErrorMessage = err.message ?: "Could not open kids playlist"
+                )
+            }
         }
     }
 

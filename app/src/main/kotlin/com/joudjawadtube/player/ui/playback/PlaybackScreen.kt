@@ -70,6 +70,10 @@ import com.joudjawadtube.player.ui.theme.SmartTubeRed
 import com.joudjawadtube.player.ui.theme.SmartTubeTextPrimary
 import com.joudjawadtube.player.ui.theme.SmartTubeTextSecondary
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.withTimeoutOrNull
 
 @SuppressLint("SetJavaScriptEnabled")
 @OptIn(UnstableApi::class)
@@ -88,20 +92,19 @@ fun PlaybackScreen(
     val seekDeltaMs = (settings.seekIntervalSec.coerceAtLeast(5)) * 1000L
 
     var isPlaying by remember { mutableStateOf(true) }
-    var currentPositionMs by remember(video.id) { mutableLongStateOf(video.positionMs) }
     var durationMs by remember(video.id) { mutableLongStateOf(video.durationMs.coerceAtLeast(1L)) }
     var videoStreamBadge by remember(video.id) { mutableStateOf<String?>(null) }
     var playbackSpeed by remember { mutableFloatStateOf(settings.defaultPlaybackSpeed) }
     var resizeMode by remember { mutableIntStateOf(settings.defaultResizeMode) }
 
     var isResolvingYouTube by remember(video.id) { mutableStateOf(video.isYoutube) }
-    var resolvedYouTubeStream by remember(video.id) { mutableStateOf< com.joudjawadtube.player.data.youtube.ResolvedYouTubeStream?>(null) }
+    var resolvedYouTubeStream by remember(video.id) { mutableStateOf<com.joudjawadtube.player.data.youtube.ResolvedYouTubeStream?>(null) }
     var triedFallbackStreamStage by remember(video.id) { mutableIntStateOf(0) }
     var useWebViewYouTubeFallback by remember(video.id) { mutableStateOf(false) }
     var webViewRef by remember { mutableStateOf<WebView?>(null) }
 
     var hudVisible by remember { mutableStateOf(true) }
-    var lastInteractionTick by remember { mutableIntStateOf(0) }
+    val interactionSignal = remember { MutableSharedFlow<Unit>(extraBufferCapacity = 1) }
     var activeDialogTab by remember { mutableStateOf<PlayerDialogTab?>(null) }
 
     val exoPlayer = remember(context) {
@@ -202,7 +205,6 @@ fun PlaybackScreen(
             }
 
             val mediaItem = MediaItem.Builder()
-                .setMediaId(video.id)
                 .setUri(Uri.parse(video.entity.uri))
                 .setSubtitleConfigurations(subtitleConfigs)
                 .build()
@@ -212,24 +214,93 @@ fun PlaybackScreen(
             exoPlayer.prepare()
             exoPlayer.playWhenReady = true
         }
-
-        hudVisible = true
-        lastInteractionTick++
     }
 
-    // Attach ExoPlayer listener
-    DisposableEffect(exoPlayer, video.videoKey) {
+    // Dynamic error recovery for YouTube streams
+    val tryNextYouTubeFallback: () -> Unit = remember(video.youtubeVideoId, resolvedYouTubeStream) {
+        {
+            val resolved = resolvedYouTubeStream
+            if (video.isYoutube && resolved != null) {
+                val httpFactory = DefaultHttpDataSource.Factory()
+                    .setUserAgent(resolved.userAgent)
+                    .setConnectTimeoutMs(10_000)
+                    .setReadTimeoutMs(12_000)
+                    .setAllowCrossProtocolRedirects(true)
+                val dataSourceFactory = DefaultDataSource.Factory(context, httpFactory)
+                val currentPos = exoPlayer.currentPosition.coerceAtLeast(0L)
+
+                when (triedFallbackStreamStage) {
+                    1 -> {
+                        if (!resolved.videoStreamUrl.isNullOrBlank() && !resolved.audioStreamUrl.isNullOrBlank()) {
+                            triedFallbackStreamStage = 2
+                            val vSource = ProgressiveMediaSource.Factory(dataSourceFactory)
+                                .createMediaSource(MediaItem.fromUri(resolved.videoStreamUrl))
+                            val aSource = ProgressiveMediaSource.Factory(dataSourceFactory)
+                                .createMediaSource(MediaItem.fromUri(resolved.audioStreamUrl))
+                            val merged = MergingMediaSource(vSource, aSource)
+                            exoPlayer.setMediaSource(merged, currentPos)
+                            exoPlayer.prepare()
+                            exoPlayer.playWhenReady = true
+                        } else if (!resolved.progressiveUrl.isNullOrBlank()) {
+                            triedFallbackStreamStage = 3
+                            val pSource = ProgressiveMediaSource.Factory(dataSourceFactory)
+                                .createMediaSource(MediaItem.fromUri(resolved.progressiveUrl))
+                            exoPlayer.setMediaSource(pSource, currentPos)
+                            exoPlayer.prepare()
+                            exoPlayer.playWhenReady = true
+                        } else {
+                            triedFallbackStreamStage = 4
+                            useWebViewYouTubeFallback = true
+                        }
+                    }
+                    2 -> {
+                        if (!resolved.progressiveUrl.isNullOrBlank()) {
+                            triedFallbackStreamStage = 3
+                            val pSource = ProgressiveMediaSource.Factory(dataSourceFactory)
+                                .createMediaSource(MediaItem.fromUri(resolved.progressiveUrl))
+                            exoPlayer.setMediaSource(pSource, currentPos)
+                            exoPlayer.prepare()
+                            exoPlayer.playWhenReady = true
+                        } else {
+                            triedFallbackStreamStage = 4
+                            useWebViewYouTubeFallback = true
+                        }
+                    }
+                    else -> {
+                        triedFallbackStreamStage = 4
+                        useWebViewYouTubeFallback = true
+                    }
+                }
+            }
+        }
+    }
+
+    // Attach ExoPlayer State and Error Listeners
+    DisposableEffect(exoPlayer) {
         val listener = object : Player.Listener {
             override fun onIsPlayingChanged(playing: Boolean) {
                 isPlaying = playing
             }
 
-            override fun onPlaybackStateChanged(playbackState: Int) {
-                if (exoPlayer.duration > 0L) {
-                    durationMs = exoPlayer.duration
+            override fun onVideoSizeChanged(videoSize: VideoSize) {
+                if (videoSize.width > 0 && videoSize.height > 0) {
+                    videoStreamBadge = when {
+                        videoSize.height >= 2160 || videoSize.width >= 3840 -> "4K"
+                        videoSize.height >= 1440 || videoSize.width >= 2560 -> "2K"
+                        videoSize.height >= 1080 || videoSize.width >= 1920 -> "1080p"
+                        videoSize.height >= 720 || videoSize.width >= 1280 -> "720p"
+                        else -> "${videoSize.height}p"
+                    }
                 }
-                if (playbackState == Player.STATE_ENDED) {
-                    onSaveProgress(video.videoKey, exoPlayer.duration, exoPlayer.duration)
+            }
+
+            override fun onPlaybackStateChanged(playbackState: Int) {
+                if (playbackState == Player.STATE_READY) {
+                    if (exoPlayer.duration > 0L) {
+                        durationMs = exoPlayer.duration
+                    }
+                } else if (playbackState == Player.STATE_ENDED) {
+                    onSaveProgress(video.videoKey, durationMs, durationMs)
                     if (settings.autoPlayNext && session.hasNext) {
                         onNextVideo()
                     }
@@ -237,66 +308,14 @@ fun PlaybackScreen(
             }
 
             override fun onPlayerError(error: PlaybackException) {
-                if (video.isYoutube && !useWebViewYouTubeFallback) {
-                    val resolved = resolvedYouTubeStream
-                    if (resolved != null) {
-                        val httpFactory = DefaultHttpDataSource.Factory()
-                            .setUserAgent(resolved.userAgent)
-                            .setAllowCrossProtocolRedirects(true)
-                        val dataSourceFactory = DefaultDataSource.Factory(context, httpFactory)
-                        val resumeAt = exoPlayer.currentPosition.coerceAtLeast(0L)
-
-                        if (triedFallbackStreamStage < 2 &&
-                            !resolved.videoStreamUrl.isNullOrBlank() &&
-                            !resolved.audioStreamUrl.isNullOrBlank()
-                        ) {
-                            triedFallbackStreamStage = 2
-                            val vSource = ProgressiveMediaSource.Factory(dataSourceFactory)
-                                .createMediaSource(MediaItem.fromUri(resolved.videoStreamUrl))
-                            val aSource = ProgressiveMediaSource.Factory(dataSourceFactory)
-                                .createMediaSource(MediaItem.fromUri(resolved.audioStreamUrl))
-                            exoPlayer.setMediaSource(MergingMediaSource(vSource, aSource), resumeAt)
-                            exoPlayer.prepare()
-                            exoPlayer.playWhenReady = true
-                            return
-                        }
-                        if (triedFallbackStreamStage < 3 && !resolved.progressiveUrl.isNullOrBlank()) {
-                            triedFallbackStreamStage = 3
-                            val pSource = ProgressiveMediaSource.Factory(dataSourceFactory)
-                                .createMediaSource(MediaItem.fromUri(resolved.progressiveUrl))
-                            exoPlayer.setMediaSource(pSource, resumeAt)
-                            exoPlayer.prepare()
-                            exoPlayer.playWhenReady = true
-                            return
-                        }
-                    }
-                    useWebViewYouTubeFallback = true
+                if (video.isYoutube) {
+                    tryNextYouTubeFallback()
                 }
-            }
-
-            override fun onVideoSizeChanged(videoSize: VideoSize) {
-                val format = exoPlayer.videoFormat
-                val codec = format?.sampleMimeType?.substringAfter('/')?.uppercase() ?: ""
-                val fps = if (format != null && format.frameRate > 0f) {
-                    "${format.frameRate.toInt()}fps"
-                } else ""
-                val dims = if (videoSize.width > 0 && videoSize.height > 0) {
-                    "${videoSize.width}x${videoSize.height}"
-                } else ""
-                videoStreamBadge = listOf(dims, codec, fps)
-                    .filter { it.isNotBlank() }
-                    .joinToString(" • ")
             }
         }
 
         exoPlayer.addListener(listener)
-
         onDispose {
-            if (!useWebViewYouTubeFallback) {
-                val pos = exoPlayer.currentPosition.coerceAtLeast(0L)
-                val dur = exoPlayer.duration.takeIf { it > 0L } ?: durationMs
-                onSaveProgress(video.videoKey, pos, dur)
-            }
             exoPlayer.removeListener(listener)
         }
     }
@@ -309,62 +328,59 @@ fun PlaybackScreen(
         }
     }
 
-    // Only poll UI position at 500ms while HUD is visible; save to DB every 20s to avoid background lag!
-    LaunchedEffect(exoPlayer, video.videoKey, hudVisible, useWebViewYouTubeFallback) {
+    // Periodic progress saving (runs every 20s in background, no UI recomposition)
+    LaunchedEffect(exoPlayer, video.videoKey, useWebViewYouTubeFallback) {
         if (useWebViewYouTubeFallback) return@LaunchedEffect
-        var tickCount = 0
-        while (true) {
-            if (hudVisible) {
-                currentPositionMs = exoPlayer.currentPosition.coerceAtLeast(0L)
-                if (exoPlayer.duration > 0L) {
-                    durationMs = exoPlayer.duration
-                }
-                tickCount++
-                if (tickCount % 40 == 0 && exoPlayer.isPlaying) {
-                    onSaveProgress(video.videoKey, currentPositionMs, durationMs)
-                }
-                delay(500L)
-            } else {
-                delay(20_000L)
-                if (exoPlayer.isPlaying) {
-                    val pos = exoPlayer.currentPosition.coerceAtLeast(0L)
-                    val dur = exoPlayer.duration.takeIf { it > 0L } ?: durationMs
-                    onSaveProgress(video.videoKey, pos, dur)
-                }
+        while (isActive) {
+            delay(20_000L)
+            if (exoPlayer.isPlaying) {
+                val pos = exoPlayer.currentPosition.coerceAtLeast(0L)
+                val dur = exoPlayer.duration.takeIf { it > 0L } ?: durationMs
+                onSaveProgress(video.videoKey, pos, dur)
             }
         }
     }
 
     // Auto-hide OSD HUD after 4.5 seconds of inactivity while video is playing
-    LaunchedEffect(hudVisible, lastInteractionTick, isPlaying, activeDialogTab) {
+    // Uses interactionSignal so moving focus between pills does NOT trigger recomposition
+    LaunchedEffect(hudVisible, isPlaying, activeDialogTab) {
         if (hudVisible && isPlaying && activeDialogTab == null) {
-            delay(4_500L)
-            hudVisible = false
+            while (isActive) {
+                val touched = withTimeoutOrNull(4_500L) {
+                    interactionSignal.first()
+                }
+                if (touched == null) {
+                    hudVisible = false
+                    break
+                }
+            }
         }
     }
 
-    val performTogglePlayPause: () -> Unit = {
-        if (useWebViewYouTubeFallback) {
-            isPlaying = !isPlaying
-            val js = if (isPlaying) "player.playVideo();" else "player.pauseVideo();"
-            webViewRef?.evaluateJavascript(js, null)
-        } else {
-            if (exoPlayer.isPlaying) exoPlayer.pause() else exoPlayer.play()
+    val performTogglePlayPause: () -> Unit = remember(useWebViewYouTubeFallback, isPlaying) {
+        {
+            if (useWebViewYouTubeFallback) {
+                isPlaying = !isPlaying
+                val js = if (isPlaying) "player.playVideo();" else "player.pauseVideo();"
+                webViewRef?.evaluateJavascript(js, null)
+            } else {
+                if (exoPlayer.isPlaying) exoPlayer.pause() else exoPlayer.play()
+            }
         }
     }
 
-    val performRelativeSeek: (Long) -> Unit = { deltaMs ->
-        if (useWebViewYouTubeFallback) {
-            val deltaSec = deltaMs / 1000
-            webViewRef?.evaluateJavascript(
-                "if(window.player && player.getCurrentTime){ player.seekTo(Math.max(0, player.getCurrentTime() + ($deltaSec)), true); }",
-                null
-            )
-            currentPositionMs = (currentPositionMs + deltaMs).coerceIn(0L, durationMs)
-        } else {
-            val target = (exoPlayer.currentPosition + deltaMs).coerceIn(0L, durationMs)
-            exoPlayer.seekTo(target)
-            currentPositionMs = target
+    val performRelativeSeek: (Long) -> Unit = remember(useWebViewYouTubeFallback, durationMs) {
+        { deltaMs ->
+            if (useWebViewYouTubeFallback) {
+                val deltaSec = deltaMs / 1000
+                webViewRef?.evaluateJavascript(
+                    "if(window.player && player.getCurrentTime){ player.seekTo(Math.max(0, player.getCurrentTime() + ($deltaSec)), true); }",
+                    null
+                )
+            } else {
+                val target = (exoPlayer.currentPosition + deltaMs).coerceIn(0L, durationMs)
+                exoPlayer.seekTo(target)
+            }
         }
     }
 
@@ -395,29 +411,30 @@ fun PlaybackScreen(
                         Key.MediaPlayPause, Key.Spacebar -> {
                             performTogglePlayPause()
                             hudVisible = true
-                            lastInteractionTick++
+                            interactionSignal.tryEmit(Unit)
                             true
                         }
                         Key.MediaFastForward -> {
                             performRelativeSeek(seekDeltaMs)
                             hudVisible = true
-                            lastInteractionTick++
+                            interactionSignal.tryEmit(Unit)
                             true
                         }
                         Key.MediaRewind -> {
                             performRelativeSeek(-seekDeltaMs)
                             hudVisible = true
-                            lastInteractionTick++
+                            interactionSignal.tryEmit(Unit)
                             true
                         }
                         Key.DirectionLeft -> {
                             if (!hudVisible) {
                                 performRelativeSeek(-seekDeltaMs)
                                 hudVisible = true
-                                lastInteractionTick++
+                                interactionSignal.tryEmit(Unit)
                                 true
                             } else {
-                                lastInteractionTick++
+                                // HUD is visible: let focus move smoothly, NO recomposition
+                                interactionSignal.tryEmit(Unit)
                                 false
                             }
                         }
@@ -425,32 +442,31 @@ fun PlaybackScreen(
                             if (!hudVisible) {
                                 performRelativeSeek(seekDeltaMs)
                                 hudVisible = true
-                                lastInteractionTick++
+                                interactionSignal.tryEmit(Unit)
                                 true
                             } else {
-                                lastInteractionTick++
+                                // HUD is visible: let focus move smoothly, NO recomposition
+                                interactionSignal.tryEmit(Unit)
                                 false
                             }
                         }
                         Key.DirectionUp, Key.DirectionDown -> {
                             if (!hudVisible) {
-                                currentPositionMs = exoPlayer.currentPosition.coerceAtLeast(0L)
                                 hudVisible = true
-                                lastInteractionTick++
+                                interactionSignal.tryEmit(Unit)
                                 true
                             } else {
-                                lastInteractionTick++
+                                interactionSignal.tryEmit(Unit)
                                 false
                             }
                         }
                         Key.DirectionCenter, Key.Enter -> {
                             if (!hudVisible) {
-                                currentPositionMs = exoPlayer.currentPosition.coerceAtLeast(0L)
                                 hudVisible = true
-                                lastInteractionTick++
+                                interactionSignal.tryEmit(Unit)
                                 true
                             } else {
-                                lastInteractionTick++
+                                interactionSignal.tryEmit(Unit)
                                 false
                             }
                         }
@@ -464,11 +480,8 @@ fun PlaybackScreen(
                 interactionSource = remember { MutableInteractionSource() },
                 indication = null
             ) {
-                if (!hudVisible && !useWebViewYouTubeFallback) {
-                    currentPositionMs = exoPlayer.currentPosition.coerceAtLeast(0L)
-                }
                 hudVisible = !hudVisible
-                lastInteractionTick++
+                interactionSignal.tryEmit(Unit)
             }
     ) {
         if (useWebViewYouTubeFallback && video.youtubeVideoId.isNotBlank()) {
@@ -554,7 +567,7 @@ fun PlaybackScreen(
             visible = hudVisible,
             video = video,
             isPlaying = isPlaying,
-            currentPositionMs = currentPositionMs,
+            positionProvider = { if (useWebViewYouTubeFallback) 0L else exoPlayer.currentPosition },
             durationMs = durationMs,
             seekIntervalSec = settings.seekIntervalSec,
             videoStreamBadge = videoStreamBadge,
@@ -573,7 +586,6 @@ fun PlaybackScreen(
                 } else {
                     exoPlayer.seekTo(position)
                 }
-                currentPositionMs = position
             },
             onSeekRelative = performRelativeSeek,
             onPreviousVideo = onPreviousVideo,
@@ -596,7 +608,7 @@ fun PlaybackScreen(
                 onBack()
             },
             onUserInteraction = {
-                lastInteractionTick++
+                interactionSignal.tryEmit(Unit)
             }
         )
 
@@ -615,7 +627,7 @@ fun PlaybackScreen(
                 },
                 onDismiss = {
                     activeDialogTab = null
-                    lastInteractionTick++
+                    interactionSignal.tryEmit(Unit)
                 }
             )
         }

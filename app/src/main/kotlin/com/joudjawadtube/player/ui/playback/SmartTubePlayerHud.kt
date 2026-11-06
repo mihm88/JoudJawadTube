@@ -6,6 +6,8 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -17,6 +19,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -42,6 +45,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -65,6 +69,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.joudjawadtube.player.data.local.FormatUtils
 import com.joudjawadtube.player.data.local.VideoItem
+import com.joudjawadtube.player.ui.components.LocalWindowLayoutInfo
 import com.joudjawadtube.player.ui.theme.SmartTubeCardBg
 import com.joudjawadtube.player.ui.theme.SmartTubeCardFocusedBg
 import com.joudjawadtube.player.ui.theme.SmartTubeFocusBorder
@@ -73,13 +78,15 @@ import com.joudjawadtube.player.ui.theme.SmartTubeRed
 import com.joudjawadtube.player.ui.theme.SmartTubeTextPrimary
 import com.joudjawadtube.player.ui.theme.SmartTubeTextSecondary
 import com.joudjawadtube.player.ui.theme.SmartTubeUsbCyan
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 
 @Composable
 fun SmartTubePlayerHud(
     visible: Boolean,
     video: VideoItem,
     isPlaying: Boolean,
-    currentPositionMs: Long,
+    positionProvider: () -> Long,
     durationMs: Long,
     seekIntervalSec: Int = 10,
     videoStreamBadge: String?,
@@ -102,6 +109,7 @@ fun SmartTubePlayerHud(
 ) {
     val playPauseFocusRequester = remember { FocusRequester() }
     val seekStepMs = (seekIntervalSec.coerceAtLeast(5)) * 1000L
+    val layoutInfo = LocalWindowLayoutInfo.current
 
     LaunchedEffect(visible) {
         if (visible) {
@@ -144,15 +152,16 @@ fun SmartTubePlayerHud(
                     HudControlPill(
                         icon = Icons.AutoMirrored.Filled.ArrowBack,
                         label = "Back",
-                        onClick = onBack
+                        onClick = onBack,
+                        onUserInteraction = onUserInteraction
                     )
                     Spacer(modifier = Modifier.width(14.dp))
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
                             text = video.title,
                             color = SmartTubeTextPrimary,
-                            fontSize = 18.sp,
-                            lineHeight = 23.sp,
+                            fontSize = if (layoutInfo.isCompact) 15.sp else 18.sp,
+                            lineHeight = if (layoutInfo.isCompact) 19.sp else 23.sp,
                             fontWeight = FontWeight.ExtraBold,
                             maxLines = 1,
                             softWrap = false,
@@ -251,81 +260,25 @@ fun SmartTubePlayerHud(
                     .align(Alignment.BottomCenter)
                     .padding(horizontal = 24.dp, vertical = 20.dp)
             ) {
-                val safeDuration = durationMs.coerceAtLeast(1L)
-                val progressFraction = (currentPositionMs.toFloat() / safeDuration.toFloat()).coerceIn(0f, 1f)
-                var seekbarFocused by remember { mutableStateOf(false) }
+                // Isolated Timeline Bar (recomposes at 500ms without recomposing outer HUD)
+                PlayerTimelineBar(
+                    positionProvider = positionProvider,
+                    durationMs = durationMs,
+                    seekStepMs = seekStepMs,
+                    onSeekTo = onSeekTo,
+                    onSeekRelative = onSeekRelative,
+                    onUserInteraction = onUserInteraction
+                )
 
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    Text(
-                        text = FormatUtils.formatDuration(currentPositionMs),
-                        color = SmartTubeTextPrimary,
-                        fontSize = 12.sp,
-                        lineHeight = 15.sp,
-                        fontWeight = FontWeight.Bold,
-                        maxLines = 1,
-                        softWrap = false
-                    )
+                Spacer(modifier = Modifier.height(10.dp))
 
-                    Slider(
-                        value = progressFraction,
-                        onValueChange = { frac ->
-                            onUserInteraction()
-                            onSeekTo((frac * safeDuration).toLong())
-                        },
-                        colors = SliderDefaults.colors(
-                            thumbColor = if (seekbarFocused) Color.White else SmartTubeRed,
-                            activeTrackColor = SmartTubeRed,
-                            inactiveTrackColor = Color.White.copy(alpha = 0.28f)
-                        ),
-                        modifier = Modifier
-                            .weight(1f)
-                            .onFocusChanged { seekbarFocused = it.isFocused || it.hasFocus }
-                            .onPreviewKeyEvent { event ->
-                                if (event.type == KeyEventType.KeyDown) {
-                                    when (event.key) {
-                                        Key.DirectionLeft -> {
-                                            onUserInteraction()
-                                            onSeekRelative(-seekStepMs)
-                                            true
-                                        }
-                                        Key.DirectionRight -> {
-                                            onUserInteraction()
-                                            onSeekRelative(seekStepMs)
-                                            true
-                                        }
-                                        else -> false
-                                    }
-                                } else {
-                                    false
-                                }
-                            }
-                    )
-
-                    Text(
-                        text = FormatUtils.formatDuration(durationMs),
-                        color = SmartTubeTextSecondary,
-                        fontSize = 12.sp,
-                        lineHeight = 15.sp,
-                        fontWeight = FontWeight.Bold,
-                        maxLines = 1,
-                        softWrap = false
-                    )
-                }
-
-                Spacer(modifier = Modifier.height(6.dp))
-
-                // Bottom Control Pill Bar (Single focus per button, single-line non-wrapping text)
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    // Left cluster: Transport controls
+                // Bottom Control Pill Bar
+                if (layoutInfo.isCompact) {
+                    // Mobile / narrow layout: two compact rows or horizontally scrollable
                     Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .horizontalScroll(rememberScrollState()),
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
@@ -333,104 +286,165 @@ fun SmartTubePlayerHud(
                             icon = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
                             label = if (isPlaying) "Pause" else "Play",
                             isPrimary = true,
-                            onClick = {
-                                onUserInteraction()
-                                onPlayPauseToggle()
-                            },
+                            onClick = onPlayPauseToggle,
+                            onUserInteraction = onUserInteraction,
                             modifier = Modifier.focusRequester(playPauseFocusRequester)
                         )
-
                         HudControlPill(
                             icon = Icons.Default.Replay10,
                             label = "-${seekIntervalSec}s",
-                            onClick = {
-                                onUserInteraction()
-                                onSeekRelative(-seekStepMs)
-                            }
+                            onClick = { onSeekRelative(-seekStepMs) },
+                            onUserInteraction = onUserInteraction
                         )
-
                         HudControlPill(
                             icon = Icons.Default.Forward10,
                             label = "+${seekIntervalSec}s",
-                            onClick = {
-                                onUserInteraction()
-                                onSeekRelative(seekStepMs)
-                            }
+                            onClick = { onSeekRelative(seekStepMs) },
+                            onUserInteraction = onUserInteraction
                         )
-
                         if (hasPrevious) {
                             HudControlPill(
                                 icon = Icons.Default.SkipPrevious,
                                 label = "Prev",
-                                onClick = {
-                                    onUserInteraction()
-                                    onPreviousVideo()
-                                }
+                                onClick = onPreviousVideo,
+                                onUserInteraction = onUserInteraction
                             )
                         }
-
                         if (hasNext) {
                             HudControlPill(
                                 icon = Icons.Default.SkipNext,
                                 label = "Next",
-                                onClick = {
-                                    onUserInteraction()
-                                    onNextVideo()
-                                }
+                                onClick = onNextVideo,
+                                onUserInteraction = onUserInteraction
                             )
                         }
-                    }
-
-                    // Right cluster: Subtitles (CC), Audio Tracks, Speed, Aspect Ratio, Favorite
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
                         HudControlPill(
                             icon = Icons.Default.ClosedCaption,
                             label = "CC",
-                            onClick = {
-                                onUserInteraction()
-                                onOpenSubtitles()
-                            }
+                            onClick = onOpenSubtitles,
+                            onUserInteraction = onUserInteraction
                         )
-
                         HudControlPill(
                             icon = Icons.Default.Audiotrack,
                             label = "Audio",
-                            onClick = {
-                                onUserInteraction()
-                                onOpenAudioTracks()
-                            }
+                            onClick = onOpenAudioTracks,
+                            onUserInteraction = onUserInteraction
                         )
-
                         HudControlPill(
                             icon = Icons.Default.Speed,
                             label = "${playbackSpeed}x",
-                            onClick = {
-                                onUserInteraction()
-                                onOpenSpeedDialog()
-                            }
+                            onClick = onOpenSpeedDialog,
+                            onUserInteraction = onUserInteraction
                         )
-
                         HudControlPill(
                             icon = Icons.Default.AspectRatio,
                             label = resizeModeLabel,
-                            onClick = {
-                                onUserInteraction()
-                                onCycleResizeMode()
-                            }
+                            onClick = onCycleResizeMode,
+                            onUserInteraction = onUserInteraction
                         )
-
                         HudControlPill(
                             icon = if (video.isFavorite) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
                             label = if (video.isFavorite) "Saved" else "Favorite",
                             iconTint = if (video.isFavorite) SmartTubeRed else Color.White,
-                            onClick = {
-                                onUserInteraction()
-                                onToggleFavorite()
-                            }
+                            onClick = onToggleFavorite,
+                            onUserInteraction = onUserInteraction
                         )
+                    }
+                } else {
+                    // Standard TV & Tablet wide layout
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        // Left cluster: Transport controls
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            HudControlPill(
+                                icon = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
+                                label = if (isPlaying) "Pause" else "Play",
+                                isPrimary = true,
+                                onClick = onPlayPauseToggle,
+                                onUserInteraction = onUserInteraction,
+                                modifier = Modifier.focusRequester(playPauseFocusRequester)
+                            )
+
+                            HudControlPill(
+                                icon = Icons.Default.Replay10,
+                                label = "-${seekIntervalSec}s",
+                                onClick = { onSeekRelative(-seekStepMs) },
+                                onUserInteraction = onUserInteraction
+                            )
+
+                            HudControlPill(
+                                icon = Icons.Default.Forward10,
+                                label = "+${seekIntervalSec}s",
+                                onClick = { onSeekRelative(seekStepMs) },
+                                onUserInteraction = onUserInteraction
+                            )
+
+                            if (hasPrevious) {
+                                HudControlPill(
+                                    icon = Icons.Default.SkipPrevious,
+                                    label = "Prev",
+                                    onClick = onPreviousVideo,
+                                    onUserInteraction = onUserInteraction
+                                )
+                            }
+
+                            if (hasNext) {
+                                HudControlPill(
+                                    icon = Icons.Default.SkipNext,
+                                    label = "Next",
+                                    onClick = onNextVideo,
+                                    onUserInteraction = onUserInteraction
+                                )
+                            }
+                        }
+
+                        // Right cluster: Secondary settings
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            HudControlPill(
+                                icon = Icons.Default.ClosedCaption,
+                                label = "Subtitles",
+                                onClick = onOpenSubtitles,
+                                onUserInteraction = onUserInteraction
+                            )
+
+                            HudControlPill(
+                                icon = Icons.Default.Audiotrack,
+                                label = "Audio",
+                                onClick = onOpenAudioTracks,
+                                onUserInteraction = onUserInteraction
+                            )
+
+                            HudControlPill(
+                                icon = Icons.Default.Speed,
+                                label = "${playbackSpeed}x",
+                                onClick = onOpenSpeedDialog,
+                                onUserInteraction = onUserInteraction
+                            )
+
+                            HudControlPill(
+                                icon = Icons.Default.AspectRatio,
+                                label = resizeModeLabel,
+                                onClick = onCycleResizeMode,
+                                onUserInteraction = onUserInteraction
+                            )
+
+                            HudControlPill(
+                                icon = if (video.isFavorite) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
+                                label = if (video.isFavorite) "Saved" else "Favorite",
+                                iconTint = if (video.isFavorite) SmartTubeRed else Color.White,
+                                onClick = onToggleFavorite,
+                                onUserInteraction = onUserInteraction
+                            )
+                        }
                     }
                 }
             }
@@ -438,6 +452,105 @@ fun SmartTubePlayerHud(
     }
 }
 
+/**
+ * Isolated leaf composable for the player timeline seekbar and duration labels.
+ * Only this composable recomposes when time advances; the parent HUD remains untouched.
+ */
+@Composable
+private fun PlayerTimelineBar(
+    positionProvider: () -> Long,
+    durationMs: Long,
+    seekStepMs: Long,
+    onSeekTo: (Long) -> Unit,
+    onSeekRelative: (Long) -> Unit,
+    onUserInteraction: () -> Unit
+) {
+    var currentPosMs by remember { mutableLongStateOf(positionProvider()) }
+    var seekbarFocused by remember { mutableStateOf(false) }
+
+    LaunchedEffect(Unit) {
+        while (isActive) {
+            currentPosMs = positionProvider().coerceAtLeast(0L)
+            delay(500L)
+        }
+    }
+
+    val safeDuration = durationMs.coerceAtLeast(1L)
+    val progressFraction = (currentPosMs.toFloat() / safeDuration.toFloat()).coerceIn(0f, 1f)
+
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        Text(
+            text = FormatUtils.formatDuration(currentPosMs),
+            color = SmartTubeTextPrimary,
+            fontSize = 12.sp,
+            lineHeight = 15.sp,
+            fontWeight = FontWeight.Bold,
+            maxLines = 1,
+            softWrap = false
+        )
+
+        val sliderColors = SliderDefaults.colors(
+            thumbColor = if (seekbarFocused) Color.White else SmartTubeRed,
+            activeTrackColor = SmartTubeRed,
+            inactiveTrackColor = Color.White.copy(alpha = 0.28f)
+        )
+
+        Slider(
+            value = progressFraction,
+            onValueChange = { frac ->
+                onUserInteraction()
+                val targetMs = (frac * safeDuration).toLong()
+                currentPosMs = targetMs
+                onSeekTo(targetMs)
+            },
+            colors = sliderColors,
+            modifier = Modifier
+                .weight(1f)
+                .onFocusChanged { seekbarFocused = it.isFocused || it.hasFocus }
+                .onPreviewKeyEvent { event ->
+                    if (event.type == KeyEventType.KeyDown) {
+                        when (event.key) {
+                            Key.DirectionLeft -> {
+                                onUserInteraction()
+                                onSeekRelative(-seekStepMs)
+                                currentPosMs = (currentPosMs - seekStepMs).coerceAtLeast(0L)
+                                true
+                            }
+                            Key.DirectionRight -> {
+                                onUserInteraction()
+                                onSeekRelative(seekStepMs)
+                                currentPosMs = (currentPosMs + seekStepMs).coerceAtMost(safeDuration)
+                                true
+                            }
+                            else -> false
+                        }
+                    } else {
+                        false
+                    }
+                }
+        )
+
+        Text(
+            text = FormatUtils.formatDuration(durationMs),
+            color = SmartTubeTextSecondary,
+            fontSize = 12.sp,
+            lineHeight = 15.sp,
+            fontWeight = FontWeight.Bold,
+            maxLines = 1,
+            softWrap = false
+        )
+    }
+}
+
+/**
+ * Lightweight, zero-relayout control pill.
+ * Uses a constant FontWeight (SemiBold) and avoids runtime text re-measurement on focus.
+ * Uses indication = null to prevent double-ripple jank.
+ */
 @Composable
 private fun HudControlPill(
     icon: ImageVector,
@@ -445,9 +558,12 @@ private fun HudControlPill(
     isPrimary: Boolean = false,
     iconTint: Color = Color.White,
     onClick: () -> Unit,
+    onUserInteraction: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     var isFocused by remember { mutableStateOf(false) }
+    val interactionSource = remember { MutableInteractionSource() }
+
     val bgColor = when {
         isFocused && isPrimary -> SmartTubeRed
         isFocused -> SmartTubeCardFocusedBg
@@ -466,7 +582,13 @@ private fun HudControlPill(
                 shape = CircleShape
             )
             .onFocusChanged { isFocused = it.isFocused }
-            .clickable { onClick() }
+            .clickable(
+                interactionSource = interactionSource,
+                indication = null
+            ) {
+                onUserInteraction()
+                onClick()
+            }
             .padding(horizontal = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(5.dp)
@@ -482,7 +604,7 @@ private fun HudControlPill(
             color = Color.White,
             fontSize = 12.sp,
             lineHeight = 15.sp,
-            fontWeight = if (isFocused || isPrimary) FontWeight.Bold else FontWeight.Medium,
+            fontWeight = FontWeight.SemiBold, // Constant weight prevents re-measurement & layout freeze
             maxLines = 1,
             softWrap = false,
             overflow = TextOverflow.Ellipsis

@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
@@ -90,6 +91,9 @@ fun TvCatalogScreen(
     onOpenVideoOptions: (VideoItem) -> Unit,
     onOpenAddYouTubeDialog: () -> Unit,
     onDeletePlaylist: (String) -> Unit,
+    onDeleteChannel: (String) -> Unit = {},
+    onOpenKidsPlaylist: (String, String) -> Unit = { _, _ -> },
+    onSaveKidsPlaylist: (String) -> Unit = {},
     onRequestReadPermission: () -> Unit,
     onRequestAllFilesAccess: () -> Unit,
     onPickSafFolder: () -> Unit,
@@ -148,6 +152,7 @@ fun TvCatalogScreen(
                     settings = uiState.settings,
                     safFolders = uiState.snapshot.safFolders,
                     savedPlaylists = uiState.snapshot.savedPlaylists,
+                    savedChannels = uiState.snapshot.savedChannels,
                     totalVideoCount = uiState.snapshot.allVideos.size,
                     usbDriveCount = uiState.usbDriveCount,
                     isScanning = uiState.isScanning,
@@ -160,11 +165,18 @@ fun TvCatalogScreen(
                     onRemoveSafFolder = onRemoveSafFolder,
                     onAddYouTubeLink = onOpenAddYouTubeDialog,
                     onDeletePlaylist = onDeletePlaylist,
+                    onDeleteChannel = onDeleteChannel,
                     onRescanStorage = onRescanStorage,
                     onClearWatchHistory = onClearWatchHistory,
                     onClearFavorites = onClearFavorites,
                     onClearYouTubeLibrary = onClearYouTubeLibrary,
                     onResetSettings = onResetSettings
+                )
+            } else if (uiState.selectedSection == SidebarSection.KIDS_PICKS) {
+                KidsPicksScreen_Antigravity(
+                    savedPlaylistIds = uiState.snapshot.savedPlaylists.map { it.playlistId }.toSet(),
+                    onOpenPlaylist = onOpenKidsPlaylist,
+                    onSavePlaylistToLibrary = onSaveKidsPlaylist
                 )
             } else {
                 PermissionBanner(
@@ -213,8 +225,7 @@ fun TvCatalogScreen(
                                 thumbnailRevision = uiState.thumbnailRevision,
                                 onVideoClick = { video -> onVideoClick(video, row.videos) },
                                 onToggleFavorite = onToggleFavorite,
-                                onOpenVideoOptions = onOpenVideoOptions,
-                                onDeletePlaylist = row.playlistId?.let { plId -> { onDeletePlaylist(plId) } }
+                                onOpenVideoOptions = onOpenVideoOptions
                             )
                         }
                     }
@@ -553,8 +564,7 @@ fun TvCategoryRowSection(
     thumbnailRevision: Int,
     onVideoClick: (VideoItem) -> Unit,
     onToggleFavorite: (VideoItem) -> Unit,
-    onOpenVideoOptions: (VideoItem) -> Unit,
-    onDeletePlaylist: (() -> Unit)? = null
+    onOpenVideoOptions: (VideoItem) -> Unit
 ) {
     Column(modifier = Modifier.fillMaxWidth()) {
         Row(
@@ -608,14 +618,6 @@ fun TvCategoryRowSection(
                     softWrap = false
                 )
             }
-
-            if (onDeletePlaylist != null) {
-                HeaderInteractivePill(
-                    icon = Icons.Default.Delete,
-                    text = "Remove Playlist",
-                    onClick = onDeletePlaylist
-                )
-            }
         }
 
         LazyRow(
@@ -624,7 +626,8 @@ fun TvCategoryRowSection(
         ) {
             items(
                 items = row.videos,
-                key = { "${row.id}_${it.id}" }
+                key = { "${row.id}_${it.id}" },
+                contentType = { "video_card" }
             ) { video ->
                 VideoCard(
                     video = video,
@@ -657,7 +660,8 @@ fun EmptyCatalogState(
     ) {
         Column(
             modifier = Modifier
-                .width(540.dp)
+                .fillMaxWidth(0.92f)
+                .widthIn(max = 540.dp)
                 .clip(RoundedCornerShape(16.dp))
                 .background(SmartTubeCardBg)
                 .border(1.dp, Color.White.copy(alpha = 0.08f), RoundedCornerShape(16.dp))

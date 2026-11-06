@@ -126,4 +126,19 @@ interface VideoDao {
 
     @Query("DELETE FROM saved_youtube_playlists")
     suspend fun clearAllPlaylists()
+
+    @Query("SELECT * FROM saved_channels ORDER BY importedAt DESC")
+    fun observeSavedChannels(): Flow<List<SavedChannelEntity>>
+
+    @Query("SELECT * FROM saved_channels ORDER BY importedAt DESC")
+    suspend fun getSavedChannels(): List<SavedChannelEntity>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertChannel(channel: SavedChannelEntity)
+
+    @Query("DELETE FROM saved_channels WHERE channelId = :channelId")
+    suspend fun deleteChannel(channelId: String)
+
+    @Query("DELETE FROM saved_channels")
+    suspend fun clearAllChannels()
 }

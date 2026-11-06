@@ -37,6 +37,7 @@ import com.joudjawadtube.player.ui.catalog.CatalogViewModel
 import com.joudjawadtube.player.ui.catalog.TabletCatalogScreen
 import com.joudjawadtube.player.ui.catalog.TvCatalogScreen
 import com.joudjawadtube.player.ui.components.AddYouTubeLinkDialog
+import com.joudjawadtube.player.ui.components.ProvideWindowLayoutInfo
 import com.joudjawadtube.player.ui.components.SidebarSection
 import com.joudjawadtube.player.ui.components.TvFolderPickerDialog
 import com.joudjawadtube.player.ui.components.VideoOptionsDialog
@@ -67,7 +68,8 @@ class MainActivity : ComponentActivity() {
 
             CompositionLocalProvider(LocalDensity provides scaledDensity) {
                 JoudJawadTubeTheme {
-                    val context = LocalContext.current
+                    ProvideWindowLayoutInfo {
+                        val context = LocalContext.current
                     val lifecycleOwner = LocalLifecycleOwner.current
 
                     var hasReadPermission by remember {
@@ -186,6 +188,9 @@ class MainActivity : ComponentActivity() {
                                 onOpenVideoOptions = { viewModel.openVideoOptions(it) },
                                 onOpenAddYouTubeDialog = { viewModel.openAddYouTubeDialog() },
                                 onDeletePlaylist = { viewModel.deleteYouTubePlaylist(it) },
+                                onDeleteChannel = { viewModel.deleteYouTubeChannel(it) },
+                                onOpenKidsPlaylist = { plId, _ -> viewModel.openOrImportKidsPlaylist(plId, playImmediately = true) },
+                                onSaveKidsPlaylist = { plId -> viewModel.openOrImportKidsPlaylist(plId, playImmediately = false) },
                                 onRequestReadPermission = requestReadPermissionAction,
                                 onRequestAllFilesAccess = requestAllFilesAccessAction,
                                 onPickSafFolder = pickFolderAction,
@@ -215,6 +220,9 @@ class MainActivity : ComponentActivity() {
                                 onOpenVideoOptions = { viewModel.openVideoOptions(it) },
                                 onOpenAddYouTubeDialog = { viewModel.openAddYouTubeDialog() },
                                 onDeletePlaylist = { viewModel.deleteYouTubePlaylist(it) },
+                                onDeleteChannel = { viewModel.deleteYouTubeChannel(it) },
+                                onOpenKidsPlaylist = { plId, _ -> viewModel.openOrImportKidsPlaylist(plId, playImmediately = true) },
+                                onSaveKidsPlaylist = { plId -> viewModel.openOrImportKidsPlaylist(plId, playImmediately = false) },
                                 onRequestReadPermission = requestReadPermissionAction,
                                 onRequestAllFilesAccess = requestAllFilesAccessAction,
                                 onPickSafFolder = pickFolderAction,
@@ -300,6 +308,7 @@ class MainActivity : ComponentActivity() {
             }
         }
     }
+}
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)

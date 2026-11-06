@@ -1,7 +1,9 @@
 package com.joudjawadtube.player.data.repository
 
 import android.content.Context
+import com.joudjawadtube.player.data.local.FormatUtils
 import com.joudjawadtube.player.data.local.PlaybackProgressEntity
+import com.joudjawadtube.player.data.local.SavedChannelEntity
 import com.joudjawadtube.player.data.local.SavedPlaylistEntity
 import com.joudjawadtube.player.data.local.SavedSafFolderEntity
 import com.joudjawadtube.player.data.local.VideoDao
@@ -19,6 +21,8 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flowOn
+import java.util.Random
+import java.util.UUID
 
 data class CategoryRow(
     val id: String,
@@ -40,7 +44,8 @@ data class CatalogSnapshot(
     val categoryRows: List<CategoryRow> = emptyList(),
     val folderNames: List<String> = emptyList(),
     val safFolders: List<SavedSafFolderEntity> = emptyList(),
-    val savedPlaylists: List<SavedPlaylistEntity> = emptyList()
+    val savedPlaylists: List<SavedPlaylistEntity> = emptyList(),
+    val savedChannels: List<SavedChannelEntity> = emptyList()
 )
 
 data class ImportedYouTubeResult(
@@ -59,12 +64,17 @@ class VideoRepository(
     private val _mountedVolumes = MutableStateFlow<List<MountedVolumeInfo>>(emptyList())
     val mountedVolumes: StateFlow<List<MountedVolumeInfo>> = _mountedVolumes.asStateFlow()
 
+    // Session-stable PRNG seed created once per app launch so recommendations stay stable while navigating
+    // but reshuffle freshly each time the app process starts.
+    private val sessionSeed: Long = System.currentTimeMillis() xor UUID.randomUUID().mostSignificantBits
+
     val catalogFlow: Flow<CatalogSnapshot> = combine(
         videoDao.observeAllVideos(),
         videoDao.observeAllProgress(),
         videoDao.observeSafFolders(),
-        videoDao.observeSavedPlaylists()
-    ) { videos, progressList, safFolders, savedPlaylists ->
+        videoDao.observeSavedPlaylists(),
+        videoDao.observeSavedChannels()
+    ) { videos, progressList, safFolders, savedPlaylists, savedChannels ->
         val progressMap = progressList.associateBy { it.videoKey }
         val items = videos.map { entity ->
             VideoItem(entity = entity, progress = progressMap[entity.videoKey])
@@ -79,8 +89,33 @@ class VideoRepository(
         val fourKVideos = items.filter { it.resolutionBadge == "4K" || it.resolutionBadge == "2K" }
         val favorites = items.filter { it.isFavorite }.sortedByDescending { it.lastPlayedAt }
 
+        // Build Row 2: "Recommended for You"
+        // Excludes videos already in Continue Watching or finished (> 95% watched)
+        val inProgressKeys = continueWatching.map { it.videoKey }.toSet()
+        val candidatePool = items.filter { candidate ->
+            candidate.videoKey !in inProgressKeys && candidate.progressFraction < 0.95f
+        }
+
+        // Group candidate videos by source: YouTube playlist or local folder
+        val groupedBySource = candidatePool.groupBy { video ->
+            when {
+                video.isYoutube && video.playlistId.isNotBlank() -> "yt_pl_${video.playlistId}"
+                video.isYoutube -> "yt_singles"
+                else -> "folder_${video.folderName}"
+            }
+        }
+
+        val sourcePrng = Random(sessionSeed)
+        val candidateList = mutableListOf<VideoItem>()
+        for ((_, sourceVideos) in groupedBySource) {
+            val shuffledSource = sourceVideos.shuffled(sourcePrng)
+            candidateList.addAll(shuffledSource.take(3)) // Max 3 per source playlist/folder
+        }
+        val recommended = candidateList.shuffled(sourcePrng).take(20) // Capped at 20 videos
+
         val rows = mutableListOf<CategoryRow>()
 
+        // Row 1: Continue Watching
         if (continueWatching.isNotEmpty()) {
             rows.add(
                 CategoryRow(
@@ -88,6 +123,18 @@ class VideoRepository(
                     title = "Continue Watching",
                     subtitle = "${continueWatching.size} videos in progress",
                     videos = continueWatching
+                )
+            )
+        }
+
+        // Row 2: Recommended for You
+        if (recommended.isNotEmpty()) {
+            rows.add(
+                CategoryRow(
+                    id = "recommended_for_you",
+                    title = "Recommended for You",
+                    subtitle = "${recommended.size} picks • Refreshed each app launch",
+                    videos = recommended
                 )
             )
         }
@@ -101,7 +148,7 @@ class VideoRepository(
                 CategoryRow(
                     id = "yt_playlist_$plId",
                     title = plTitle,
-                    subtitle = "${plVideos.size} videos • YouTube Playlist",
+                    subtitle = "${plVideos.size} videos • YouTube",
                     isYoutubeCategory = true,
                     playlistId = plId,
                     videos = plVideos
@@ -134,7 +181,7 @@ class VideoRepository(
             )
         }
 
-        // Group local & USB videos by folder name (without duplicating them under a redundant full-USB row)
+        // Group local & USB videos by folder name
         val localAndUsbItems = items.filter { !it.isYoutube }
         val byFolder = localAndUsbItems.groupBy { it.folderName }
         for ((folderName, folderVideos) in byFolder) {
@@ -169,7 +216,8 @@ class VideoRepository(
             categoryRows = rows,
             folderNames = byFolder.keys.sorted(),
             safFolders = safFolders,
-            savedPlaylists = savedPlaylists
+            savedPlaylists = savedPlaylists,
+            savedChannels = savedChannels
         )
     }.flowOn(Dispatchers.Default)
 
@@ -185,8 +233,51 @@ class VideoRepository(
             val safFolders = videoDao.getSafFolders()
             val scanned = LocalVideoScanner.scanAllSources(appContext, safFolders, hideBootPartitions)
             videoDao.replaceCatalog(scanned)
+
+            // Auto-sync saved YouTube channels to pull new uploads
+            syncSavedChannels()
         } finally {
             _isScanning.value = false
+        }
+    }
+
+    suspend fun syncSavedChannels() {
+        val channels = videoDao.getSavedChannels()
+        for (channel in channels) {
+            runCatching {
+                val uploadsPl = YouTubeService.fetchPlaylist(channel.uploadsPlaylistId, maxVideos = channel.videoCap)
+                if (uploadsPl != null && uploadsPl.videos.isNotEmpty()) {
+                    val baseTime = System.currentTimeMillis()
+                    val entities = uploadsPl.videos.mapIndexed { index, vid ->
+                        VideoEntity(
+                            id = "yt_${channel.uploadsPlaylistId}_${vid.videoId}",
+                            videoKey = "yt_${vid.videoId}",
+                            uri = "https://www.youtube.com/watch?v=${vid.videoId}",
+                            filePath = "",
+                            title = vid.title,
+                            fileName = "${vid.title} [${vid.videoId}].mp4",
+                            folderName = channel.title,
+                            folderPath = "youtube_channel_${channel.channelId}",
+                            volumeLabel = "YouTube Channel",
+                            isUsb = false,
+                            durationMs = vid.durationMs,
+                            sizeBytes = 0L,
+                            width = vid.width,
+                            height = vid.height,
+                            mimeType = "video/mp4",
+                            dateModified = baseTime - (index * 1000L),
+                            sidecarSubtitles = "",
+                            isYoutube = true,
+                            youtubeVideoId = vid.videoId,
+                            playlistId = channel.uploadsPlaylistId,
+                            playlistTitle = "${channel.title} - Uploads",
+                            thumbnailUrl = vid.thumbnailUrl
+                        )
+                    }
+                    videoDao.insertVideos(entities)
+                    videoDao.insertChannel(channel.copy(lastSyncedAt = System.currentTimeMillis()))
+                }
+            }
         }
     }
 
@@ -236,7 +327,6 @@ class VideoRepository(
             is ParsedYouTubeInput.Playlist -> {
                 val playlistMeta = YouTubeService.fetchPlaylist(parsed.playlistId)
                 if (playlistMeta == null || playlistMeta.videos.isEmpty()) {
-                    // If playlist fetch failed but an initialVideoId was present in the URL, fall back to single video
                     val fallbackVid = parsed.initialVideoId
                     if (!fallbackVid.isNullOrBlank()) {
                         return importYouTubeUrl("https://www.youtube.com/watch?v=$fallbackVid")
@@ -301,7 +391,85 @@ class VideoRepository(
                     )
                 )
             }
+
+            is ParsedYouTubeInput.Channel -> {
+                importYouTubeChannel(parsed.originalUrl)
+            }
         }
+    }
+
+    suspend fun importYouTubeChannel(rawUrl: String, videoCap: Int = 200): Result<ImportedYouTubeResult> {
+        val channelMeta = YouTubeService.fetchChannel(rawUrl, videoCap)
+            ?: return Result.failure(IllegalStateException("Could not resolve YouTube channel from link: $rawUrl"))
+
+        val entity = SavedChannelEntity(
+            channelId = channelMeta.channelId,
+            handle = channelMeta.handle,
+            title = channelMeta.title,
+            avatarUrl = channelMeta.avatarUrl,
+            uploadsPlaylistId = channelMeta.uploadsPlaylistId,
+            importedAt = System.currentTimeMillis(),
+            lastSyncedAt = System.currentTimeMillis(),
+            videoCap = videoCap
+        )
+        videoDao.insertChannel(entity)
+
+        if (channelMeta.uploadsVideos.isEmpty()) {
+            return Result.failure(IllegalStateException("Channel \"${channelMeta.title}\" has no public uploads or could not be loaded."))
+        }
+
+        // Save uploads playlist as a playlist entry in the DB
+        val savedPlaylist = SavedPlaylistEntity(
+            playlistId = channelMeta.uploadsPlaylistId,
+            title = "${channelMeta.title} - Uploads",
+            author = channelMeta.title,
+            sourceUrl = rawUrl,
+            thumbnailUrl = channelMeta.avatarUrl,
+            videoCount = channelMeta.uploadsVideos.size,
+            addedAt = System.currentTimeMillis()
+        )
+        videoDao.insertPlaylist(savedPlaylist)
+
+        val baseTime = System.currentTimeMillis()
+        val entities = channelMeta.uploadsVideos.mapIndexed { index, vid ->
+            VideoEntity(
+                id = "yt_${channelMeta.uploadsPlaylistId}_${vid.videoId}",
+                videoKey = "yt_${vid.videoId}",
+                uri = "https://www.youtube.com/watch?v=${vid.videoId}",
+                filePath = "",
+                title = vid.title,
+                fileName = "${vid.title} [${vid.videoId}].mp4",
+                folderName = channelMeta.title,
+                folderPath = "youtube_channel_${channelMeta.channelId}",
+                volumeLabel = "YouTube Channel",
+                isUsb = false,
+                durationMs = vid.durationMs,
+                sizeBytes = 0L,
+                width = vid.width,
+                height = vid.height,
+                mimeType = "video/mp4",
+                dateModified = baseTime - (index * 1000L),
+                sidecarSubtitles = "",
+                isYoutube = true,
+                youtubeVideoId = vid.videoId,
+                playlistId = channelMeta.uploadsPlaylistId,
+                playlistTitle = "${channelMeta.title} - Uploads",
+                thumbnailUrl = vid.thumbnailUrl
+            )
+        }
+        videoDao.insertVideos(entities)
+
+        val items = entities.map { ent ->
+            VideoItem(ent, videoDao.getProgress(ent.videoKey))
+        }
+
+        return Result.success(
+            ImportedYouTubeResult(
+                firstVideo = items.first(),
+                playlist = items,
+                summaryMessage = "Imported channel \"${channelMeta.title}\" (${items.size} videos)"
+            )
+        )
     }
 
     suspend fun deleteYouTubeVideo(videoId: String) {
@@ -313,7 +481,15 @@ class VideoRepository(
         videoDao.deleteVideosByPlaylistId(playlistId)
     }
 
+    suspend fun deleteYouTubeChannel(channelId: String) {
+        val uploadsId = if (channelId.startsWith("UC")) "UU" + channelId.substring(2) else channelId
+        videoDao.deleteChannel(channelId)
+        videoDao.deletePlaylist(uploadsId)
+        videoDao.deleteVideosByPlaylistId(uploadsId)
+    }
+
     suspend fun clearAllYouTubeContent() {
+        videoDao.clearAllChannels()
         videoDao.clearAllPlaylists()
         videoDao.clearYoutubeVideos()
     }
@@ -323,6 +499,10 @@ class VideoRepository(
     }
 
     suspend fun clearAllFavorites() {
+        videoDao.clearAllFavorites()
+    }
+
+    suspend fun clearFavorites() {
         videoDao.clearAllFavorites()
     }
 

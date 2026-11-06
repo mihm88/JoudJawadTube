@@ -55,6 +55,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.media3.ui.AspectRatioFrameLayout
 import com.joudjawadtube.player.data.local.FormatUtils
+import com.joudjawadtube.player.data.local.SavedChannelEntity
 import com.joudjawadtube.player.data.local.SavedPlaylistEntity
 import com.joudjawadtube.player.data.local.SavedSafFolderEntity
 import com.joudjawadtube.player.data.settings.AppSettingsState
@@ -66,6 +67,7 @@ import com.joudjawadtube.player.data.settings.UiFontScale
 import com.joudjawadtube.player.data.settings.UiModePreference
 import com.joudjawadtube.player.data.thumbnail.ThumbnailManager
 import com.joudjawadtube.player.ui.components.ActionPillButton
+import com.joudjawadtube.player.ui.components.ConfirmDestructiveDialog_Antigravity
 import com.joudjawadtube.player.ui.theme.SmartTubeCardBg
 import com.joudjawadtube.player.ui.theme.SmartTubeCardFocusedBg
 import com.joudjawadtube.player.ui.theme.SmartTubeFocusBorder
@@ -74,11 +76,19 @@ import com.joudjawadtube.player.ui.theme.SmartTubeTextPrimary
 import com.joudjawadtube.player.ui.theme.SmartTubeTextSecondary
 import com.joudjawadtube.player.ui.theme.SmartTubeUsbCyan
 
+data class DestructiveAction(
+    val title: String,
+    val message: String,
+    val confirmLabel: String = "Delete",
+    val onConfirm: () -> Unit
+)
+
 @Composable
 fun SettingsScreen(
     settings: AppSettingsState,
     safFolders: List<SavedSafFolderEntity>,
     savedPlaylists: List<SavedPlaylistEntity>,
+    savedChannels: List<SavedChannelEntity> = emptyList(),
     totalVideoCount: Int,
     usbDriveCount: Int,
     isScanning: Boolean,
@@ -91,6 +101,7 @@ fun SettingsScreen(
     onRemoveSafFolder: (String) -> Unit,
     onAddYouTubeLink: () -> Unit,
     onDeletePlaylist: (String) -> Unit,
+    onDeleteChannel: (String) -> Unit = {},
     onRescanStorage: () -> Unit,
     onClearWatchHistory: () -> Unit,
     onClearFavorites: () -> Unit,
@@ -98,6 +109,7 @@ fun SettingsScreen(
     onResetSettings: () -> Unit
 ) {
     val context = LocalContext.current
+    var pendingDestructiveAction by remember { mutableStateOf<DestructiveAction?>(null) }
     var cacheSizeBytes by remember(isGeneratingThumbnails, thumbnailStatusMessage) {
         mutableLongStateOf(ThumbnailManager.getCacheSizeBytes(context))
     }
@@ -435,14 +447,55 @@ fun SettingsScreen(
                 title = "5. Saved YouTube Playlists, History & Reset",
                 subtitle = "Manage saved YouTube playlists, watch progress, favorites, and app defaults"
             ) {
+                if (savedChannels.isNotEmpty()) {
+                    Text(
+                        text = "Saved YouTube Channels (${savedChannels.size})",
+                        color = SmartTubeTextSecondary,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.padding(top = 4.dp)
+                    )
+                    savedChannels.forEach { chan ->
+                        SettingsCycleOptionRow(
+                            icon = Icons.Default.AddLink,
+                            title = "Channel: ${chan.title}",
+                            subtitle = "${chan.handle} • Uploads: ${chan.uploadsPlaylistId}",
+                            valueLabel = "Delete Channel",
+                            onClick = {
+                                pendingDestructiveAction = DestructiveAction(
+                                    title = "Delete Channel",
+                                    message = "Are you sure you want to delete channel \"${chan.title}\"? All its uploads and playlists will be removed.",
+                                    confirmLabel = "Delete",
+                                    onConfirm = { onDeleteChannel(chan.channelId) }
+                                )
+                            }
+                        )
+                    }
+                    HorizontalDivider(color = Color.White.copy(alpha = 0.08f))
+                }
+
                 if (savedPlaylists.isNotEmpty()) {
+                    Text(
+                        text = "Saved YouTube Playlists (${savedPlaylists.size})",
+                        color = SmartTubeTextSecondary,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.padding(top = 4.dp)
+                    )
                     savedPlaylists.forEach { pl ->
                         SettingsCycleOptionRow(
                             icon = Icons.Default.AddLink,
                             title = "Playlist: ${pl.title}",
                             subtitle = "${pl.videoCount} videos • ${pl.sourceUrl}",
                             valueLabel = "Delete Playlist",
-                            onClick = { onDeletePlaylist(pl.playlistId) }
+                            onClick = {
+                                pendingDestructiveAction = DestructiveAction(
+                                    title = "Delete Playlist",
+                                    message = "Are you sure you want to delete playlist \"${pl.title}\"? Its ${pl.videoCount} videos will be removed from your library.",
+                                    confirmLabel = "Delete",
+                                    onConfirm = { onDeletePlaylist(pl.playlistId) }
+                                )
+                            }
                         )
                     }
                     HorizontalDivider(color = Color.White.copy(alpha = 0.08f))
@@ -453,7 +506,14 @@ fun SettingsScreen(
                     title = "Clear Watch History & Playback Progress",
                     subtitle = "Resets Continue Watching positions for all videos",
                     valueLabel = "Clear History",
-                    onClick = onClearWatchHistory
+                    onClick = {
+                        pendingDestructiveAction = DestructiveAction(
+                            title = "Clear Watch History",
+                            message = "Are you sure you want to clear your watch history? Continue Watching progress will be reset for all videos.",
+                            confirmLabel = "Clear History",
+                            onConfirm = onClearWatchHistory
+                        )
+                    }
                 )
 
                 SettingsCycleOptionRow(
@@ -461,7 +521,14 @@ fun SettingsScreen(
                     title = "Clear All Favorites",
                     subtitle = "Removes all videos from your Favorites list",
                     valueLabel = "Clear Favorites",
-                    onClick = onClearFavorites
+                    onClick = {
+                        pendingDestructiveAction = DestructiveAction(
+                            title = "Clear All Favorites",
+                            message = "Are you sure you want to remove all saved favorite videos?",
+                            confirmLabel = "Clear Favorites",
+                            onConfirm = onClearFavorites
+                        )
+                    }
                 )
 
                 SettingsCycleOptionRow(
@@ -469,7 +536,14 @@ fun SettingsScreen(
                     title = "Remove All Saved YouTube Links & Playlists",
                     subtitle = "Deletes imported YouTube links while keeping all local & USB videos untouched",
                     valueLabel = "Clear YouTube",
-                    onClick = onClearYouTubeLibrary
+                    onClick = {
+                        pendingDestructiveAction = DestructiveAction(
+                            title = "Clear YouTube Library",
+                            message = "Are you sure you want to delete all saved YouTube playlists, channels, and video links? Local and USB files will remain safe.",
+                            confirmLabel = "Clear All",
+                            onConfirm = onClearYouTubeLibrary
+                        )
+                    }
                 )
 
                 SettingsCycleOptionRow(
@@ -477,10 +551,27 @@ fun SettingsScreen(
                     title = "Reset All Settings to Default",
                     subtitle = "Restores all player, thumbnail, and layout settings to factory defaults",
                     valueLabel = "Reset Defaults",
-                    onClick = onResetSettings
+                    onClick = {
+                        pendingDestructiveAction = DestructiveAction(
+                            title = "Reset All Settings",
+                            message = "Are you sure you want to restore all settings to factory default values?",
+                            confirmLabel = "Reset Defaults",
+                            onConfirm = onResetSettings
+                        )
+                    }
                 )
             }
         }
+    }
+
+    pendingDestructiveAction?.let { action ->
+        ConfirmDestructiveDialog_Antigravity(
+            title = action.title,
+            message = action.message,
+            confirmActionLabel = action.confirmLabel,
+            onConfirmed = action.onConfirm,
+            onDismiss = { pendingDestructiveAction = null }
+        )
     }
 }
 

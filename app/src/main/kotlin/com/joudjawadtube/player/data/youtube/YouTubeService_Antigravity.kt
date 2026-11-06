@@ -31,6 +31,16 @@ data class YouTubePlaylistMetadata(
     val videos: List<YouTubeVideoMetadata>
 )
 
+data class YouTubeChannelMetadata(
+    val channelId: String,
+    val title: String,
+    val handle: String,
+    val avatarUrl: String,
+    val uploadsPlaylistId: String,
+    val uploadsVideos: List<YouTubeVideoMetadata>,
+    val subPlaylists: List<YouTubePlaylistMetadata> = emptyList()
+)
+
 data class ResolvedYouTubeStream(
     val videoId: String,
     val hlsManifestUrl: String? = null,
@@ -52,6 +62,7 @@ data class ResolvedYouTubeStream(
 sealed class ParsedYouTubeInput {
     data class SingleVideo(val videoId: String, val originalUrl: String) : ParsedYouTubeInput()
     data class Playlist(val playlistId: String, val initialVideoId: String?, val originalUrl: String) : ParsedYouTubeInput()
+    data class Channel(val channelQuery: String, val originalUrl: String) : ParsedYouTubeInput()
     data class Invalid(val reason: String) : ParsedYouTubeInput()
 }
 
@@ -113,7 +124,31 @@ object YouTubeService {
             )
         }
 
-        return ParsedYouTubeInput.Invalid("Could not recognize a valid YouTube video or playlist URL.")
+        val channelMatch = Regex("""(?:https?://(?:www\.)?youtube\.com/)?(@[a-zA-Z0-9_.-]+|channel/[a-zA-Z0-9_-]+|c/[a-zA-Z0-9_.-]+|user/[a-zA-Z0-9_.-]+)""").find(urlToken)
+        if (channelMatch != null && !urlToken.contains("/watch") && !urlToken.contains("/playlist")) {
+            val q = channelMatch.groupValues[1]
+            val fullUrl = if (urlToken.startsWith("http")) urlToken else "https://www.youtube.com/$q"
+            return ParsedYouTubeInput.Channel(
+                channelQuery = q,
+                originalUrl = fullUrl
+            )
+        }
+
+        if (urlToken.startsWith("@")) {
+            return ParsedYouTubeInput.Channel(
+                channelQuery = urlToken,
+                originalUrl = "https://www.youtube.com/$urlToken"
+            )
+        }
+
+        if (urlToken.startsWith("UC") && urlToken.length >= 24 && !urlToken.contains("/")) {
+            return ParsedYouTubeInput.Channel(
+                channelQuery = urlToken,
+                originalUrl = "https://www.youtube.com/channel/$urlToken"
+            )
+        }
+
+        return ParsedYouTubeInput.Invalid("Could not recognize a valid YouTube video, playlist, or channel URL.")
     }
 
     /**
@@ -176,7 +211,7 @@ object YouTubeService {
      * Fetches a full YouTube playlist and all its individual videos via InnerTube browse/next APIs.
      * Supports modern lockupViewModel playlists, classic playlistVideoRenderer, and playlistPanelVideoRenderer.
      */
-    suspend fun fetchPlaylist(playlistId: String): YouTubePlaylistMetadata? = withContext(Dispatchers.IO) {
+    suspend fun fetchPlaylist(playlistId: String, maxVideos: Int = 200): YouTubePlaylistMetadata? = withContext(Dispatchers.IO) {
         val browseId = if (playlistId.startsWith("VL")) playlistId else "VL$playlistId"
         val webBody = JSONObject().apply {
             put("browseId", browseId)
@@ -205,6 +240,7 @@ object YouTubeService {
         var playlistTitle: String? = null
         var playlistAuthor: String? = null
         val videos = mutableListOf<YouTubeVideoMetadata>()
+        var continuationToken: String? = null
 
         if (!responseStr.isNullOrBlank()) {
             runCatching {
@@ -216,6 +252,48 @@ object YouTubeService {
                     defaultAuthor = playlistAuthor ?: "YouTube Playlist",
                     sink = videos
                 )
+                continuationToken = extractContinuationToken(root)
+            }
+        }
+
+        // Page through continuation tokens up to maxVideos (e.g. for channel uploads)
+        var pagesCount = 0
+        while (!continuationToken.isNullOrBlank() && videos.size < maxVideos && pagesCount < 4) {
+            pagesCount++
+            val contBody = JSONObject().apply {
+                put("continuation", continuationToken)
+                put(
+                    "context",
+                    JSONObject().apply {
+                        put(
+                            "client",
+                            JSONObject().apply {
+                                put("clientName", "WEB")
+                                put("clientVersion", "2.20240726.00.00")
+                                put("hl", "en")
+                                put("gl", "US")
+                            }
+                        )
+                    }
+                )
+            }
+            val contResponse = httpPostJson(
+                url = "https://www.youtube.com/youtubei/v1/browse?prettyPrint=false",
+                jsonBody = contBody.toString(),
+                userAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+            )
+            if (!contResponse.isNullOrBlank()) {
+                runCatching {
+                    val contRoot = JSONObject(contResponse)
+                    collectPlaylistVideosRecursive(
+                        node = contRoot,
+                        defaultAuthor = playlistAuthor ?: "YouTube Playlist",
+                        sink = videos
+                    )
+                    continuationToken = extractContinuationToken(contRoot)
+                }
+            } else {
+                break
             }
         }
 
@@ -257,7 +335,7 @@ object YouTubeService {
             }
         }
 
-        val uniqueVideos = videos.distinctBy { it.videoId }
+        val uniqueVideos = videos.distinctBy { it.videoId }.take(maxVideos)
         if (uniqueVideos.isEmpty()) return@withContext null
 
         val finalTitle = playlistTitle ?: "YouTube Playlist ($playlistId)"
@@ -271,6 +349,84 @@ object YouTubeService {
             author = finalAuthor,
             thumbnailUrl = thumb,
             videos = uniqueVideos
+        )
+    }
+
+    suspend fun resolveChannel(channelQuery: String): Pair<String, String>? = withContext(Dispatchers.IO) {
+        val trimmed = channelQuery.trim()
+        if (trimmed.startsWith("UC") && trimmed.length >= 24 && !trimmed.contains("/")) {
+            return@withContext Pair(trimmed, trimmed)
+        }
+
+        val cleanUrl = when {
+            trimmed.startsWith("http") -> trimmed
+            trimmed.startsWith("@") -> "https://www.youtube.com/$trimmed"
+            trimmed.startsWith("channel/") -> "https://www.youtube.com/$trimmed"
+            trimmed.startsWith("c/") -> "https://www.youtube.com/$trimmed"
+            trimmed.startsWith("user/") -> "https://www.youtube.com/$trimmed"
+            else -> "https://www.youtube.com/@$trimmed"
+        }
+
+        try {
+            val payload = JSONObject().apply {
+                put(
+                    "context",
+                    JSONObject().apply {
+                        put(
+                            "client",
+                            JSONObject().apply {
+                                put("clientName", "WEB")
+                                put("clientVersion", "2.20240410.01.00")
+                                put("hl", "en")
+                                put("gl", "US")
+                            }
+                        )
+                    }
+                )
+                put("url", cleanUrl)
+            }
+            val response = httpPostJson(
+                url = "https://www.youtube.com/youtubei/v1/navigation/resolve_url?prettyPrint=false",
+                jsonBody = payload.toString(),
+                userAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+            ) ?: return@withContext null
+
+            val root = JSONObject(response)
+            val browseEndpoint = root.optJSONObject("endpoint")?.optJSONObject("browseEndpoint")
+            val browseId = browseEndpoint?.optString("browseId")
+            val canon = browseEndpoint?.optString("canonicalBaseUrl").orEmpty()
+            if (!browseId.isNullOrBlank()) {
+                Pair(browseId, if (canon.isNotBlank()) canon else cleanUrl)
+            } else {
+                null
+            }
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    suspend fun fetchChannel(
+        channelQuery: String,
+        videoCap: Int = 200
+    ): YouTubeChannelMetadata? = withContext(Dispatchers.IO) {
+        val resolved = resolveChannel(channelQuery) ?: return@withContext null
+        val channelId = resolved.first
+        val handle = resolved.second
+
+        val uploadsPlaylistId = if (channelId.startsWith("UC")) "UU" + channelId.substring(2) else channelId
+        val uploadsPl = fetchPlaylist(uploadsPlaylistId, maxVideos = videoCap)
+
+        val channelTitle = uploadsPl?.author?.takeIf { it.isNotBlank() && it != "YouTube Playlist" }
+            ?: handle.removePrefix("/@").removePrefix("@").ifBlank { "YouTube Channel" }
+
+        YouTubeChannelMetadata(
+            channelId = channelId,
+            title = channelTitle,
+            handle = handle,
+            avatarUrl = uploadsPl?.thumbnailUrl.orEmpty(),
+            uploadsPlaylistId = uploadsPlaylistId,
+            uploadsVideos = uploadsPl?.videos ?: emptyList(),
+            subPlaylists = emptyList()
         )
     }
 
@@ -775,6 +931,28 @@ object YouTubeService {
             else -> 0L
         }
         return seconds * 1000L
+    }
+
+    private fun extractContinuationToken(node: Any?): String? {
+        if (node is JSONObject) {
+            val contCmd = node.optJSONObject("continuationCommand")
+            if (contCmd != null) {
+                val token = contCmd.optString("token")
+                if (token.isNotBlank()) return token
+            }
+            val keys = node.keys()
+            while (keys.hasNext()) {
+                val k = keys.next()
+                val res = extractContinuationToken(node.opt(k))
+                if (res != null) return res
+            }
+        } else if (node is JSONArray) {
+            for (i in 0 until node.length()) {
+                val res = extractContinuationToken(node.opt(i))
+                if (res != null) return res
+            }
+        }
+        return null
     }
 
     private fun httpPostJson(url: String, jsonBody: String, userAgent: String): String? {

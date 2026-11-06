@@ -32,6 +32,7 @@ import androidx.compose.material.icons.filled.OndemandVideo
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.Usb
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -64,6 +65,7 @@ import com.joudjawadtube.player.ui.theme.SmartTubeUsbCyan
 
 enum class SidebarSection(val title: String, val icon: ImageVector) {
     HOME("Home", Icons.Default.Home),
+    KIDS_PICKS("Kids Picks", Icons.Default.Star),
     YOUTUBE("YouTube", Icons.Default.OndemandVideo),
     CONTINUE_WATCHING("History", Icons.Default.History),
     USB_DRIVES("USB Drives", Icons.Default.Usb),

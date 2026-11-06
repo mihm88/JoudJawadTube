@@ -29,6 +29,24 @@ object ThumbnailManager {
     // In-memory negative lookup cache so we don't repeatedly search YouTube for offline/unknown files in one session
     private val failedYouTubeLookups = java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
 
+    // In-memory cache index: avoids synchronous disk I/O (File.exists / length) on the UI thread during scrolling
+    private val inMemoryCacheIndex = java.util.concurrent.ConcurrentHashMap<String, File>()
+    private val indexInitialized = java.util.concurrent.atomic.AtomicBoolean(false)
+
+    fun warmUpIndex(context: Context) {
+        if (indexInitialized.compareAndSet(false, true)) {
+            val dir = getThumbnailsDir(context)
+            val files = dir.listFiles()
+            if (files != null) {
+                for (f in files) {
+                    if (f.isFile && f.length() > 512L) {
+                        inMemoryCacheIndex[f.name] = f
+                    }
+                }
+            }
+        }
+    }
+
     fun getThumbnailsDir(context: Context): File {
         val dir = File(context.filesDir, "thumbnails_cache")
         if (!dir.exists()) {
@@ -39,36 +57,43 @@ object ThumbnailManager {
 
     /**
      * Fast synchronous check if a cached thumbnail file already exists on internal flash storage.
+     * Uses in-memory index for 0ms, zero-disk-I/O responsiveness during fast catalog scrolling.
      */
     fun getCachedThumbnailFile(
         context: Context,
         video: VideoItem,
         settings: AppSettingsState
     ): File? {
-        if (video.entity.customThumbnailPath.isNotBlank()) {
-            val customFile = File(video.entity.customThumbnailPath)
-            if (customFile.exists() && customFile.length() > 0L) return customFile
+        if (!indexInitialized.get()) {
+            warmUpIndex(context)
         }
 
-        val dir = getThumbnailsDir(context)
-        val ytFile = File(dir, "${video.id}_yt.jpg")
-        val frameFile = File(dir, "${video.id}_frame.jpg")
+        if (video.entity.customThumbnailPath.isNotBlank()) {
+            val customFile = inMemoryCacheIndex[video.entity.customThumbnailPath] ?: File(video.entity.customThumbnailPath)
+            if (customFile.exists() && customFile.length() > 0L) {
+                inMemoryCacheIndex[video.entity.customThumbnailPath] = customFile
+                return customFile
+            }
+        }
+
+        val ytFile = inMemoryCacheIndex["${video.id}_yt.jpg"]
+        val frameFile = inMemoryCacheIndex["${video.id}_frame.jpg"]
 
         return when (settings.thumbnailMode) {
             ThumbnailMode.YOUTUBE_FIRST -> {
                 when {
-                    ytFile.exists() && ytFile.length() > 512L -> ytFile
-                    frameFile.exists() && frameFile.length() > 512L && failedYouTubeLookups.contains(video.id) -> frameFile
+                    ytFile != null -> ytFile
+                    frameFile != null && failedYouTubeLookups.contains(video.id) -> frameFile
                     else -> null
                 }
             }
             ThumbnailMode.AUTO_FRAME_ONLY -> {
-                if (frameFile.exists() && frameFile.length() > 512L) frameFile
-                else if (ytFile.exists() && ytFile.length() > 512L && video.isYoutube) ytFile
+                if (frameFile != null) frameFile
+                else if (ytFile != null && video.isYoutube) ytFile
                 else null
             }
             ThumbnailMode.YOUTUBE_AND_SIDECAR_ONLY -> {
-                if (ytFile.exists() && ytFile.length() > 512L) ytFile else null
+                if (ytFile != null) ytFile else null
             }
         }
     }
@@ -221,7 +246,9 @@ object ThumbnailManager {
             cropped.recycle()
             if (targetFile.exists()) targetFile.delete()
             tmpFile.renameTo(targetFile)
-            targetFile.exists() && targetFile.length() > 512L
+            val ok = targetFile.exists() && targetFile.length() > 512L
+            if (ok) inMemoryCacheIndex[targetFile.name] = targetFile
+            ok
         }.getOrDefault(false)
     }
 
@@ -304,7 +331,9 @@ object ThumbnailManager {
             scaled.recycle()
             if (targetFile.exists()) targetFile.delete()
             tmpFile.renameTo(targetFile)
-            targetFile.exists() && targetFile.length() > 512L
+            val ok = targetFile.exists() && targetFile.length() > 512L
+            if (ok) inMemoryCacheIndex[targetFile.name] = targetFile
+            ok
         } catch (_: Exception) {
             false
         } finally {
@@ -349,6 +378,8 @@ object ThumbnailManager {
 
     fun clearThumbnailCache(context: Context) {
         failedYouTubeLookups.clear()
+        inMemoryCacheIndex.clear()
+        indexInitialized.set(false)
         val dir = getThumbnailsDir(context)
         dir.listFiles()?.forEach { runCatching { it.delete() } }
     }
