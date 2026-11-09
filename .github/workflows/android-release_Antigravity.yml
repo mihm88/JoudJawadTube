@@ -53,13 +53,13 @@ jobs:
       - name: Prepare APK Asset for Release
         run: |
           mkdir -p release-artifacts
-          SOURCE_APK="app/build/outputs/apk/debug/app-debug.apk"
+          SOURCE_APK=$(find app/build/outputs/apk/debug -name "*.apk" | head -n 1)
           DEST_APK="release-artifacts/JoudJawadTube-${{ env.RELEASE_TAG }}.apk"
-          if [ -f "$SOURCE_APK" ]; then
+          if [ -n "$SOURCE_APK" ] && [ -f "$SOURCE_APK" ]; then
             cp "$SOURCE_APK" "$DEST_APK"
             echo "Copied $SOURCE_APK to $DEST_APK"
           else
-            echo "Error: $SOURCE_APK not found!"
+            echo "Error: No APK found in app/build/outputs/apk/debug!"
             find app/build/outputs/apk -name "*.apk"
             exit 1
           fi

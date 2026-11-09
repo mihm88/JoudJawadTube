@@ -202,8 +202,9 @@ cd JoudJawadTube
 ```
 The output APK will be generated at:
 ```
-app/build/outputs/apk/debug/app-debug.apk
+app/build/outputs/apk/debug/JoudJawadTube-v1.0.0.apk
 ```
+(A pre-compiled copy is also kept ready at the repository root: `JoudJawadTube-v1.0.0.apk`)
 
 ### Run Unit Tests
 ```bash
@@ -215,7 +216,7 @@ app/build/outputs/apk/debug/app-debug.apk
 2. Connect to your TV's IP address:
 ```bash
 adb connect 192.168.1.xxx:5555
-adb install -r app/build/outputs/apk/debug/app-debug.apk
+adb install -r app/build/outputs/apk/debug/JoudJawadTube-v1.0.0.apk
 ```
 
 ---
