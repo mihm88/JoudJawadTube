@@ -63,6 +63,7 @@ import androidx.media3.exoplayer.trackselection.DefaultTrackSelector
 import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.PlayerView
 import com.joudjawadtube.player.data.settings.AppSettingsState
+import com.joudjawadtube.player.data.settings.RepeatMode
 import com.joudjawadtube.player.data.settings.ResumeMode
 import com.joudjawadtube.player.data.youtube.YouTubeService
 import com.joudjawadtube.player.ui.catalog.PlaybackSession
@@ -96,6 +97,8 @@ fun PlaybackScreen(
     var videoStreamBadge by remember(video.id) { mutableStateOf<String?>(null) }
     var playbackSpeed by remember { mutableFloatStateOf(settings.defaultPlaybackSpeed) }
     var resizeMode by remember { mutableIntStateOf(settings.defaultResizeMode) }
+    var currentRepeatMode by remember { mutableStateOf(settings.repeatMode) }
+    var currentQuality by remember { mutableStateOf(settings.preferredQuality) }
 
     var isResolvingYouTube by remember(video.id) { mutableStateOf(video.isYoutube) }
     var resolvedYouTubeStream by remember(video.id) { mutableStateOf<com.joudjawadtube.player.data.youtube.ResolvedYouTubeStream?>(null) }
@@ -301,8 +304,18 @@ fun PlaybackScreen(
                     }
                 } else if (playbackState == Player.STATE_ENDED) {
                     onSaveProgress(video.videoKey, durationMs, durationMs)
-                    if (settings.autoPlayNext && session.hasNext) {
-                        onNextVideo()
+                    when (currentRepeatMode) {
+                        RepeatMode.REPEAT_ONE -> {
+                            // Handled by Player.REPEAT_MODE_ONE
+                        }
+                        RepeatMode.REPEAT_ALL -> {
+                            onNextVideo()
+                        }
+                        RepeatMode.OFF -> {
+                            if (settings.autoPlayNext && session.hasNext) {
+                                onNextVideo()
+                            }
+                        }
                     }
                 }
             }
@@ -352,6 +365,63 @@ fun PlaybackScreen(
                 if (touched == null) {
                     hudVisible = false
                     break
+                }
+            }
+        }
+    }
+
+    LaunchedEffect(currentRepeatMode) {
+        exoPlayer.repeatMode = if (currentRepeatMode == RepeatMode.REPEAT_ONE) {
+            Player.REPEAT_MODE_ONE
+        } else {
+            Player.REPEAT_MODE_OFF
+        }
+    }
+
+    val applyQualitySelection: (String) -> Unit = remember(exoPlayer, video, resolvedYouTubeStream) {
+        { newQuality ->
+            currentQuality = newQuality
+            val (maxW, maxH) = when {
+                newQuality.contains("4K", ignoreCase = true) || newQuality.contains("2160", ignoreCase = true) -> 3840 to 2160
+                newQuality.contains("2K", ignoreCase = true) || newQuality.contains("1440", ignoreCase = true) -> 2560 to 1440
+                newQuality.contains("1080", ignoreCase = true) -> 1920 to 1080
+                newQuality.contains("720", ignoreCase = true) -> 1280 to 720
+                newQuality.contains("480", ignoreCase = true) -> 854 to 480
+                newQuality.contains("360", ignoreCase = true) -> 640 to 360
+                else -> Int.MAX_VALUE to Int.MAX_VALUE
+            }
+            exoPlayer.trackSelectionParameters = exoPlayer.trackSelectionParameters
+                .buildUpon()
+                .setMaxVideoSize(maxW, maxH)
+                .build()
+
+            val resolved = resolvedYouTubeStream
+            if (video.isYoutube && resolved != null && resolved.qualityVariants.isNotEmpty() && newQuality != "Auto") {
+                val match = resolved.qualityVariants.firstOrNull { it.label.contains(newQuality.take(4), ignoreCase = true) }
+                    ?: resolved.qualityVariants.firstOrNull { it.height <= maxH }
+                if (match != null && match.videoUrl.isNotBlank()) {
+                    val currentPos = exoPlayer.currentPosition.coerceAtLeast(0L)
+                    val httpFactory = DefaultHttpDataSource.Factory()
+                        .setUserAgent(resolved.userAgent)
+                        .setConnectTimeoutMs(10_000)
+                        .setReadTimeoutMs(12_000)
+                        .setAllowCrossProtocolRedirects(true)
+                    val dataSourceFactory = DefaultDataSource.Factory(context, httpFactory)
+
+                    val newSource = if (match.isProgressive || resolved.audioStreamUrl.isNullOrBlank()) {
+                        ProgressiveMediaSource.Factory(dataSourceFactory)
+                            .createMediaSource(MediaItem.fromUri(match.videoUrl))
+                    } else {
+                        val vSource = ProgressiveMediaSource.Factory(dataSourceFactory)
+                            .createMediaSource(MediaItem.fromUri(match.videoUrl))
+                        val aSource = ProgressiveMediaSource.Factory(dataSourceFactory)
+                            .createMediaSource(MediaItem.fromUri(resolved.audioStreamUrl))
+                        MergingMediaSource(vSource, aSource)
+                    }
+
+                    exoPlayer.setMediaSource(newSource, currentPos)
+                    exoPlayer.prepare()
+                    exoPlayer.playWhenReady = true
                 }
             }
         }
@@ -601,6 +671,16 @@ fun PlaybackScreen(
                 }
             },
             onToggleFavorite = onToggleFavorite,
+            currentQuality = currentQuality,
+            repeatMode = currentRepeatMode,
+            onOpenQualityDialog = { activeDialogTab = PlayerDialogTab.QUALITY },
+            onCycleRepeatMode = {
+                currentRepeatMode = when (currentRepeatMode) {
+                    RepeatMode.OFF -> RepeatMode.REPEAT_ONE
+                    RepeatMode.REPEAT_ONE -> RepeatMode.REPEAT_ALL
+                    RepeatMode.REPEAT_ALL -> RepeatMode.OFF
+                }
+            },
             onBack = {
                 if (!useWebViewYouTubeFallback) {
                     onSaveProgress(video.videoKey, exoPlayer.currentPosition, durationMs)
@@ -617,6 +697,7 @@ fun PlaybackScreen(
                 player = exoPlayer,
                 initialTab = tab,
                 currentSpeed = playbackSpeed,
+                currentQuality = currentQuality,
                 onSelectSpeed = { newSpeed ->
                     playbackSpeed = newSpeed
                     exoPlayer.setPlaybackSpeed(newSpeed)
@@ -625,6 +706,7 @@ fun PlaybackScreen(
                         null
                     )
                 },
+                onSelectQuality = applyQualitySelection,
                 onDismiss = {
                     activeDialogTab = null
                     interactionSignal.tryEmit(Unit)

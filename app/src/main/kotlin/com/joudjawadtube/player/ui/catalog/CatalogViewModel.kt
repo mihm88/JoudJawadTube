@@ -5,6 +5,8 @@ import android.net.Uri
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.joudjawadtube.player.data.local.AppDatabase
+import com.joudjawadtube.player.data.local.SavedChannelEntity
+import com.joudjawadtube.player.data.local.SavedPlaylistEntity
 import com.joudjawadtube.player.data.local.VideoEntity
 import com.joudjawadtube.player.data.local.VideoItem
 import com.joudjawadtube.player.data.repository.CatalogSnapshot
@@ -17,9 +19,13 @@ import com.joudjawadtube.player.data.settings.AppSettingsRepository
 import com.joudjawadtube.player.data.settings.AppSettingsState
 import com.joudjawadtube.player.data.settings.UiModePreference
 import com.joudjawadtube.player.data.thumbnail.ThumbnailManager
+import com.joudjawadtube.player.data.updater.AppUpdater_Antigravity
+import com.joudjawadtube.player.data.updater.UpdateInfo_Antigravity
+import com.joudjawadtube.player.data.updater.UpdateState_Antigravity
 import com.joudjawadtube.player.data.youtube.YouTubeService
 import com.joudjawadtube.player.ui.components.SidebarSection
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -50,12 +56,15 @@ data class CatalogUiState(
     val isScanning: Boolean = false,
     val mountedVolumes: List<MountedVolumeInfo> = emptyList(),
     val selectedSection: SidebarSection = SidebarSection.HOME,
+    val selectedTopCategory: String = "All",
     val searchQuery: String = "",
     val selectedFolderFilter: String? = null,
     val isTvModeOverride: Boolean? = null,
     val tabletUseGridMode: Boolean = true,
     val filteredRows: List<CategoryRow> = emptyList(),
     val filteredVideos: List<VideoItem> = emptyList(),
+    val matchingChannels: List<SavedChannelEntity> = emptyList(),
+    val matchingPlaylists: List<SavedPlaylistEntity> = emptyList(),
     val showAddYouTubeDialog: Boolean = false,
     val isImportingYouTube: Boolean = false,
     val youtubeErrorMessage: String? = null,
@@ -64,7 +73,8 @@ data class CatalogUiState(
     val selectedVideoForOptions: VideoItem? = null,
     val isGeneratingThumbnails: Boolean = false,
     val thumbnailStatusMessage: String? = null,
-    val thumbnailRevision: Int = 0
+    val thumbnailRevision: Int = 0,
+    val updateState: UpdateState_Antigravity = UpdateState_Antigravity.Idle
 ) {
     val usbDriveCount: Int
         get() = mountedVolumes.count { it.isUsbOrRemovable }
@@ -79,19 +89,22 @@ private data class DialogAndThumbState(
     val selectedVideoForOptions: VideoItem? = null,
     val isGeneratingThumbnails: Boolean = false,
     val thumbnailStatusMessage: String? = null,
-    val thumbnailRevision: Int = 0
+    val thumbnailRevision: Int = 0,
+    val updateState: UpdateState_Antigravity = UpdateState_Antigravity.Idle,
+    val isTvModeOverride: Boolean? = null
 )
 
 class CatalogViewModel(application: Application) : AndroidViewModel(application) {
 
+    private val appUpdater = AppUpdater_Antigravity(application)
     private val database = AppDatabase.getInstance(application)
     private val repository = VideoRepository(application.applicationContext, database.videoDao())
     private val settingsRepository = AppSettingsRepository.getInstance(application)
 
     private val _selectedSection = MutableStateFlow(SidebarSection.HOME)
+    private val _selectedTopCategory = MutableStateFlow("All")
     private val _searchQuery = MutableStateFlow("")
     private val _selectedFolderFilter = MutableStateFlow<String?>(null)
-    private val _isTvModeOverride = MutableStateFlow<Boolean?>(null)
     private val _dialogState = MutableStateFlow(DialogAndThumbState())
 
     private val _activePlaybackSession = MutableStateFlow<PlaybackSession?>(null)
@@ -104,28 +117,51 @@ class CatalogViewModel(application: Application) : AndroidViewModel(application)
         settingsRepository.settingsFlow,
         combine(
             _selectedSection,
+            _selectedTopCategory,
             _searchQuery,
             _selectedFolderFilter,
-            _isTvModeOverride,
             _dialogState
-        ) { section, query, folder, tvOverride, dialog ->
-            FilterAndDialogBundle(section, query, folder, tvOverride, dialog)
+        ) { section, topCat, query, folder, dialog ->
+            FilterAndDialogBundle(section, topCat, query, folder, dialog.isTvModeOverride, dialog)
         }
     ) { snapshot, isScanning, volumes, settings, bundle ->
         val section = bundle.selectedSection
+        val topCategory = bundle.selectedTopCategory
         val query = bundle.searchQuery.trim()
         val folderFilter = bundle.selectedFolderFilter
 
         val baseVideos = when (section) {
             SidebarSection.HOME -> snapshot.allVideos
             SidebarSection.KIDS_PICKS -> emptyList()
-            SidebarSection.YOUTUBE -> snapshot.youtubeVideos
+            SidebarSection.CHANNELS -> snapshot.youtubeVideos
+            SidebarSection.PLAYLISTS -> snapshot.youtubeVideos
+            SidebarSection.CATEGORIES -> snapshot.youtubeVideos
             SidebarSection.CONTINUE_WATCHING -> snapshot.continueWatching
             SidebarSection.USB_DRIVES -> snapshot.usbVideos
             SidebarSection.FOLDERS -> snapshot.allVideos.filter { !it.isYoutube }
             SidebarSection.FOUR_K -> snapshot.fourKVideos
             SidebarSection.FAVORITES -> snapshot.favoriteVideos
             SidebarSection.SETTINGS -> snapshot.allVideos
+        }
+
+        // Strictly in-app scoped search: filter saved channels, playlists, and videos
+        val matchingChannels = if (query.isEmpty()) {
+            snapshot.savedChannels
+        } else {
+            snapshot.savedChannels.filter {
+                it.title.contains(query, ignoreCase = true) ||
+                    it.handle.contains(query, ignoreCase = true) ||
+                    it.category.contains(query, ignoreCase = true)
+            }
+        }
+
+        val matchingPlaylists = if (query.isEmpty()) {
+            snapshot.savedPlaylists
+        } else {
+            snapshot.savedPlaylists.filter {
+                it.title.contains(query, ignoreCase = true) ||
+                    it.category.contains(query, ignoreCase = true)
+            }
         }
 
         val queryFilteredVideos = baseVideos.filter { item ->
@@ -139,7 +175,18 @@ class CatalogViewModel(application: Application) : AndroidViewModel(application)
 
         val rows = when (section) {
             SidebarSection.HOME -> {
-                snapshot.categoryRows.mapNotNull { row ->
+                val candidateRows = if (topCategory == "All") {
+                    snapshot.categoryRows
+                } else {
+                    snapshot.categoryRows.filter { row ->
+                        row.category.equals(topCategory, ignoreCase = true) ||
+                            (topCategory.equals("Islamic Kids", ignoreCase = true) && (row.title.contains("Islamic", ignoreCase = true) || row.title.contains("Quran", ignoreCase = true))) ||
+                            (topCategory.equals("English Learning", ignoreCase = true) && (row.title.contains("English", ignoreCase = true) || row.title.contains("ABC", ignoreCase = true))) ||
+                            (topCategory.equals("Cartoons & Fun", ignoreCase = true) && (row.title.contains("Cartoon", ignoreCase = true) || row.title.contains("Animation", ignoreCase = true))) ||
+                            (topCategory.equals("Stories & Rhymes", ignoreCase = true) && (row.title.contains("Stories", ignoreCase = true) || row.title.contains("Rhymes", ignoreCase = true)))
+                    }
+                }
+                candidateRows.mapNotNull { row ->
                     val matching = row.videos.filter { item ->
                         val matchesQuery = query.isEmpty() ||
                             item.title.contains(query, ignoreCase = true) ||
@@ -151,35 +198,56 @@ class CatalogViewModel(application: Application) : AndroidViewModel(application)
                 }
             }
             SidebarSection.KIDS_PICKS -> emptyList()
-            SidebarSection.YOUTUBE -> {
-                val ytRows = mutableListOf<CategoryRow>()
-                val byPlaylist = queryFilteredVideos.filter { it.playlistId.isNotBlank() }.groupBy { it.playlistId }
-                for ((plId, list) in byPlaylist) {
-                    val plTitle = list.firstOrNull()?.playlistTitle?.ifBlank { "YouTube Playlist" } ?: "YouTube Playlist"
-                    ytRows.add(
-                        CategoryRow(
-                            id = "yt_sec_pl_$plId",
-                            title = plTitle,
-                            subtitle = "${list.size} videos in playlist",
-                            isYoutubeCategory = true,
-                            playlistId = plId,
-                            videos = list
-                        )
+            SidebarSection.CHANNELS -> {
+                matchingChannels.map { channel ->
+                    val cVideos = queryFilteredVideos.filter {
+                        (channel.uploadsPlaylistId.isNotBlank() && it.playlistId == channel.uploadsPlaylistId) ||
+                            (channel.title.isNotBlank() && it.playlistTitle.contains(channel.title, ignoreCase = true)) ||
+                            (channel.title.isNotBlank() && it.folderName.contains(channel.title, ignoreCase = true))
+                    }
+                    CategoryRow(
+                        id = "ch_row_${channel.channelId}",
+                        title = channel.title,
+                        subtitle = "${cVideos.size} videos • ${channel.category}",
+                        isYoutubeCategory = true,
+                        channelId = channel.channelId,
+                        category = channel.category,
+                        videos = cVideos
                     )
                 }
-                val singles = queryFilteredVideos.filter { it.playlistId.isBlank() }
-                if (singles.isNotEmpty()) {
-                    ytRows.add(
-                        CategoryRow(
-                            id = "yt_sec_singles",
-                            title = "Saved YouTube Videos",
-                            subtitle = "${singles.size} saved videos",
-                            isYoutubeCategory = true,
-                            videos = singles
-                        )
+            }
+            SidebarSection.PLAYLISTS -> {
+                matchingPlaylists.map { pl ->
+                    val plVideos = queryFilteredVideos.filter { it.playlistId == pl.playlistId }
+                    CategoryRow(
+                        id = "pl_row_${pl.playlistId}",
+                        title = pl.title,
+                        subtitle = "${plVideos.size} videos • ${pl.category}" + if (pl.isAutoCreatedFromChannel) " • From Channel" else "",
+                        isYoutubeCategory = true,
+                        playlistId = pl.playlistId,
+                        videos = plVideos
                     )
                 }
-                ytRows
+            }
+            SidebarSection.CATEGORIES -> {
+                val catRows = mutableListOf<CategoryRow>()
+                val allCats = (snapshot.savedChannels.map { it.category } + snapshot.savedPlaylists.map { it.category }).distinct()
+                for (cat in allCats) {
+                    val catPlaylists = snapshot.savedPlaylists.filter { it.category.equals(cat, ignoreCase = true) }.map { it.playlistId }.toSet()
+                    val catVideos = queryFilteredVideos.filter { it.playlistId in catPlaylists }
+                    if (catVideos.isNotEmpty()) {
+                        catRows.add(
+                            CategoryRow(
+                                id = "cat_row_$cat",
+                                title = cat,
+                                subtitle = "${catVideos.size} videos in $cat",
+                                isYoutubeCategory = true,
+                                videos = catVideos
+                            )
+                        )
+                    }
+                }
+                catRows
             }
             SidebarSection.CONTINUE_WATCHING -> {
                 if (queryFilteredVideos.isEmpty()) emptyList()
@@ -248,12 +316,15 @@ class CatalogViewModel(application: Application) : AndroidViewModel(application)
             isScanning = isScanning,
             mountedVolumes = volumes,
             selectedSection = section,
+            selectedTopCategory = topCategory,
             searchQuery = bundle.searchQuery,
             selectedFolderFilter = folderFilter,
             isTvModeOverride = bundle.isTvModeOverride,
             tabletUseGridMode = settings.tabletUseGridMode,
             filteredRows = rows,
             filteredVideos = queryFilteredVideos,
+            matchingChannels = matchingChannels,
+            matchingPlaylists = matchingPlaylists,
             showAddYouTubeDialog = dlg.showAddYouTubeDialog,
             isImportingYouTube = dlg.isImportingYouTube,
             youtubeErrorMessage = dlg.youtubeErrorMessage,
@@ -262,7 +333,8 @@ class CatalogViewModel(application: Application) : AndroidViewModel(application)
             selectedVideoForOptions = dlg.selectedVideoForOptions,
             isGeneratingThumbnails = dlg.isGeneratingThumbnails,
             thumbnailStatusMessage = dlg.thumbnailStatusMessage,
-            thumbnailRevision = dlg.thumbnailRevision
+            thumbnailRevision = dlg.thumbnailRevision,
+            updateState = dlg.updateState
         )
     }.flowOn(Dispatchers.Default).stateIn(
         scope = viewModelScope,
@@ -272,6 +344,7 @@ class CatalogViewModel(application: Application) : AndroidViewModel(application)
 
     private data class FilterAndDialogBundle(
         val selectedSection: SidebarSection,
+        val selectedTopCategory: String,
         val searchQuery: String,
         val selectedFolderFilter: String?,
         val isTvModeOverride: Boolean?,
@@ -300,6 +373,79 @@ class CatalogViewModel(application: Application) : AndroidViewModel(application)
                 }
             }
         }
+
+        viewModelScope.launch {
+            delay(3500)
+            checkForAppUpdates(isManual = false)
+        }
+    }
+
+    fun checkForAppUpdates(isManual: Boolean = false) {
+        viewModelScope.launch {
+            _dialogState.value = _dialogState.value.copy(updateState = UpdateState_Antigravity.Checking)
+            val currentVersion = runCatching {
+                val pInfo = getApplication<Application>().packageManager.getPackageInfo(getApplication<Application>().packageName, 0)
+                pInfo.versionName ?: "1.0.0"
+            }.getOrDefault("1.0.0")
+
+            val result = appUpdater.checkForUpdate(currentVersion)
+            result.onSuccess { info ->
+                if (info == null) {
+                    _dialogState.value = _dialogState.value.copy(
+                        updateState = UpdateState_Antigravity.UpToDate(currentVersion)
+                    )
+                } else if (info.isNewer) {
+                    _dialogState.value = _dialogState.value.copy(
+                        updateState = UpdateState_Antigravity.UpdateAvailable(info)
+                    )
+                } else {
+                    _dialogState.value = _dialogState.value.copy(
+                        updateState = UpdateState_Antigravity.UpToDate(currentVersion)
+                    )
+                }
+            }.onFailure { err ->
+                if (isManual) {
+                    _dialogState.value = _dialogState.value.copy(
+                        updateState = UpdateState_Antigravity.Error(err.message ?: "Failed to check for updates")
+                    )
+                } else {
+                    _dialogState.value = _dialogState.value.copy(
+                        updateState = UpdateState_Antigravity.Idle
+                    )
+                }
+            }
+        }
+    }
+
+    fun downloadAndInstallUpdate(info: UpdateInfo_Antigravity) {
+        viewModelScope.launch {
+            _dialogState.value = _dialogState.value.copy(
+                updateState = UpdateState_Antigravity.Downloading(0, 0, info.fileSize)
+            )
+            val result = appUpdater.downloadApk(info) { percent, downloaded, total ->
+                _dialogState.value = _dialogState.value.copy(
+                    updateState = UpdateState_Antigravity.Downloading(percent, downloaded, total)
+                )
+            }
+            result.onSuccess { apkFile ->
+                _dialogState.value = _dialogState.value.copy(
+                    updateState = UpdateState_Antigravity.ReadyToInstall(apkFile, info)
+                )
+                appUpdater.installApk(apkFile).onFailure { err ->
+                    _dialogState.value = _dialogState.value.copy(
+                        updateState = UpdateState_Antigravity.Error("Failed to launch installer: ${err.message}")
+                    )
+                }
+            }.onFailure { err ->
+                _dialogState.value = _dialogState.value.copy(
+                    updateState = UpdateState_Antigravity.Error("Download failed: ${err.message}")
+                )
+            }
+        }
+    }
+
+    fun dismissUpdateStatus() {
+        _dialogState.value = _dialogState.value.copy(updateState = UpdateState_Antigravity.Idle)
     }
 
     fun rescanStorage() {
@@ -316,6 +462,10 @@ class CatalogViewModel(application: Application) : AndroidViewModel(application)
         }
     }
 
+    fun selectTopCategory(category: String) {
+        _selectedTopCategory.value = category
+    }
+
     fun updateSearchQuery(query: String) {
         _searchQuery.value = query
     }
@@ -329,10 +479,10 @@ class CatalogViewModel(application: Application) : AndroidViewModel(application)
         val currentEffective = when (currentSettings.uiModePreference) {
             UiModePreference.FORCE_TV -> true
             UiModePreference.FORCE_TABLET -> false
-            UiModePreference.AUTO -> _isTvModeOverride.value ?: defaultIsTv
+            UiModePreference.AUTO -> _dialogState.value.isTvModeOverride ?: defaultIsTv
         }
         val nextIsTv = !currentEffective
-        _isTvModeOverride.value = nextIsTv
+        _dialogState.value = _dialogState.value.copy(isTvModeOverride = nextIsTv)
         settingsRepository.update {
             it.copy(uiModePreference = if (nextIsTv) UiModePreference.FORCE_TV else UiModePreference.FORCE_TABLET)
         }
@@ -347,7 +497,7 @@ class CatalogViewModel(application: Application) : AndroidViewModel(application)
     }
 
     fun resetSettingsToDefaults() {
-        _isTvModeOverride.value = null
+        _dialogState.value = _dialogState.value.copy(isTvModeOverride = null)
         settingsRepository.resetToDefaults()
     }
 
@@ -388,7 +538,7 @@ class CatalogViewModel(application: Application) : AndroidViewModel(application)
                 if (playImmediately) {
                     openVideo(imported.firstVideo, imported.playlist)
                 } else {
-                    _selectedSection.value = SidebarSection.YOUTUBE
+                    _selectedSection.value = SidebarSection.PLAYLISTS
                 }
             }.onFailure { err ->
                 _dialogState.value = _dialogState.value.copy(
@@ -596,11 +746,25 @@ class CatalogViewModel(application: Application) : AndroidViewModel(application)
         }
     }
 
-    fun playNextInSession() {
+    fun playNextInSession(wrapAround: Boolean = false) {
         val session = _activePlaybackSession.value ?: return
         if (session.hasNext) {
             val next = session.playlist[session.currentIndex + 1]
             openVideo(next, session.playlist)
+        } else if (wrapAround && session.playlist.isNotEmpty()) {
+            openVideo(session.playlist.first(), session.playlist)
+        }
+    }
+
+    fun updateChannelCategory(channelId: String, newCategory: String) {
+        viewModelScope.launch {
+            repository.updateChannelCategory(channelId, newCategory)
+        }
+    }
+
+    fun updatePlaylistCategory(playlistId: String, newCategory: String) {
+        viewModelScope.launch {
+            repository.updatePlaylistCategory(playlistId, newCategory)
         }
     }
 

@@ -41,6 +41,14 @@ data class YouTubeChannelMetadata(
     val subPlaylists: List<YouTubePlaylistMetadata> = emptyList()
 )
 
+data class YouTubeQualityVariant(
+    val label: String,
+    val height: Int,
+    val width: Int,
+    val videoUrl: String,
+    val isProgressive: Boolean = false
+)
+
 data class ResolvedYouTubeStream(
     val videoId: String,
     val hlsManifestUrl: String? = null,
@@ -50,6 +58,7 @@ data class ResolvedYouTubeStream(
     val width: Int = 1920,
     val height: Int = 1080,
     val durationMs: Long = 0L,
+    val qualityVariants: List<YouTubeQualityVariant> = emptyList(),
     val subtitles: List<SidecarSubtitle> = emptyList(),
     val userAgent: String = "com.google.ios.youtubekids/9.40.0 (iPad14,1; U; CPU iOS 18_1_0 like Mac OS X;)"
 ) {
@@ -419,6 +428,8 @@ object YouTubeService {
         val channelTitle = uploadsPl?.author?.takeIf { it.isNotBlank() && it != "YouTube Playlist" }
             ?: handle.removePrefix("/@").removePrefix("@").ifBlank { "YouTube Channel" }
 
+        val subPlaylists = fetchChannelPublicPlaylists(channelId)
+
         YouTubeChannelMetadata(
             channelId = channelId,
             title = channelTitle,
@@ -426,8 +437,83 @@ object YouTubeService {
             avatarUrl = uploadsPl?.thumbnailUrl.orEmpty(),
             uploadsPlaylistId = uploadsPlaylistId,
             uploadsVideos = uploadsPl?.videos ?: emptyList(),
-            subPlaylists = emptyList()
+            subPlaylists = subPlaylists
         )
+    }
+
+    suspend fun fetchChannelPublicPlaylists(channelId: String): List<YouTubePlaylistMetadata> = withContext(Dispatchers.IO) {
+        val playlists = mutableListOf<YouTubePlaylistMetadata>()
+        val browseId = if (channelId.startsWith("UC")) channelId else "UC$channelId"
+        val payload = JSONObject().apply {
+            put("browseId", browseId)
+            put("params", "EglwbGF5bGlzdHPyBgQKAkIA")
+            put(
+                "context",
+                JSONObject().apply {
+                    put(
+                        "client",
+                        JSONObject().apply {
+                            put("clientName", "WEB")
+                            put("clientVersion", "2.20240726.00.00")
+                            put("hl", "en")
+                            put("gl", "US")
+                        }
+                    )
+                }
+            )
+        }
+        val response = httpPostJson(
+            url = "https://www.youtube.com/youtubei/v1/browse?prettyPrint=false",
+            jsonBody = payload.toString(),
+            userAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+        )
+        if (!response.isNullOrBlank()) {
+            runCatching {
+                val root = JSONObject(response)
+                collectChannelPlaylistsRecursive(root, playlists)
+            }
+        }
+        playlists.distinctBy { it.playlistId }
+    }
+
+    private fun collectChannelPlaylistsRecursive(
+        node: Any?,
+        sink: MutableList<YouTubePlaylistMetadata>
+    ) {
+        when (node) {
+            is JSONObject -> {
+                val gpr = node.optJSONObject("gridPlaylistRenderer")
+                    ?: node.optJSONObject("playlistRenderer")
+                if (gpr != null) {
+                    val plId = gpr.optString("playlistId")
+                    if (plId.length >= 12) {
+                        val title = gpr.optJSONObject("title")?.optString("simpleText")
+                            ?: gpr.optJSONObject("title")?.optJSONArray("runs")?.optJSONObject(0)?.optString("text")
+                            ?: "Playlist $plId"
+                        val thumb = gpr.optJSONObject("thumbnail")?.optJSONArray("thumbnails")
+                            ?.optJSONObject(0)?.optString("url") ?: ""
+                        sink.add(
+                            YouTubePlaylistMetadata(
+                                playlistId = plId,
+                                title = title,
+                                author = "",
+                                thumbnailUrl = thumb,
+                                videos = emptyList()
+                            )
+                        )
+                    }
+                }
+                val keys = node.keys()
+                while (keys.hasNext()) {
+                    collectChannelPlaylistsRecursive(node.opt(keys.next()), sink)
+                }
+            }
+            is JSONArray -> {
+                for (i in 0 until node.length()) {
+                    collectChannelPlaylistsRecursive(node.opt(i), sink)
+                }
+            }
+        }
     }
 
     /**
@@ -636,6 +722,51 @@ object YouTubeService {
             }
         }
 
+        val variants = mutableListOf<YouTubeQualityVariant>()
+        if (formats != null) {
+            for (i in 0 until formats.length()) {
+                val fmt = formats.optJSONObject(i) ?: continue
+                val url = fmt.optString("url").takeIf { it.isNotBlank() } ?: continue
+                val h = fmt.optInt("height", 360)
+                val w = fmt.optInt("width", (h * 16) / 9)
+                val label = when {
+                    h >= 2160 || w >= 3840 -> "4K (2160p)"
+                    h >= 1440 || w >= 2560 -> "2K (1440p)"
+                    h >= 1080 -> "1080p"
+                    h >= 720 -> "720p"
+                    h >= 480 -> "480p"
+                    else -> "${h}p"
+                }
+                variants.add(YouTubeQualityVariant(label, h, w, url, isProgressive = true))
+            }
+        }
+        if (adaptive != null) {
+            for (i in 0 until adaptive.length()) {
+                val fmt = adaptive.optJSONObject(i) ?: continue
+                val url = fmt.optString("url").takeIf { it.isNotBlank() } ?: continue
+                val mime = fmt.optString("mimeType")
+                if (mime.startsWith("video/")) {
+                    if (mime.contains("av01")) continue
+                    val h = fmt.optInt("height", 0)
+                    val w = fmt.optInt("width", (h * 16) / 9)
+                    if (h >= 240) {
+                        val label = when {
+                            h >= 2160 || w >= 3840 -> "4K (2160p)"
+                            h >= 1440 || w >= 2560 -> "2K (1440p)"
+                            h >= 1080 -> "1080p"
+                            h >= 720 -> "720p"
+                            h >= 480 -> "480p"
+                            else -> "${h}p"
+                        }
+                        variants.add(YouTubeQualityVariant(label, h, w, url, isProgressive = false))
+                    }
+                }
+            }
+        }
+        val distinctVariants = variants
+            .sortedByDescending { it.height }
+            .distinctBy { it.label }
+
         val subtitles = extractSubtitles(playerJson)
 
         return ResolvedYouTubeStream(
@@ -647,6 +778,7 @@ object YouTubeService {
             width = bestVideoWidth,
             height = if (bestVideoHeight > 0) bestVideoHeight else bestProgressiveHeight.coerceAtLeast(720),
             durationMs = durationMs,
+            qualityVariants = distinctVariants,
             subtitles = subtitles,
             userAgent = userAgent
         )

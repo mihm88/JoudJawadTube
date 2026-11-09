@@ -32,8 +32,9 @@ fun CompactBottomNav_Antigravity(
 ) {
     val navItems = listOf(
         SidebarSection.HOME,
-        SidebarSection.KIDS_PICKS,
-        SidebarSection.YOUTUBE,
+        SidebarSection.CHANNELS,
+        SidebarSection.PLAYLISTS,
+        SidebarSection.CATEGORIES,
         SidebarSection.USB_DRIVES,
         SidebarSection.SETTINGS
     )

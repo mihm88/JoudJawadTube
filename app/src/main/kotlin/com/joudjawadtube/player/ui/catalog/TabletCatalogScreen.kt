@@ -1,8 +1,11 @@
 package com.joudjawadtube.player.ui.catalog
 
+import com.joudjawadtube.player.data.updater.UpdateInfo_Antigravity
+
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -11,16 +14,22 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyGridState
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
@@ -71,9 +80,12 @@ import com.joudjawadtube.player.ui.theme.SmartTubeUsbCyan
 @Composable
 fun TabletCatalogScreen(
     uiState: CatalogUiState,
+    lazyListState: LazyListState = rememberLazyListState(),
+    lazyGridState: LazyGridState = rememberLazyGridState(),
     hasReadVideoPermission: Boolean,
     hasAllFilesAccess: Boolean,
     onSelectSection: (SidebarSection) -> Unit,
+    onSelectTopCategory: (String) -> Unit = {},
     onSearchQueryChange: (String) -> Unit,
     onSelectFolderFilter: (String?) -> Unit,
     onVideoClick: (VideoItem, List<VideoItem>) -> Unit,
@@ -82,13 +94,14 @@ fun TabletCatalogScreen(
     onOpenAddYouTubeDialog: () -> Unit,
     onDeletePlaylist: (String) -> Unit,
     onDeleteChannel: (String) -> Unit = {},
+    onChangeChannelCategory: (channelId: String, newCategory: String) -> Unit = { _, _ -> },
+    onChangePlaylistCategory: (playlistId: String, newCategory: String) -> Unit = { _, _ -> },
     onOpenKidsPlaylist: (String, String) -> Unit = { _, _ -> },
     onSaveKidsPlaylist: (String) -> Unit = {},
     onRequestReadPermission: () -> Unit,
     onRequestAllFilesAccess: () -> Unit,
     onPickSafFolder: () -> Unit,
     onRescanStorage: () -> Unit,
-    onToggleLayoutMode: () -> Unit,
     onToggleTabletGridMode: () -> Unit,
     onUpdateSettings: ((AppSettingsState) -> AppSettingsState) -> Unit,
     onRegenerateAllThumbnails: () -> Unit,
@@ -97,7 +110,10 @@ fun TabletCatalogScreen(
     onClearWatchHistory: () -> Unit,
     onClearFavorites: () -> Unit,
     onClearYouTubeLibrary: () -> Unit,
-    onResetSettings: () -> Unit
+    onResetSettings: () -> Unit,
+    onCheckForUpdates: () -> Unit = {},
+    onDownloadAndInstallUpdate: (UpdateInfo_Antigravity) -> Unit = {},
+    onDismissUpdateStatus: () -> Unit = {}
 ) {
     BoxWithConstraints(
         modifier = Modifier
@@ -116,7 +132,8 @@ fun TabletCatalogScreen(
                     SmartTubeSidebar(
                         selectedSection = uiState.selectedSection,
                         usbDriveCount = uiState.usbDriveCount,
-                        youtubeCount = uiState.snapshot.youtubeVideos.size,
+                        channelsCount = uiState.snapshot.savedChannels.size,
+                        playlistsCount = uiState.snapshot.savedPlaylists.size,
                         isScanning = uiState.isScanning,
                         isExpanded = isWideTablet,
                         sidebarMode = uiState.settings.sidebarMode,
@@ -133,66 +150,80 @@ fun TabletCatalogScreen(
                         .fillMaxSize()
                         .padding(horizontal = if (isCompactWidth) 12.dp else 20.dp, vertical = 14.dp)
                 ) {
+                    val categoryList = remember(uiState.snapshot.savedChannels, uiState.snapshot.savedPlaylists) {
+                        val found = (uiState.snapshot.savedChannels.map { it.category } + uiState.snapshot.savedPlaylists.map { it.category }).filter { it.isNotBlank() }.toSet()
+                        listOf("All") + (STANDARD_CATEGORIES_ANTIGRAVITY + found).distinct()
+                    }
+
                     // Top Bar
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
+                        // Focus-Safe Search Input
                         Row(
                             modifier = Modifier
-                                .weight(1f)
-                                .height(40.dp)
-                                .clip(RoundedCornerShape(20.dp))
-                                .background(if (searchFocused) SmartTubeCardFocusedBg else SmartTubeCardBg)
-                                .border(
-                                    width = if (searchFocused) 1.8.dp else 1.dp,
-                                    color = if (searchFocused) SmartTubeRed else Color.White.copy(alpha = 0.08f),
-                                    shape = RoundedCornerShape(20.dp)
-                                )
-                                .clickable {
-                                    runCatching { searchFocusRequester.requestFocus() }
-                                    keyboardController?.show()
-                                }
-                                .padding(horizontal = 14.dp),
-                            verticalAlignment = Alignment.CenterVertically
+                                .weight(if (isCompactWidth) 1f else 0.45f)
+                                .height(40.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
                         ) {
-                            Icon(
-                                imageVector = Icons.Default.Search,
-                                contentDescription = "Search",
-                                tint = if (searchFocused) SmartTubeRed else SmartTubeTextSecondary,
-                                modifier = Modifier.size(18.dp)
-                            )
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Box(
-                                modifier = Modifier.weight(1f),
-                                contentAlignment = Alignment.CenterStart
-                            ) {
-                                if (uiState.searchQuery.isEmpty()) {
-                                    Text(
-                                        text = "Search videos, folders, YouTube...",
-                                        color = SmartTubeTextSecondary,
-                                        fontSize = 13.sp,
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis
-                                    )
+                            BasicTextField(
+                                value = uiState.searchQuery,
+                                onValueChange = onSearchQueryChange,
+                                singleLine = true,
+                                textStyle = TextStyle(
+                                    color = SmartTubeTextPrimary,
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.Medium
+                                ),
+                                cursorBrush = SolidColor(SmartTubeRed),
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .fillMaxHeight()
+                                    .focusRequester(searchFocusRequester)
+                                    .onFocusChanged { searchFocused = it.isFocused },
+                                decorationBox = { innerTextField ->
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxSize()
+                                            .clip(RoundedCornerShape(20.dp))
+                                            .background(if (searchFocused) SmartTubeCardFocusedBg else SmartTubeCardBg)
+                                            .border(
+                                                width = if (searchFocused) 1.8.dp else 1.dp,
+                                                color = if (searchFocused) SmartTubeRed else Color.White.copy(alpha = 0.08f),
+                                                shape = RoundedCornerShape(20.dp)
+                                            )
+                                            .padding(horizontal = 14.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Search,
+                                            contentDescription = "Search",
+                                            tint = if (searchFocused) SmartTubeRed else SmartTubeTextSecondary,
+                                            modifier = Modifier.size(18.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(8.dp))
+                                        Box(
+                                            modifier = Modifier.weight(1f),
+                                            contentAlignment = Alignment.CenterStart
+                                        ) {
+                                            if (uiState.searchQuery.isEmpty()) {
+                                                Text(
+                                                    text = "Search in-app...",
+                                                    color = SmartTubeTextSecondary,
+                                                    fontSize = 13.sp,
+                                                    maxLines = 1,
+                                                    overflow = TextOverflow.Ellipsis
+                                                )
+                                            }
+                                            innerTextField()
+                                        }
+                                    }
                                 }
-                                BasicTextField(
-                                    value = uiState.searchQuery,
-                                    onValueChange = onSearchQueryChange,
-                                    singleLine = true,
-                                    textStyle = TextStyle(
-                                        color = SmartTubeTextPrimary,
-                                        fontSize = 13.sp,
-                                        fontWeight = FontWeight.Medium
-                                    ),
-                                    cursorBrush = SolidColor(SmartTubeRed),
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .focusRequester(searchFocusRequester)
-                                        .onFocusChanged { searchFocused = it.isFocused }
-                                )
-                            }
+                            )
+
                             if (uiState.searchQuery.isNotEmpty()) {
                                 HeaderInteractivePill(
                                     icon = Icons.Default.Clear,
@@ -204,48 +235,51 @@ fun TabletCatalogScreen(
 
                         Spacer(modifier = Modifier.width(10.dp))
 
-                        HeaderInteractivePill(
-                            icon = Icons.Default.AddLink,
-                            text = "+ YouTube",
-                            isPrimary = true,
-                            onClick = onOpenAddYouTubeDialog
-                        )
+                        // Category Navigation Pills (Replaces old top-bar buttons!)
+                        Row(
+                            modifier = Modifier
+                                .weight(if (isCompactWidth) 0.5f else 0.55f)
+                                .horizontalScroll(rememberScrollState()),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            categoryList.forEach { cat ->
+                                val isSelected = uiState.selectedTopCategory.equals(cat, ignoreCase = true)
+                                FilterChipItem(
+                                    label = cat,
+                                    isSelected = isSelected,
+                                    onClick = { onSelectTopCategory(cat) }
+                                )
+                            }
 
-                        if (!isCompactWidth) {
-                            Spacer(modifier = Modifier.width(6.dp))
-                            HeaderInteractivePill(
-                                icon = Icons.Default.Usb,
-                                text = if (uiState.usbDriveCount > 0) "${uiState.usbDriveCount} USB" else "No USB",
-                                accentColor = if (uiState.usbDriveCount > 0) SmartTubeUsbCyan else null,
-                                onClick = { onSelectSection(SidebarSection.USB_DRIVES) }
-                            )
-
-                            Spacer(modifier = Modifier.width(6.dp))
                             HeaderInteractivePill(
                                 icon = if (uiState.tabletUseGridMode) Icons.Default.ViewAgenda else Icons.Default.GridView,
                                 text = if (uiState.tabletUseGridMode) "Rows" else "Grid",
                                 onClick = onToggleTabletGridMode
                             )
-
-                            Spacer(modifier = Modifier.width(6.dp))
-                            HeaderInteractivePill(
-                                icon = Icons.Default.Tv,
-                                text = "TV Mode",
-                                onClick = onToggleLayoutMode
-                            )
                         }
-
-                        Spacer(modifier = Modifier.width(6.dp))
-                        HeaderInteractivePill(
-                            icon = Icons.Default.Settings,
-                            text = "Settings",
-                            onClick = { onSelectSection(SidebarSection.SETTINGS) }
-                        )
                     }
 
                     Spacer(modifier = Modifier.height(12.dp))
 
-                    if (uiState.selectedSection == SidebarSection.SETTINGS) {
+                    if (uiState.searchQuery.isNotBlank()) {
+                        InAppSearchResultsView_Antigravity(
+                            query = uiState.searchQuery,
+                            matchingChannels = uiState.matchingChannels,
+                            matchingPlaylists = uiState.matchingPlaylists,
+                            matchingVideos = uiState.filteredVideos,
+                            onOpenChannelVideos = { channel, videos ->
+                                if (videos.isNotEmpty()) onVideoClick(videos.first(), videos)
+                            },
+                            onOpenPlaylistVideos = { playlist, videos ->
+                                if (videos.isNotEmpty()) onVideoClick(videos.first(), videos)
+                            },
+                            onVideoClick = onVideoClick,
+                            onToggleFavorite = onToggleFavorite,
+                            onOpenVideoOptions = onOpenVideoOptions,
+                            onClearSearch = { onSearchQueryChange("") }
+                        )
+                    } else if (uiState.selectedSection == SidebarSection.SETTINGS) {
                         SettingsScreen(
                             settings = uiState.settings,
                             safFolders = uiState.snapshot.safFolders,
@@ -268,13 +302,62 @@ fun TabletCatalogScreen(
                             onClearWatchHistory = onClearWatchHistory,
                             onClearFavorites = onClearFavorites,
                             onClearYouTubeLibrary = onClearYouTubeLibrary,
-                            onResetSettings = onResetSettings
+                            onResetSettings = onResetSettings,
+                            updateState = uiState.updateState,
+                            onCheckForUpdates = onCheckForUpdates,
+                            onDownloadAndInstallUpdate = onDownloadAndInstallUpdate,
+                            onDismissUpdateStatus = onDismissUpdateStatus
                         )
                     } else if (uiState.selectedSection == SidebarSection.KIDS_PICKS) {
                         KidsPicksScreen_Antigravity(
                             savedPlaylistIds = uiState.snapshot.savedPlaylists.map { it.playlistId }.toSet(),
                             onOpenPlaylist = onOpenKidsPlaylist,
                             onSavePlaylistToLibrary = onSaveKidsPlaylist
+                        )
+                    } else if (uiState.selectedSection == SidebarSection.CHANNELS) {
+                        ChannelsScreen_Antigravity(
+                            channels = uiState.snapshot.savedChannels,
+                            allVideos = uiState.snapshot.youtubeVideos,
+                            onOpenChannelVideos = { channel, videos ->
+                                if (videos.isNotEmpty()) onVideoClick(videos.first(), videos)
+                            },
+                            onVideoClick = onVideoClick,
+                            onToggleFavorite = onToggleFavorite,
+                            onOpenVideoOptions = onOpenVideoOptions,
+                            onChangeChannelCategory = onChangeChannelCategory,
+                            onDeleteChannel = onDeleteChannel,
+                            onAddChannelClick = onOpenAddYouTubeDialog
+                        )
+                    } else if (uiState.selectedSection == SidebarSection.PLAYLISTS) {
+                        PlaylistsScreen_Antigravity(
+                            playlists = uiState.snapshot.savedPlaylists,
+                            allVideos = uiState.snapshot.youtubeVideos,
+                            onOpenPlaylistVideos = { playlist, videos ->
+                                if (videos.isNotEmpty()) onVideoClick(videos.first(), videos)
+                            },
+                            onVideoClick = onVideoClick,
+                            onToggleFavorite = onToggleFavorite,
+                            onOpenVideoOptions = onOpenVideoOptions,
+                            onChangePlaylistCategory = onChangePlaylistCategory,
+                            onDeletePlaylist = onDeletePlaylist,
+                            onAddPlaylistClick = onOpenAddYouTubeDialog
+                        )
+                    } else if (uiState.selectedSection == SidebarSection.CATEGORIES) {
+                        CategoriesScreen_Antigravity(
+                            channels = uiState.snapshot.savedChannels,
+                            playlists = uiState.snapshot.savedPlaylists,
+                            allVideos = uiState.snapshot.youtubeVideos,
+                            onOpenChannelVideos = { channel, videos ->
+                                if (videos.isNotEmpty()) onVideoClick(videos.first(), videos)
+                            },
+                            onOpenPlaylistVideos = { playlist, videos ->
+                                if (videos.isNotEmpty()) onVideoClick(videos.first(), videos)
+                            },
+                            onVideoClick = onVideoClick,
+                            onToggleFavorite = onToggleFavorite,
+                            onOpenVideoOptions = onOpenVideoOptions,
+                            onChangeChannelCategory = onChangeChannelCategory,
+                            onChangePlaylistCategory = onChangePlaylistCategory
                         )
                     } else {
                         PermissionBanner(
@@ -307,6 +390,7 @@ fun TabletCatalogScreen(
                             )
                         } else if (uiState.tabletUseGridMode) {
                             LazyVerticalGrid(
+                                state = lazyGridState,
                                 columns = GridCells.Adaptive(minSize = if (isCompactWidth) 160.dp else 244.dp),
                                 modifier = Modifier.fillMaxSize(),
                                 horizontalArrangement = Arrangement.spacedBy(14.dp),
@@ -331,6 +415,7 @@ fun TabletCatalogScreen(
                             }
                         } else {
                             LazyColumn(
+                                state = lazyListState,
                                 modifier = Modifier.fillMaxSize(),
                                 verticalArrangement = Arrangement.spacedBy(22.dp),
                                 contentPadding = PaddingValues(bottom = 32.dp)
@@ -345,7 +430,9 @@ fun TabletCatalogScreen(
                                         thumbnailRevision = uiState.thumbnailRevision,
                                         onVideoClick = { video -> onVideoClick(video, row.videos) },
                                         onToggleFavorite = onToggleFavorite,
-                                        onOpenVideoOptions = onOpenVideoOptions
+                                        onOpenVideoOptions = onOpenVideoOptions,
+                                        onPlaylistClick = { onSelectSection(SidebarSection.PLAYLISTS) },
+                                        onChannelClick = { onSelectSection(SidebarSection.CHANNELS) }
                                     )
                                 }
                             }

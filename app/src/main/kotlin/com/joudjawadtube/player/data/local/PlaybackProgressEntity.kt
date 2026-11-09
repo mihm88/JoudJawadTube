@@ -31,5 +31,8 @@ data class SavedPlaylistEntity(
     val sourceUrl: String,
     val thumbnailUrl: String = "",
     val videoCount: Int = 0,
+    val category: String = "General",
+    val channelId: String = "",
+    val isAutoCreatedFromChannel: Boolean = false,
     val addedAt: Long = System.currentTimeMillis()
 )

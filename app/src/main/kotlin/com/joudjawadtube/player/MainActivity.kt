@@ -17,13 +17,19 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.lazy.LazyListState
+import androidx.compose.foundation.lazy.grid.LazyGridState
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLifecycleOwner
@@ -153,32 +159,28 @@ class MainActivity : ComponentActivity() {
                         viewModel.openFolderPickerDialog()
                     }
 
-                    val currentSession = activePlaybackSession
-                    if (currentSession != null) {
-                        PlaybackScreen(
-                            session = currentSession,
-                            settings = uiState.settings,
-                            onSaveProgress = { videoKey, posMs, durMs ->
-                                viewModel.savePlaybackProgress(videoKey, posMs, durMs)
-                            },
-                            onPreviousVideo = { viewModel.playPreviousInSession() },
-                            onNextVideo = { viewModel.playNextInSession() },
-                            onToggleFavorite = { viewModel.toggleFavorite(currentSession.currentVideo) },
-                            onBack = { viewModel.closePlayer() }
-                        )
-                    } else {
-                        val useTvLayout = when (uiState.settings.uiModePreference) {
-                            UiModePreference.FORCE_TV -> true
-                            UiModePreference.FORCE_TABLET -> false
-                            UiModePreference.AUTO -> uiState.isTvModeOverride ?: defaultIsTv
-                        }
+                    // Hoisted lazy list / grid states for persistent scroll preservation across playback exits
+                    val tvHomeListState = rememberSaveable(saver = LazyListState.Saver) { LazyListState() }
+                    val tabletHomeListState = rememberSaveable(saver = LazyListState.Saver) { LazyListState() }
+                    val tabletGridState = rememberSaveable(saver = LazyGridState.Saver) { LazyGridState() }
 
+                    // Automatically detect device type without manual top-bar toggle buttons
+                    val isTv = remember { defaultIsTv }
+                    val useTvLayout = when (uiState.settings.uiModePreference) {
+                        UiModePreference.FORCE_TV -> true
+                        UiModePreference.FORCE_TABLET -> false
+                        UiModePreference.AUTO -> isTv
+                    }
+
+                    Box(modifier = Modifier.fillMaxSize()) {
                         if (useTvLayout) {
                             TvCatalogScreen(
                                 uiState = uiState,
+                                lazyListState = tvHomeListState,
                                 hasReadVideoPermission = hasReadPermission,
                                 hasAllFilesAccess = hasAllFilesAccess,
                                 onSelectSection = { viewModel.selectSection(it) },
+                                onSelectTopCategory = { viewModel.selectTopCategory(it) },
                                 onSearchQueryChange = { viewModel.updateSearchQuery(it) },
                                 onSelectFolderFilter = { viewModel.selectFolderFilter(it) },
                                 onVideoClick = { video, playlist ->
@@ -189,13 +191,14 @@ class MainActivity : ComponentActivity() {
                                 onOpenAddYouTubeDialog = { viewModel.openAddYouTubeDialog() },
                                 onDeletePlaylist = { viewModel.deleteYouTubePlaylist(it) },
                                 onDeleteChannel = { viewModel.deleteYouTubeChannel(it) },
+                                onChangeChannelCategory = { channelId, cat -> viewModel.updateChannelCategory(channelId, cat) },
+                                onChangePlaylistCategory = { playlistId, cat -> viewModel.updatePlaylistCategory(playlistId, cat) },
                                 onOpenKidsPlaylist = { plId, _ -> viewModel.openOrImportKidsPlaylist(plId, playImmediately = true) },
                                 onSaveKidsPlaylist = { plId -> viewModel.openOrImportKidsPlaylist(plId, playImmediately = false) },
                                 onRequestReadPermission = requestReadPermissionAction,
                                 onRequestAllFilesAccess = requestAllFilesAccessAction,
                                 onPickSafFolder = pickFolderAction,
                                 onRescanStorage = { viewModel.rescanStorage() },
-                                onToggleLayoutMode = { viewModel.toggleTvTabletMode(defaultIsTv) },
                                 onUpdateSettings = { viewModel.updateSettings(it) },
                                 onRegenerateAllThumbnails = { viewModel.regenerateAllThumbnails() },
                                 onClearThumbnailCache = { viewModel.clearThumbnailCache() },
@@ -203,14 +206,20 @@ class MainActivity : ComponentActivity() {
                                 onClearWatchHistory = { viewModel.clearWatchHistory() },
                                 onClearFavorites = { viewModel.clearFavorites() },
                                 onClearYouTubeLibrary = { viewModel.clearYouTubeLibrary() },
-                                onResetSettings = { viewModel.resetSettingsToDefaults() }
+                                onResetSettings = { viewModel.resetSettingsToDefaults() },
+                                onCheckForUpdates = { viewModel.checkForAppUpdates(isManual = true) },
+                                onDownloadAndInstallUpdate = { viewModel.downloadAndInstallUpdate(it) },
+                                onDismissUpdateStatus = { viewModel.dismissUpdateStatus() }
                             )
                         } else {
                             TabletCatalogScreen(
                                 uiState = uiState,
+                                lazyListState = tabletHomeListState,
+                                lazyGridState = tabletGridState,
                                 hasReadVideoPermission = hasReadPermission,
                                 hasAllFilesAccess = hasAllFilesAccess,
                                 onSelectSection = { viewModel.selectSection(it) },
+                                onSelectTopCategory = { viewModel.selectTopCategory(it) },
                                 onSearchQueryChange = { viewModel.updateSearchQuery(it) },
                                 onSelectFolderFilter = { viewModel.selectFolderFilter(it) },
                                 onVideoClick = { video, playlist ->
@@ -221,13 +230,14 @@ class MainActivity : ComponentActivity() {
                                 onOpenAddYouTubeDialog = { viewModel.openAddYouTubeDialog() },
                                 onDeletePlaylist = { viewModel.deleteYouTubePlaylist(it) },
                                 onDeleteChannel = { viewModel.deleteYouTubeChannel(it) },
+                                onChangeChannelCategory = { channelId, cat -> viewModel.updateChannelCategory(channelId, cat) },
+                                onChangePlaylistCategory = { playlistId, cat -> viewModel.updatePlaylistCategory(playlistId, cat) },
                                 onOpenKidsPlaylist = { plId, _ -> viewModel.openOrImportKidsPlaylist(plId, playImmediately = true) },
                                 onSaveKidsPlaylist = { plId -> viewModel.openOrImportKidsPlaylist(plId, playImmediately = false) },
                                 onRequestReadPermission = requestReadPermissionAction,
                                 onRequestAllFilesAccess = requestAllFilesAccessAction,
                                 onPickSafFolder = pickFolderAction,
                                 onRescanStorage = { viewModel.rescanStorage() },
-                                onToggleLayoutMode = { viewModel.toggleTvTabletMode(defaultIsTv) },
                                 onToggleTabletGridMode = { viewModel.toggleTabletGridMode() },
                                 onUpdateSettings = { viewModel.updateSettings(it) },
                                 onRegenerateAllThumbnails = { viewModel.regenerateAllThumbnails() },
@@ -236,16 +246,39 @@ class MainActivity : ComponentActivity() {
                                 onClearWatchHistory = { viewModel.clearWatchHistory() },
                                 onClearFavorites = { viewModel.clearFavorites() },
                                 onClearYouTubeLibrary = { viewModel.clearYouTubeLibrary() },
-                                onResetSettings = { viewModel.resetSettingsToDefaults() }
+                                onResetSettings = { viewModel.resetSettingsToDefaults() },
+                                onCheckForUpdates = { viewModel.checkForAppUpdates(isManual = true) },
+                                onDownloadAndInstallUpdate = { viewModel.downloadAndInstallUpdate(it) },
+                                onDismissUpdateStatus = { viewModel.dismissUpdateStatus() }
                             )
                         }
 
-                        // Handle TV Remote Back Button for modal dialogs & non-Home sections
+                        // Playback overlay when an active playback session is running
+                        activePlaybackSession?.let { currentSession ->
+                            PlaybackScreen(
+                                session = currentSession,
+                                settings = uiState.settings,
+                                onSaveProgress = { videoKey, posMs, durMs ->
+                                    viewModel.savePlaybackProgress(videoKey, posMs, durMs)
+                                },
+                                onPreviousVideo = { viewModel.playPreviousInSession() },
+                                onNextVideo = {
+                                    val wrap = uiState.settings.repeatMode == com.joudjawadtube.player.data.settings.RepeatMode.REPEAT_ALL
+                                    viewModel.playNextInSession(wrapAround = wrap)
+                                },
+                                onToggleFavorite = { viewModel.toggleFavorite(currentSession.currentVideo) },
+                                onBack = { viewModel.closePlayer() }
+                            )
+                        }
+
+                        // Handle TV Remote Back Button for modal dialogs & non-Home sections when player is not active
                         BackHandler(
-                            enabled = uiState.showAddYouTubeDialog ||
+                            enabled = activePlaybackSession == null && (
+                                uiState.showAddYouTubeDialog ||
                                 uiState.showFolderPickerDialog ||
                                 uiState.selectedVideoForOptions != null ||
                                 uiState.selectedSection != SidebarSection.HOME
+                            )
                         ) {
                             when {
                                 uiState.selectedVideoForOptions != null -> viewModel.closeVideoOptions()

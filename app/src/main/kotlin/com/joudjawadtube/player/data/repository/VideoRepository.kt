@@ -31,6 +31,8 @@ data class CategoryRow(
     val isUsbCategory: Boolean = false,
     val isYoutubeCategory: Boolean = false,
     val playlistId: String? = null,
+    val channelId: String? = null,
+    val category: String = "General",
     val videos: List<VideoItem>
 )
 
@@ -144,13 +146,17 @@ class VideoRepository(
         for ((plId, plVideos) in ytByPlaylist) {
             val plMeta = savedPlaylists.firstOrNull { it.playlistId == plId }
             val plTitle = plMeta?.title ?: plVideos.firstOrNull()?.playlistTitle?.ifBlank { "YouTube Playlist" } ?: "YouTube Playlist"
+            val plCat = plMeta?.category ?: "General"
+            val chId = plMeta?.channelId
             rows.add(
                 CategoryRow(
                     id = "yt_playlist_$plId",
                     title = plTitle,
-                    subtitle = "${plVideos.size} videos • YouTube",
+                    subtitle = "${plVideos.size} videos • $plCat",
                     isYoutubeCategory = true,
                     playlistId = plId,
+                    channelId = chId,
+                    category = plCat,
                     videos = plVideos
                 )
             )
@@ -402,12 +408,17 @@ class VideoRepository(
         val channelMeta = YouTubeService.fetchChannel(rawUrl, videoCap)
             ?: return Result.failure(IllegalStateException("Could not resolve YouTube channel from link: $rawUrl"))
 
+        val kidsChannels = KidsCatalogRepository_Antigravity.loadKidsChannels(appContext)
+        val matchedKidsChannel = kidsChannels.firstOrNull { it.channelId == channelMeta.channelId }
+        val category = matchedKidsChannel?.category?.takeIf { it.isNotBlank() } ?: "General"
+
         val entity = SavedChannelEntity(
             channelId = channelMeta.channelId,
             handle = channelMeta.handle,
             title = channelMeta.title,
             avatarUrl = channelMeta.avatarUrl,
             uploadsPlaylistId = channelMeta.uploadsPlaylistId,
+            category = category,
             importedAt = System.currentTimeMillis(),
             lastSyncedAt = System.currentTimeMillis(),
             videoCap = videoCap
@@ -426,9 +437,54 @@ class VideoRepository(
             sourceUrl = rawUrl,
             thumbnailUrl = channelMeta.avatarUrl,
             videoCount = channelMeta.uploadsVideos.size,
+            category = category,
+            channelId = channelMeta.channelId,
+            isAutoCreatedFromChannel = true,
             addedAt = System.currentTimeMillis()
         )
         videoDao.insertPlaylist(savedPlaylist)
+
+        // Also save discovered sub-playlists from the channel or kids catalog
+        val extraPlaylists = mutableListOf<SavedPlaylistEntity>()
+        matchedKidsChannel?.playlists?.forEach { kp ->
+            if (kp.id != channelMeta.uploadsPlaylistId) {
+                extraPlaylists.add(
+                    SavedPlaylistEntity(
+                        playlistId = kp.id,
+                        title = kp.title,
+                        author = channelMeta.title,
+                        sourceUrl = "https://www.youtube.com/playlist?list=${kp.id}",
+                        thumbnailUrl = channelMeta.avatarUrl,
+                        videoCount = 0,
+                        category = category,
+                        channelId = channelMeta.channelId,
+                        isAutoCreatedFromChannel = true,
+                        addedAt = System.currentTimeMillis()
+                    )
+                )
+            }
+        }
+        channelMeta.subPlaylists.forEach { sp ->
+            if (sp.playlistId != channelMeta.uploadsPlaylistId && extraPlaylists.none { it.playlistId == sp.playlistId }) {
+                extraPlaylists.add(
+                    SavedPlaylistEntity(
+                        playlistId = sp.playlistId,
+                        title = sp.title,
+                        author = channelMeta.title,
+                        sourceUrl = "https://www.youtube.com/playlist?list=${sp.playlistId}",
+                        thumbnailUrl = sp.thumbnailUrl.ifBlank { channelMeta.avatarUrl },
+                        videoCount = 0,
+                        category = category,
+                        channelId = channelMeta.channelId,
+                        isAutoCreatedFromChannel = true,
+                        addedAt = System.currentTimeMillis()
+                    )
+                )
+            }
+        }
+        if (extraPlaylists.isNotEmpty()) {
+            videoDao.insertPlaylists(extraPlaylists)
+        }
 
         val baseTime = System.currentTimeMillis()
         val entities = channelMeta.uploadsVideos.mapIndexed { index, vid ->
@@ -467,9 +523,20 @@ class VideoRepository(
             ImportedYouTubeResult(
                 firstVideo = items.first(),
                 playlist = items,
-                summaryMessage = "Imported channel \"${channelMeta.title}\" (${items.size} videos)"
+                summaryMessage = "Imported channel \"${channelMeta.title}\" (${items.size} videos, ${extraPlaylists.size + 1} playlists)"
             )
         )
+    }
+
+    suspend fun updateChannelCategory(channelId: String, category: String) {
+        videoDao.updateChannelCategory(channelId, category)
+        videoDao.getSavedPlaylists().filter { it.channelId == channelId }.forEach {
+            videoDao.updatePlaylistCategory(it.playlistId, category)
+        }
+    }
+
+    suspend fun updatePlaylistCategory(playlistId: String, category: String) {
+        videoDao.updatePlaylistCategory(playlistId, category)
     }
 
     suspend fun deleteYouTubeVideo(videoId: String) {
@@ -485,6 +552,7 @@ class VideoRepository(
         val uploadsId = if (channelId.startsWith("UC")) "UU" + channelId.substring(2) else channelId
         videoDao.deleteChannel(channelId)
         videoDao.deletePlaylist(uploadsId)
+        videoDao.deletePlaylistsByChannelId(channelId)
         videoDao.deleteVideosByPlaylistId(uploadsId)
     }
 

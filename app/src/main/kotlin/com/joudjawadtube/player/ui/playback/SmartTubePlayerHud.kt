@@ -30,9 +30,12 @@ import androidx.compose.material.icons.filled.ClosedCaption
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.Forward10
+import androidx.compose.material.icons.filled.Hd
 import androidx.compose.material.icons.filled.OndemandVideo
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Repeat
+import androidx.compose.material.icons.filled.RepeatOne
 import androidx.compose.material.icons.filled.Replay10
 import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material.icons.filled.SkipPrevious
@@ -69,6 +72,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.joudjawadtube.player.data.local.FormatUtils
 import com.joudjawadtube.player.data.local.VideoItem
+import com.joudjawadtube.player.data.settings.RepeatMode
 import com.joudjawadtube.player.ui.components.LocalWindowLayoutInfo
 import com.joudjawadtube.player.ui.theme.SmartTubeCardBg
 import com.joudjawadtube.player.ui.theme.SmartTubeCardFocusedBg
@@ -104,6 +108,10 @@ fun SmartTubePlayerHud(
     onOpenSpeedDialog: () -> Unit,
     onCycleResizeMode: () -> Unit,
     onToggleFavorite: () -> Unit,
+    currentQuality: String = "Auto",
+    repeatMode: RepeatMode = RepeatMode.OFF,
+    onOpenQualityDialog: () -> Unit = {},
+    onCycleRepeatMode: () -> Unit = {},
     onBack: () -> Unit,
     onUserInteraction: () -> Unit
 ) {
@@ -349,6 +357,24 @@ fun SmartTubePlayerHud(
                             onClick = onToggleFavorite,
                             onUserInteraction = onUserInteraction
                         )
+                        val (repIconNarrow, repLabelNarrow, repActiveNarrow) = when (repeatMode) {
+                            RepeatMode.OFF -> Triple(Icons.Default.Repeat, "Repeat: Off", false)
+                            RepeatMode.REPEAT_ONE -> Triple(Icons.Default.RepeatOne, "Repeat: Video", true)
+                            RepeatMode.REPEAT_ALL -> Triple(Icons.Default.Repeat, "Repeat: All", true)
+                        }
+                        HudControlPill(
+                            icon = repIconNarrow,
+                            label = repLabelNarrow,
+                            iconTint = if (repActiveNarrow) SmartTubeRed else Color.White,
+                            onClick = onCycleRepeatMode,
+                            onUserInteraction = onUserInteraction
+                        )
+                        HudControlPill(
+                            icon = Icons.Default.Hd,
+                            label = currentQuality,
+                            onClick = onOpenQualityDialog,
+                            onUserInteraction = onUserInteraction
+                        )
                     }
                 } else {
                     // Standard TV & Tablet wide layout
@@ -442,6 +468,26 @@ fun SmartTubePlayerHud(
                                 label = if (video.isFavorite) "Saved" else "Favorite",
                                 iconTint = if (video.isFavorite) SmartTubeRed else Color.White,
                                 onClick = onToggleFavorite,
+                                onUserInteraction = onUserInteraction
+                            )
+
+                            val (repeatIcon, repeatLabel, repeatActive) = when (repeatMode) {
+                                RepeatMode.OFF -> Triple(Icons.Default.Repeat, "Repeat: Off", false)
+                                RepeatMode.REPEAT_ONE -> Triple(Icons.Default.RepeatOne, "Repeat: Video", true)
+                                RepeatMode.REPEAT_ALL -> Triple(Icons.Default.Repeat, "Repeat: All", true)
+                            }
+                            HudControlPill(
+                                icon = repeatIcon,
+                                label = repeatLabel,
+                                iconTint = if (repeatActive) SmartTubeRed else Color.White,
+                                onClick = onCycleRepeatMode,
+                                onUserInteraction = onUserInteraction
+                            )
+
+                            HudControlPill(
+                                icon = Icons.Default.Hd,
+                                label = currentQuality,
+                                onClick = onOpenQualityDialog,
                                 onUserInteraction = onUserInteraction
                             )
                         }

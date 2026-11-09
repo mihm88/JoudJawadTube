@@ -23,6 +23,7 @@ import androidx.compose.material.icons.filled.Audiotrack
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.ClosedCaption
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Hd
 import androidx.compose.material.icons.filled.Speed
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -58,7 +59,8 @@ import java.util.Locale
 enum class PlayerDialogTab {
     SUBTITLES,
     AUDIO,
-    SPEED
+    SPEED,
+    QUALITY
 }
 
 data class TrackOptionUi(
@@ -76,7 +78,9 @@ fun TrackSelectorDialog(
     player: Player,
     initialTab: PlayerDialogTab,
     currentSpeed: Float,
+    currentQuality: String = "Auto",
     onSelectSpeed: (Float) -> Unit,
+    onSelectQuality: (String) -> Unit = {},
     onDismiss: () -> Unit
 ) {
     var activeTab by remember { mutableStateOf(initialTab) }
@@ -130,6 +134,12 @@ fun TrackSelectorDialog(
                         label = "Speed (${currentSpeed}x)",
                         isSelected = activeTab == PlayerDialogTab.SPEED,
                         onClick = { activeTab = PlayerDialogTab.SPEED }
+                    )
+                    DialogTabChip(
+                        icon = Icons.Default.Hd,
+                        label = "Quality ($currentQuality)",
+                        isSelected = activeTab == PlayerDialogTab.QUALITY,
+                        onClick = { activeTab = PlayerDialogTab.QUALITY }
                     )
                 }
 
@@ -261,6 +271,39 @@ fun TrackSelectorDialog(
                                 isSelected = kotlin.math.abs(currentSpeed - speed) < 0.01f,
                                 onClick = {
                                     onSelectSpeed(speed)
+                                    onDismiss()
+                                }
+                            )
+                        }
+                    }
+                }
+
+                PlayerDialogTab.QUALITY -> {
+                    val qualityList = listOf("Auto", "4K (2160p)", "2K (1440p)", "1080p", "720p", "480p", "360p")
+                    LazyColumn(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(max = 320.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        items(qualityList) { qualityOption ->
+                            val isSelected = currentQuality.equals(qualityOption, ignoreCase = true) ||
+                                (qualityOption == "Auto" && (currentQuality.isBlank() || currentQuality.equals("Auto", ignoreCase = true)))
+                            DialogOptionRow(
+                                title = qualityOption,
+                                subtitle = when (qualityOption) {
+                                    "Auto" -> "Best available adaptive resolution"
+                                    "4K (2160p)" -> "3840 x 2160 Ultra HD"
+                                    "2K (1440p)" -> "2560 x 1440 Quad HD"
+                                    "1080p" -> "1920 x 1080 Full HD"
+                                    "720p" -> "1280 x 720 HD"
+                                    "480p" -> "Standard Definition"
+                                    "360p" -> "Data saver"
+                                    else -> ""
+                                },
+                                isSelected = isSelected,
+                                onClick = {
+                                    onSelectQuality(qualityOption)
                                     onDismiss()
                                 }
                             )

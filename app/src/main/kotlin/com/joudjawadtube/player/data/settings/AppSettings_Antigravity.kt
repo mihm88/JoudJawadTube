@@ -51,6 +51,12 @@ enum class SidebarMode(val label: String) {
     ALWAYS_EXPANDED("Always Expanded")
 }
 
+enum class RepeatMode(val label: String) {
+    OFF("Repeat Off"),
+    REPEAT_ONE("Repeat Video"),
+    REPEAT_ALL("Repeat Playlist")
+}
+
 data class AppSettingsState(
     val thumbnailMode: ThumbnailMode = ThumbnailMode.YOUTUBE_FIRST,
     val frameCapturePosition: FrameCapturePosition = FrameCapturePosition.FAST_3S,
@@ -58,6 +64,8 @@ data class AppSettingsState(
     val defaultResizeMode: Int = 0, // 0 = Fit, 4 = Zoom, 3 = Stretch
     val seekIntervalSec: Int = 10,
     val autoPlayNext: Boolean = true,
+    val repeatMode: RepeatMode = RepeatMode.OFF,
+    val preferredQuality: String = "Auto",
     val resumeMode: ResumeMode = ResumeMode.ALWAYS_RESUME,
     val subtitlesEnabledByDefault: Boolean = true,
     val uiModePreference: UiModePreference = UiModePreference.AUTO,
@@ -81,6 +89,8 @@ class AppSettingsRepository(context: Context) {
         val thumbModeName = prefs.getString("thumbnail_mode", ThumbnailMode.YOUTUBE_FIRST.name)
         val framePosName = prefs.getString("frame_capture_pos", FrameCapturePosition.FAST_3S.name)
         val resumeName = prefs.getString("resume_mode", ResumeMode.ALWAYS_RESUME.name)
+        val repeatName = prefs.getString("repeat_mode", RepeatMode.OFF.name)
+        val preferredQuality = prefs.getString("preferred_quality", "Auto") ?: "Auto"
         val uiModeName = prefs.getString("ui_mode_pref", UiModePreference.AUTO.name)
         val fontScaleName = prefs.getString("ui_font_scale", UiFontScale.NORMAL.name)
         val sidebarName = prefs.getString("sidebar_mode", SidebarMode.OVERLAY_ON_FOCUS.name)
@@ -94,6 +104,8 @@ class AppSettingsRepository(context: Context) {
             defaultResizeMode = prefs.getInt("default_resize_mode", 0),
             seekIntervalSec = prefs.getInt("seek_interval_sec", 10),
             autoPlayNext = prefs.getBoolean("auto_play_next", true),
+            repeatMode = runCatching { RepeatMode.valueOf(repeatName!!) }.getOrDefault(RepeatMode.OFF),
+            preferredQuality = preferredQuality,
             resumeMode = runCatching { ResumeMode.valueOf(resumeName!!) }
                 .getOrDefault(ResumeMode.ALWAYS_RESUME),
             subtitlesEnabledByDefault = prefs.getBoolean("subtitles_enabled_default", true),
@@ -120,6 +132,8 @@ class AppSettingsRepository(context: Context) {
             .putInt("default_resize_mode", updated.defaultResizeMode)
             .putInt("seek_interval_sec", updated.seekIntervalSec)
             .putBoolean("auto_play_next", updated.autoPlayNext)
+            .putString("repeat_mode", updated.repeatMode.name)
+            .putString("preferred_quality", updated.preferredQuality)
             .putString("resume_mode", updated.resumeMode.name)
             .putBoolean("subtitles_enabled_default", updated.subtitlesEnabledByDefault)
             .putString("ui_mode_pref", updated.uiModePreference.name)

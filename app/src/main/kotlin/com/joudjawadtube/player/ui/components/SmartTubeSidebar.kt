@@ -22,18 +22,20 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AddLink
+import androidx.compose.material.icons.filled.Category
 import androidx.compose.material.icons.filled.CreateNewFolder
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.Hd
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Home
-import androidx.compose.material.icons.filled.OndemandVideo
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.PlaylistPlay
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.Usb
+import androidx.compose.material.icons.filled.VideoLibrary
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -66,7 +68,9 @@ import com.joudjawadtube.player.ui.theme.SmartTubeUsbCyan
 enum class SidebarSection(val title: String, val icon: ImageVector) {
     HOME("Home", Icons.Default.Home),
     KIDS_PICKS("Kids Picks", Icons.Default.Star),
-    YOUTUBE("YouTube", Icons.Default.OndemandVideo),
+    CHANNELS("Channels", Icons.Default.VideoLibrary),
+    PLAYLISTS("Playlists", Icons.Default.PlaylistPlay),
+    CATEGORIES("Categories", Icons.Default.Category),
     CONTINUE_WATCHING("History", Icons.Default.History),
     USB_DRIVES("USB Drives", Icons.Default.Usb),
     FOLDERS("Folders", Icons.Default.Folder),
@@ -79,7 +83,8 @@ enum class SidebarSection(val title: String, val icon: ImageVector) {
 fun SmartTubeSidebar(
     selectedSection: SidebarSection,
     usbDriveCount: Int,
-    youtubeCount: Int = 0,
+    channelsCount: Int = 0,
+    playlistsCount: Int = 0,
     isScanning: Boolean,
     isExpanded: Boolean,
     sidebarMode: SidebarMode = SidebarMode.OVERLAY_ON_FOCUS,
@@ -188,10 +193,15 @@ fun SmartTubeSidebar(
                 SidebarSection.entries.forEach { section ->
                     val badgeText = when {
                         section == SidebarSection.USB_DRIVES && usbDriveCount > 0 -> usbDriveCount.toString()
-                        section == SidebarSection.YOUTUBE && youtubeCount > 0 -> youtubeCount.toString()
+                        section == SidebarSection.CHANNELS && channelsCount > 0 -> channelsCount.toString()
+                        section == SidebarSection.PLAYLISTS && playlistsCount > 0 -> playlistsCount.toString()
                         else -> null
                     }
-                    val badgeColor = if (section == SidebarSection.USB_DRIVES) SmartTubeUsbCyan else SmartTubeRed
+                    val badgeColor = when (section) {
+                        SidebarSection.USB_DRIVES -> SmartTubeUsbCyan
+                        SidebarSection.PLAYLISTS -> SmartTubeUsbCyan
+                        else -> SmartTubeRed
+                    }
 
                     SidebarNavItem(
                         icon = section.icon,

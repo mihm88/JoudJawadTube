@@ -121,8 +121,17 @@ interface VideoDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertPlaylist(playlist: SavedPlaylistEntity)
 
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertPlaylists(playlists: List<SavedPlaylistEntity>)
+
+    @Query("UPDATE saved_youtube_playlists SET category = :category WHERE playlistId = :playlistId")
+    suspend fun updatePlaylistCategory(playlistId: String, category: String)
+
     @Query("DELETE FROM saved_youtube_playlists WHERE playlistId = :playlistId")
     suspend fun deletePlaylist(playlistId: String)
+
+    @Query("DELETE FROM saved_youtube_playlists WHERE channelId = :channelId")
+    suspend fun deletePlaylistsByChannelId(channelId: String)
 
     @Query("DELETE FROM saved_youtube_playlists")
     suspend fun clearAllPlaylists()
@@ -135,6 +144,9 @@ interface VideoDao {
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertChannel(channel: SavedChannelEntity)
+
+    @Query("UPDATE saved_channels SET category = :category WHERE channelId = :channelId")
+    suspend fun updateChannelCategory(channelId: String, category: String)
 
     @Query("DELETE FROM saved_channels WHERE channelId = :channelId")
     suspend fun deleteChannel(channelId: String)

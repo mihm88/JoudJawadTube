@@ -11,6 +11,7 @@ data class SavedChannelEntity(
     val title: String,
     val avatarUrl: String = "",
     val uploadsPlaylistId: String = "",
+    val category: String = "General",
     val importedAt: Long = System.currentTimeMillis(),
     val lastSyncedAt: Long = System.currentTimeMillis(),
     val videoCap: Int = 200
