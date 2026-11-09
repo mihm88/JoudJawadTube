@@ -56,6 +56,9 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
+import androidx.annotation.StringRes
+import androidx.compose.ui.res.stringResource
+import com.joudjawadtube.player.R
 import com.joudjawadtube.player.data.settings.SidebarMode
 import com.joudjawadtube.player.ui.theme.SmartTubeCardFocusedBg
 import com.joudjawadtube.player.ui.theme.SmartTubeFocusBorder
@@ -65,18 +68,21 @@ import com.joudjawadtube.player.ui.theme.SmartTubeTextPrimary
 import com.joudjawadtube.player.ui.theme.SmartTubeTextSecondary
 import com.joudjawadtube.player.ui.theme.SmartTubeUsbCyan
 
-enum class SidebarSection(val title: String, val icon: ImageVector) {
-    HOME("Home", Icons.Default.Home),
-    KIDS_PICKS("Kids Picks", Icons.Default.Star),
-    CHANNELS("Channels", Icons.Default.VideoLibrary),
-    PLAYLISTS("Playlists", Icons.Default.PlaylistPlay),
-    CATEGORIES("Categories", Icons.Default.Category),
-    CONTINUE_WATCHING("History", Icons.Default.History),
-    USB_DRIVES("USB Drives", Icons.Default.Usb),
-    FOLDERS("Folders", Icons.Default.Folder),
-    FOUR_K("4K / UHD", Icons.Default.Hd),
-    FAVORITES("Favorites", Icons.Default.Favorite),
-    SETTINGS("Settings", Icons.Default.Settings)
+enum class SidebarSection(@StringRes val titleRes: Int, val icon: ImageVector) {
+    HOME(R.string.nav_home, Icons.Default.Home),
+    KIDS_PICKS(R.string.nav_kids_picks, Icons.Default.Star),
+    CHANNELS(R.string.nav_channels, Icons.Default.VideoLibrary),
+    PLAYLISTS(R.string.nav_playlists, Icons.Default.PlaylistPlay),
+    CATEGORIES(R.string.nav_categories, Icons.Default.Category),
+    CONTINUE_WATCHING(R.string.nav_history, Icons.Default.History),
+    USB_DRIVES(R.string.nav_usb_storage, Icons.Default.Usb),
+    FOLDERS(R.string.nav_folders, Icons.Default.Folder),
+    FOUR_K(R.string.nav_four_k, Icons.Default.Hd),
+    FAVORITES(R.string.nav_favorites, Icons.Default.Favorite),
+    SETTINGS(R.string.nav_settings, Icons.Default.Settings);
+
+    val title: String
+        @Composable get() = stringResource(titleRes)
 }
 
 @Composable

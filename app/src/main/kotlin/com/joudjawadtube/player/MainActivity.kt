@@ -11,12 +11,13 @@ import android.os.Build
 import android.os.Bundle
 import android.os.Environment
 import android.provider.Settings
-import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
+import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
+import androidx.appcompat.app.AppCompatActivity
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.lazy.LazyListState
@@ -50,12 +51,13 @@ import com.joudjawadtube.player.ui.components.VideoOptionsDialog
 import com.joudjawadtube.player.ui.playback.PlaybackScreen
 import com.joudjawadtube.player.ui.theme.JoudJawadTubeTheme
 
-class MainActivity : ComponentActivity() {
+class MainActivity : AppCompatActivity() {
 
     private val viewModel: CatalogViewModel by viewModels()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        enableEdgeToEdge()
 
         handleIncomingVideoIntent(intent)
 
@@ -73,7 +75,7 @@ class MainActivity : ComponentActivity() {
             }
 
             CompositionLocalProvider(LocalDensity provides scaledDensity) {
-                JoudJawadTubeTheme {
+                JoudJawadTubeTheme(themeMode = uiState.settings.themeMode) {
                     ProvideWindowLayoutInfo {
                         val context = LocalContext.current
                     val lifecycleOwner = LocalLifecycleOwner.current

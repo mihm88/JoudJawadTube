@@ -23,6 +23,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AddLink
 import androidx.compose.material.icons.filled.AspectRatio
+import androidx.compose.material.icons.filled.Brightness4
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.CloudDownload
 import androidx.compose.material.icons.filled.ClosedCaption
@@ -30,6 +31,7 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.FolderOpen
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Image
+import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Restore
@@ -43,6 +45,10 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.Text
+import androidx.compose.ui.res.stringResource
+import com.joudjawadtube.player.R
+import com.joudjawadtube.player.data.settings.AppLanguage
+import com.joudjawadtube.player.data.settings.ThemeMode
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
@@ -197,6 +203,50 @@ fun SettingsScreen(
                         onClick = onRescanStorage
                     )
                 }
+            }
+        }
+
+        // Section: Appearance & Language
+        item(key = "settings_appearance_language") {
+            SettingsCategoryCard(
+                title = stringResource(R.string.settings_section_appearance),
+                subtitle = stringResource(R.string.settings_language_desc)
+            ) {
+                val currentLangLabel = when (settings.appLanguage) {
+                    AppLanguage.FOLLOW_SYSTEM -> stringResource(R.string.settings_language_system)
+                    AppLanguage.ENGLISH -> stringResource(R.string.settings_language_english)
+                    AppLanguage.ARABIC -> stringResource(R.string.settings_language_arabic)
+                }
+
+                SettingsCycleOptionRow(
+                    icon = Icons.Default.Language,
+                    title = stringResource(R.string.settings_language),
+                    subtitle = stringResource(R.string.settings_language_desc),
+                    valueLabel = currentLangLabel,
+                    onClick = {
+                        val langs = AppLanguage.entries
+                        val next = langs[(langs.indexOf(settings.appLanguage) + 1) % langs.size]
+                        onUpdateSettings { it.copy(appLanguage = next) }
+                    }
+                )
+
+                val currentThemeLabel = when (settings.themeMode) {
+                    ThemeMode.FOLLOW_SYSTEM -> stringResource(R.string.settings_theme_system)
+                    ThemeMode.DARK -> stringResource(R.string.settings_theme_dark)
+                    ThemeMode.LIGHT -> stringResource(R.string.settings_theme_light)
+                }
+
+                SettingsCycleOptionRow(
+                    icon = Icons.Default.Brightness4,
+                    title = stringResource(R.string.settings_theme),
+                    subtitle = stringResource(R.string.settings_theme_desc),
+                    valueLabel = currentThemeLabel,
+                    onClick = {
+                        val themes = ThemeMode.entries
+                        val next = themes[(themes.indexOf(settings.themeMode) + 1) % themes.size]
+                        onUpdateSettings { it.copy(themeMode = next) }
+                    }
+                )
             }
         }
 

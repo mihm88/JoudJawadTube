@@ -45,6 +45,8 @@ import androidx.compose.material.icons.filled.VideoLibrary
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
+import androidx.compose.ui.res.stringResource
+import com.joudjawadtube.player.R
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -388,7 +390,7 @@ private fun TvTopHeaderBar(
                         ) {
                             if (searchQuery.isEmpty()) {
                                 Text(
-                                    text = "Search in-app...",
+                                    text = stringResource(R.string.search_placeholder),
                                     color = SmartTubeTextSecondary,
                                     fontSize = 13.sp,
                                     lineHeight = 16.sp,
@@ -406,7 +408,7 @@ private fun TvTopHeaderBar(
             if (searchQuery.isNotEmpty()) {
                 HeaderInteractivePill(
                     icon = Icons.Default.Clear,
-                    text = "Clear",
+                    text = stringResource(R.string.search_clear),
                     onClick = { onSearchQueryChange("") }
                 )
             }
@@ -424,8 +426,17 @@ private fun TvTopHeaderBar(
         ) {
             categories.forEach { cat ->
                 val isSelected = selectedCategory.equals(cat, ignoreCase = true)
+                val catDisplay = when (cat.lowercase(Locale.ROOT)) {
+                    "all" -> stringResource(R.string.category_all)
+                    "islamic kids" -> stringResource(R.string.category_islamic_kids)
+                    "english learning" -> stringResource(R.string.category_english_learning)
+                    "stories & rhymes" -> stringResource(R.string.category_stories_rhymes)
+                    "cartoons & fun" -> stringResource(R.string.category_cartoons_fun)
+                    "stem", "stem & education" -> stringResource(R.string.category_stem_science)
+                    else -> cat
+                }
                 FilterChipItem(
-                    label = cat,
+                    label = catDisplay,
                     isSelected = isSelected,
                     onClick = { onSelectCategory(cat) }
                 )

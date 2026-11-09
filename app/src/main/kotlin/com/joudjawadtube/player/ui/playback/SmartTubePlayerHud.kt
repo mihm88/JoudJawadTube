@@ -46,6 +46,11 @@ import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.unit.LayoutDirection
+import androidx.compose.ui.res.stringResource
+import com.joudjawadtube.player.R
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
@@ -130,9 +135,10 @@ fun SmartTubePlayerHud(
         enter = fadeIn(),
         exit = fadeOut()
     ) {
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
+        CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
                 .background(
                     Brush.verticalGradient(
                         colors = listOf(
@@ -358,9 +364,9 @@ fun SmartTubePlayerHud(
                             onUserInteraction = onUserInteraction
                         )
                         val (repIconNarrow, repLabelNarrow, repActiveNarrow) = when (repeatMode) {
-                            RepeatMode.OFF -> Triple(Icons.Default.Repeat, "Repeat: Off", false)
-                            RepeatMode.REPEAT_ONE -> Triple(Icons.Default.RepeatOne, "Repeat: Video", true)
-                            RepeatMode.REPEAT_ALL -> Triple(Icons.Default.Repeat, "Repeat: All", true)
+                            RepeatMode.OFF -> Triple(Icons.Default.Repeat, stringResource(R.string.player_repeat_off), false)
+                            RepeatMode.REPEAT_ONE -> Triple(Icons.Default.RepeatOne, stringResource(R.string.player_repeat_one), true)
+                            RepeatMode.REPEAT_ALL -> Triple(Icons.Default.Repeat, stringResource(R.string.player_repeat_all), true)
                         }
                         HudControlPill(
                             icon = repIconNarrow,
@@ -390,7 +396,7 @@ fun SmartTubePlayerHud(
                         ) {
                             HudControlPill(
                                 icon = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
-                                label = if (isPlaying) "Pause" else "Play",
+                                label = if (isPlaying) stringResource(R.string.player_pause) else stringResource(R.string.player_play),
                                 isPrimary = true,
                                 onClick = onPlayPauseToggle,
                                 onUserInteraction = onUserInteraction,
@@ -472,9 +478,9 @@ fun SmartTubePlayerHud(
                             )
 
                             val (repeatIcon, repeatLabel, repeatActive) = when (repeatMode) {
-                                RepeatMode.OFF -> Triple(Icons.Default.Repeat, "Repeat: Off", false)
-                                RepeatMode.REPEAT_ONE -> Triple(Icons.Default.RepeatOne, "Repeat: Video", true)
-                                RepeatMode.REPEAT_ALL -> Triple(Icons.Default.Repeat, "Repeat: All", true)
+                                RepeatMode.OFF -> Triple(Icons.Default.Repeat, stringResource(R.string.player_repeat_off), false)
+                                RepeatMode.REPEAT_ONE -> Triple(Icons.Default.RepeatOne, stringResource(R.string.player_repeat_one), true)
+                                RepeatMode.REPEAT_ALL -> Triple(Icons.Default.Repeat, stringResource(R.string.player_repeat_all), true)
                             }
                             HudControlPill(
                                 icon = repeatIcon,
@@ -496,6 +502,7 @@ fun SmartTubePlayerHud(
             }
         }
     }
+}
 }
 
 /**

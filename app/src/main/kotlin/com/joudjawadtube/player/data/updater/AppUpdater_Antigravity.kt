@@ -129,6 +129,9 @@ class AppUpdater_Antigravity(private val context: Context) {
             val maxRedirects = 6
 
             while (true) {
+                if (!currentUrl.startsWith("https://", ignoreCase = true)) {
+                    throw SecurityException("Insecure download URL rejected: $currentUrl (HTTPS required)")
+                }
                 val url = URL(currentUrl)
                 connection = (url.openConnection() as HttpURLConnection).apply {
                     connectTimeout = 15000
@@ -190,6 +193,13 @@ class AppUpdater_Antigravity(private val context: Context) {
     fun installApk(apkFile: File): Result<Unit> = runCatching {
         if (!apkFile.exists()) {
             throw IllegalArgumentException("APK file does not exist: ${apkFile.absolutePath}")
+        }
+
+        // Verify package archive integrity
+        val pm = context.packageManager
+        val archiveInfo = pm.getPackageArchiveInfo(apkFile.absolutePath, 0)
+        if (archiveInfo == null || archiveInfo.packageName != context.packageName) {
+            throw SecurityException("Downloaded update package is invalid or does not match ${context.packageName}")
         }
 
         val apkUri = FileProvider.getUriForFile(

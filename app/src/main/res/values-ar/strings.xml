@@ -1,0 +1,180 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- App Branding -->
+    <string name="app_name">Joud&amp;Jawad Tube</string>
+    <string name="app_subtitle">مشغل وسائط 4K محلي وعبر الـ USB</string>
+    <string name="edition_tv">نسخة أندرويد TV • واجهة الشاشات الكبيرة</string>
+    <string name="edition_tablet">التعرف التلقائي على أجهزة التابلت</string>
+
+    <!-- Navigation & Sections -->
+    <string name="nav_home">الرئيسية</string>
+    <string name="nav_kids_picks">مختارات الأطفال</string>
+    <string name="nav_channels">القنوات</string>
+    <string name="nav_playlists">قوائم التشغيل</string>
+    <string name="nav_categories">التصنيفات</string>
+    <string name="nav_history">سجل المشاهدة</string>
+    <string name="nav_usb_storage">ذاكرة USB</string>
+    <string name="nav_folders">المجلدات</string>
+    <string name="nav_four_k">4K فائقة الوضوح</string>
+    <string name="nav_favorites">المفضلة</string>
+    <string name="nav_settings">الإعدادات</string>
+
+    <!-- Categories -->
+    <string name="category_all">الكل</string>
+    <string name="category_islamic_kids">أطفال وإسلاميات</string>
+    <string name="category_english_learning">تعليم الإنجليزية</string>
+    <string name="category_stories_rhymes">قصص وأناشيد</string>
+    <string name="category_cartoons_fun">رسوم متحركة ومرح</string>
+    <string name="category_stem_science">علوم واكتشاف</string>
+
+    <!-- Search & Filters -->
+    <string name="search_placeholder">البحث في الفيديوهات والقنوات وقوائم التشغيل المحفوظة...</string>
+    <string name="search_hint_scoped">(داخل التطبيق فقط: الملفات المحلية والقوائم)</string>
+    <string name="search_no_results">لم يتم العثور على أي فيديوهات أو قوائم مطابقة في مكتبتك.</string>
+    <string name="search_clear">مسح البحث</string>
+
+    <!-- Catalog & Rows -->
+    <string name="empty_home_title">لا توجد فيديوهات</string>
+    <string name="empty_home_message">قم بتوصيل وحدة تخزين USB أو إضافة مجلدات فيديو للبدء.</string>
+    <string name="empty_channels_title">لا توجد قنوات محفوظة</string>
+    <string name="empty_channels_message">أضف قنوات يوتيوب العائلية المفضلة لديك أو صناع المحتوى المحليين لتنظيم فيديوهاتك.</string>
+    <string name="empty_playlists_title">لا توجد قوائم تشغيل</string>
+    <string name="empty_playlists_message">أنشئ قائمة تشغيل أو قم بتوصيل فلاشة USB تحتوي على مجلدات الفيديو.</string>
+    <string name="empty_categories_title">لا توجد تصنيفات</string>
+    <string name="empty_categories_message">قم بتنظيم قنواتك وقوائم التشغيل ضمن تصنيفات محددة من الإعدادات.</string>
+    <string name="empty_usb_title">لم يتم اكتشاف وحدة تخزين خارجية</string>
+    <string name="empty_usb_message">قم بتوصيل وحدة تخزين USB OTG أو بطاقة SD لتشغيل فيديوهات 4K دون اتصال بالإنترنت.</string>
+
+    <!-- Action Buttons -->
+    <string name="action_add_channel">إضافة قناة</string>
+    <string name="action_add_playlist">إضافة قائمة تشغيل</string>
+    <string name="action_add_folder">إضافة مجلد</string>
+    <string name="action_rescan_usb">إعادة فحص USB</string>
+    <string name="action_refresh">تحديث</string>
+    <string name="action_play_all">تشغيل الكل</string>
+    <string name="action_resume">استئناف</string>
+    <string name="action_delete">حذف</string>
+    <string name="action_cancel">إلغاء</string>
+    <string name="action_confirm">تأكيد</string>
+    <string name="action_save">حفظ</string>
+    <string name="action_close">إغلاق</string>
+    <string name="action_retry">إعادة المحاولة</string>
+    <string name="action_grant_permission">منح الإذن</string>
+    <string name="action_open_settings">فتح الإعدادات</string>
+
+    <!-- Video Card & Playback Stats -->
+    <string name="video_badge_4k">4K</string>
+    <string name="video_badge_hd">HD</string>
+    <string name="video_badge_usb">USB</string>
+    <string name="video_watched_percent">تمت مشاهدة %d%%</string>
+    <string name="video_count">%d فيديو</string>
+    <string name="video_views">%s مشاهدة</string>
+
+    <!-- Player HUD & Controls -->
+    <string name="player_play">تشغيل</string>
+    <string name="player_pause">إيقاف مؤقت</string>
+    <string name="player_previous">السابق</string>
+    <string name="player_next">التالي</string>
+    <string name="player_repeat_off">التكرار: معطل</string>
+    <string name="player_repeat_one">التكرار: الفيديو الحالي</string>
+    <string name="player_repeat_all">التكرار: كامل القائمة</string>
+    <string name="player_quality">الدقة: %s</string>
+    <string name="player_quality_select_title">اختر دقة الفيديو</string>
+    <string name="player_quality_auto">تلقائي (متكيف)</string>
+    <string name="player_quality_4k">4K فائقة الوضوح (2160p)</string>
+    <string name="player_quality_2k">2K عالية الوضوح (1440p)</string>
+    <string name="player_quality_1080p">1080p الدقة الكاملة (Full HD)</string>
+    <string name="player_quality_720p">720p عالية الوضوح (HD)</string>
+    <string name="player_quality_480p">480p دقة قياسية (SD)</string>
+    <string name="player_quality_360p">360p دقة منخفضة (SD)</string>
+    <string name="player_audio">الصوت: %s</string>
+    <string name="player_audio_select_title">اختر المسار الصوتي</string>
+    <string name="player_subtitles">الترجمة: %s</string>
+    <string name="player_subtitles_select_title">اختر مسار الترجمة</string>
+    <string name="player_subtitles_off">إيقاف الترجمة</string>
+    <string name="player_aspect_fit">ملاءمة الشاشة</string>
+    <string name="player_aspect_zoom">تقريب وقص</string>
+    <string name="player_aspect_stretch">تمديد الشاشة</string>
+    <string name="player_speed">السرعة: %.2fx</string>
+    <string name="player_hw_accel">تسريع عتادي HEVC</string>
+    <string name="player_now_playing">قيد التشغيل الآن</string>
+
+    <!-- Settings: Appearance & Language -->
+    <string name="settings_section_appearance">المظهر واللغة</string>
+    <string name="settings_language">لغة التطبيق</string>
+    <string name="settings_language_desc">اختر لغة واجهة المستخدم</string>
+    <string name="settings_language_system">حسب لغة الجهاز</string>
+    <string name="settings_language_english">English (الإنجليزية)</string>
+    <string name="settings_language_arabic">العربية</string>
+
+    <string name="settings_theme">وضع المظهر</string>
+    <string name="settings_theme_desc">التبديل بين المظهر الداكن والفاتح</string>
+    <string name="settings_theme_system">حسب مظهر الجهاز</string>
+    <string name="settings_theme_dark">داكن (Obsidian)</string>
+    <string name="settings_theme_light">فاتح (Light)</string>
+
+    <!-- Settings: Playback & General -->
+    <string name="settings_section_playback">التشغيل</string>
+    <string name="settings_preferred_quality">الدقة الافتراضية</string>
+    <string name="settings_repeat_mode">وضع التكرار الافتراضي</string>
+    <string name="settings_resume_mode">استئناف التشغيل</string>
+    <string name="settings_resume_always">استئناف من حيث توقفت</string>
+    <string name="settings_resume_beginning">البدء دائماً من البداية</string>
+    <string name="settings_auto_play_next">تشغيل الفيديو التالي تلقائياً</string>
+    <string name="settings_subtitles_default">تفعيل الترجمة افتراضياً</string>
+    <string name="settings_seek_interval">فترة التقديم والترجيع</string>
+    <string name="settings_seek_seconds">%d ثوانٍ</string>
+
+    <!-- Settings: UI & Layout -->
+    <string name="settings_section_ui">الواجهة وتصميم العرض</string>
+    <string name="settings_ui_mode">نمط واجهة الشاشة</string>
+    <string name="settings_ui_mode_auto">اكتشاف تلقائي (TV / تابلت)</string>
+    <string name="settings_ui_mode_tv">واجهة أندرويد TV للشاشات الكبيرة</string>
+    <string name="settings_ui_mode_tablet">واجهة تابلت للمس</string>
+    <string name="settings_font_scale">حجم الخط</string>
+    <string name="settings_font_scale_compact">مضغوط (92%)</string>
+    <string name="settings_font_scale_normal">طبيعي (100%)</string>
+    <string name="settings_font_scale_large">كبير (110%)</string>
+    <string name="settings_sidebar_mode">نمط القائمة الجانبية</string>
+    <string name="settings_sidebar_overlay">طبقة عائمة عند التركيز (سريعة جداً)</string>
+    <string name="settings_sidebar_collapsed">مطوية دائماً</string>
+    <string name="settings_sidebar_expanded">موسعة دائماً</string>
+
+    <!-- Settings: Storage & USB -->
+    <string name="settings_section_storage">التخزين وفحص الـ USB</string>
+    <string name="settings_auto_scan_startup">فحص الذاكرة تلقائياً عند فتح التطبيق</string>
+    <string name="settings_auto_scan_usb">فحص تلقائي عند إدخال وحدة USB</string>
+    <string name="settings_hide_boot_partitions">إخفاء أقسام النظام وأقسام الإقلاع في الـ USB</string>
+    <string name="settings_rescan_button">إعادة فحص كل وسائط التخزين الآن</string>
+
+    <!-- Settings: App Updates & GitHub Sync -->
+    <string name="settings_section_updater">تحديثات التطبيق ومزامنة GitHub</string>
+    <string name="settings_current_version">الإصدار المثبت حالياً: %s</string>
+    <string name="settings_check_updates">التحقق من وجود تحديثات</string>
+    <string name="settings_checking_updates">جاري البحث عن تحديثات...</string>
+    <string name="settings_update_available">يوجد تحديث جديد: %s</string>
+    <string name="settings_up_to_date">التطبيق محدث إلى آخر إصدار!</string>
+    <string name="settings_download_update">تنزيل وتثبيت التحديث</string>
+    <string name="settings_downloading_update">جاري تنزيل التحديث: %1$d%% (%2$s ميجابايت / %3$s ميجابايت)</string>
+    <string name="settings_update_ready">اكتمل التنزيل. اضغط للتثبيت.</string>
+    <string name="settings_update_error">فشل التحقق من التحديث أو تنزيله: %s</string>
+
+    <!-- Settings: Reset & About -->
+    <string name="settings_section_about">حول التطبيق وإعادة الضبط</string>
+    <string name="settings_reset_all">إعادة ضبط جميع الإعدادات للوضع الافتراضي</string>
+    <string name="settings_reset_confirm">هل أنت متأكد من رغبتك في إعادة ضبط جميع التفضيلات؟</string>
+
+    <!-- Permissions Banner -->
+    <string name="permission_storage_title">مطلوب إذن الوصول إلى وحدة التخزين</string>
+    <string name="permission_storage_desc">يحتاج Joud&amp;Jawad Tube لإذن التخزين للعثور على فيديوهاتك المحلية وفيديوهات USB وتشغيلها.</string>
+    <string name="permission_all_files_title">إذن الوصول الشامل للملفات لوحدات USB</string>
+    <string name="permission_all_files_desc">للوصول إلى وحدات تخزين USB OTG والأقراص الموصولة على أندرويد TV، يرجى تفعيل إذن الوصول لجميع الملفات.</string>
+
+    <!-- Dialogs -->
+    <string name="dialog_add_channel_title">إضافة قناة يوتيوب</string>
+    <string name="dialog_channel_url_hint">أدخل رابط القناة أو المعرّف (مثل channel@)</string>
+    <string name="dialog_add_playlist_title">إضافة قائمة تشغيل</string>
+    <string name="dialog_playlist_title_hint">اسم قائمة التشغيل</string>
+    <string name="dialog_confirm_delete_title">تأكيد الحذف</string>
+    <string name="dialog_confirm_delete_msg">هل أنت متأكد من رغبتك في إزالة \"%s\"؟</string>
+</resources>

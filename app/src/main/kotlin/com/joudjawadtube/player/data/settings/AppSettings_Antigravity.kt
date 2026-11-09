@@ -58,6 +58,8 @@ enum class RepeatMode(val label: String) {
 }
 
 data class AppSettingsState(
+    val appLanguage: AppLanguage = AppLanguage.FOLLOW_SYSTEM,
+    val themeMode: ThemeMode = ThemeMode.FOLLOW_SYSTEM,
     val thumbnailMode: ThumbnailMode = ThumbnailMode.YOUTUBE_FIRST,
     val frameCapturePosition: FrameCapturePosition = FrameCapturePosition.FAST_3S,
     val defaultPlaybackSpeed: Float = 1.0f,
@@ -86,6 +88,8 @@ class AppSettingsRepository(context: Context) {
     val settingsFlow: StateFlow<AppSettingsState> = _settingsFlow.asStateFlow()
 
     private fun loadFromPrefs(): AppSettingsState {
+        val langName = prefs.getString("app_language", AppLanguage.FOLLOW_SYSTEM.name)
+        val themeName = prefs.getString("theme_mode", ThemeMode.FOLLOW_SYSTEM.name)
         val thumbModeName = prefs.getString("thumbnail_mode", ThumbnailMode.YOUTUBE_FIRST.name)
         val framePosName = prefs.getString("frame_capture_pos", FrameCapturePosition.FAST_3S.name)
         val resumeName = prefs.getString("resume_mode", ResumeMode.ALWAYS_RESUME.name)
@@ -95,7 +99,17 @@ class AppSettingsRepository(context: Context) {
         val fontScaleName = prefs.getString("ui_font_scale", UiFontScale.NORMAL.name)
         val sidebarName = prefs.getString("sidebar_mode", SidebarMode.OVERLAY_ON_FOCUS.name)
 
+        val loadedLanguage = runCatching { AppLanguage.valueOf(langName!!) }
+            .getOrDefault(AppLanguage.FOLLOW_SYSTEM)
+        val loadedTheme = runCatching { ThemeMode.valueOf(themeName!!) }
+            .getOrDefault(ThemeMode.FOLLOW_SYSTEM)
+
+        LocaleManager_Antigravity.apply(loadedLanguage)
+        LocaleManager_Antigravity.applyTheme(loadedTheme)
+
         return AppSettingsState(
+            appLanguage = loadedLanguage,
+            themeMode = loadedTheme,
             thumbnailMode = runCatching { ThumbnailMode.valueOf(thumbModeName!!) }
                 .getOrDefault(ThumbnailMode.YOUTUBE_FIRST),
             frameCapturePosition = runCatching { FrameCapturePosition.valueOf(framePosName!!) }
@@ -125,7 +139,11 @@ class AppSettingsRepository(context: Context) {
     fun update(transform: (AppSettingsState) -> AppSettingsState) {
         val updated = transform(_settingsFlow.value)
         _settingsFlow.value = updated
+        LocaleManager_Antigravity.apply(updated.appLanguage)
+        LocaleManager_Antigravity.applyTheme(updated.themeMode)
         prefs.edit()
+            .putString("app_language", updated.appLanguage.name)
+            .putString("theme_mode", updated.themeMode.name)
             .putString("thumbnail_mode", updated.thumbnailMode.name)
             .putString("frame_capture_pos", updated.frameCapturePosition.name)
             .putFloat("default_playback_speed", updated.defaultPlaybackSpeed)
@@ -148,7 +166,10 @@ class AppSettingsRepository(context: Context) {
 
     fun resetToDefaults() {
         prefs.edit().clear().apply()
-        _settingsFlow.value = AppSettingsState()
+        val defaultState = AppSettingsState()
+        LocaleManager_Antigravity.apply(defaultState.appLanguage)
+        LocaleManager_Antigravity.applyTheme(defaultState.themeMode)
+        _settingsFlow.value = defaultState
     }
 
     companion object {

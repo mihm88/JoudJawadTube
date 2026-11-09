@@ -4,9 +4,11 @@
 
 [![Android TV](https://img.shields.io/badge/Platform-Android%20TV%20%7C%20Google%20TV%20%7C%20Tablet-brightgreen.svg?logo=android&logoColor=white)](#)
 [![Min SDK](https://img.shields.io/badge/Min%20SDK-23%20(Android%206.0+)-blue.svg)](#)
-[![Target SDK](https://img.shields.io/badge/Target%20SDK-34%20(Android%2014)-orange.svg)](#)
-[![Media3 ExoPlayer](https://img.shields.io/badge/Player-AndroidX%20Media3%201.3.1-red.svg?logo=youtube&logoColor=white)](#)
-[![Jetpack Compose](https://img.shields.io/badge/UI-Jetpack%20Compose%20for%20TV-purple.svg?logo=jetpackcompose&logoColor=white)](#)
+[![Target SDK](https://img.shields.io/badge/Target%20SDK-36%20(Android%2016)-orange.svg)](#)
+[![Media3 ExoPlayer](https://img.shields.io/badge/Player-AndroidX%20Media3%201.4.1-red.svg?logo=youtube&logoColor=white)](#)
+[![Languages](https://img.shields.io/badge/Languages-English%20%7C%20العربية%20(RTL)-teal.svg)](#)
+[![Themes](https://img.shields.io/badge/Themes-Dark%20%7C%20Light%20%7C%20Follow%20System-darkblue.svg)](#)
+[![Security Hardened](https://img.shields.io/badge/Release-Hardened%20%26%20R8%20Minified-success.svg)](#)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![GitHub Release](https://img.shields.io/github/v/release/mihm88/JoudJawadTube?include_prereleases&color=success)](https://github.com/mihm88/JoudJawadTube/releases)
 
@@ -92,7 +94,32 @@ Auto-detected tablet layout displaying adaptive 3-column video cards, scoped in-
 ### 🔄 7. In-App GitHub Releases Auto-Updater
 - Checks the GitHub Releases API (`mihm88/JoudJawadTube`) for new version tags.
 - In-app notification card displays release notes, download progress bar, and triggers `FileProvider` package installation.
-- Fully automated CI/CD workflow builds debug/release APKs on push.
+- Fully automated CI/CD workflow builds release APKs on push.
+
+### 🌐 8. Arabic Language & RTL Support
+- **Full Modern Standard Arabic Translation**: Comprehensive localization across every screen, dialog, row, and setting.
+- **True Right-to-Left (RTL) Layout**: Sidebars, grids, chips, and navigation automatically mirror when Arabic is active.
+- **Language Selector in Settings**:
+  - `Follow system` (Default: automatically detects Arabic on Arabic devices; falls back cleanly to English for others).
+  - `English` (Forced English display).
+  - `العربية` (Forced Arabic display).
+- **Physical Player LTR Timeline**: As per YouTube & Android TV media guidelines, the video seekbar, playback elapsed times, and D-pad scrubbing remain left-to-right for consistent intuitive control.
+
+### 🎨 9. Light Mode & System Theme Following
+- **Dynamic Obsidian & Light Palettes**:
+  - `Follow system` (Default: automatically matches device day/night mode).
+  - `Dark` (Classic SmartTube Obsidian `#0F0F0F` theme).
+  - `Light` (Clean, high-contrast `#F8F9FA` theme with AA-contrast text & focus borders).
+- **Video Player HUD Stays Dark**: The player overlay retains its cinematic dark scrim in both themes for maximum video viewing contrast.
+
+### 🔐 10. Production Release Signing & Hardened Security
+- **Persistent Release Key**: Signed with a dedicated 4096-bit RSA certificate valid until 2054, eliminating mismatch update errors.
+- **v1, v2, and v3 Signature Schemes**: Full security and compatibility across Android 6.0 (API 23) through Android 16 (API 36).
+- **Certificate SHA-256 Fingerprint**:
+  `9D:70:A7:A6:3A:1D:71:3F:FA:40:DD:EA:4E:CD:15:F1:F5:EA:88:9C:A9:0F:B1:59:60:B2:CC:2F:40:66:B0:82`
+- **Permission Hardening**: Explicit `tools:node="remove"` guards prevent dependencies from injecting SMS, location, microphone, camera, or phone-state capabilities.
+- **R8 Code & Resource Shrinking**: Release APK size reduced by 82% (from 22.2 MB to **4.06 MB**).
+- For complete details, see [Release Signing Guide](docs/RELEASE_SIGNING_Antigravity.md) and [Play Protect Investigation Guide](docs/PLAY_PROTECT_Antigravity.md).
 
 ---
 
@@ -192,19 +219,19 @@ git clone https://github.com/mihm88/JoudJawadTube.git
 cd JoudJawadTube
 ```
 
-### Build Debug APK
+### Build Release APK
 ```bash
 # On Windows PowerShell
-.\gradlew.bat assembleDebug
+.\gradlew.bat assembleRelease
 
 # On macOS / Linux
-./gradlew assembleDebug
+./gradlew assembleRelease
 ```
-The output APK will be generated at:
+The optimized signed release APK will be generated at:
 ```
-app/build/outputs/apk/debug/JoudJawadTube-v1.0.0.apk
+app/build/outputs/apk/release/JoudJawadTube-v1.1.0.apk
 ```
-(A pre-compiled copy is also kept ready at the repository root: `JoudJawadTube-v1.0.0.apk`)
+(A pre-compiled copy is also kept ready at the repository root: `JoudJawadTube-v1.1.0.apk`)
 
 ### Run Unit Tests
 ```bash
@@ -212,11 +239,15 @@ app/build/outputs/apk/debug/JoudJawadTube-v1.0.0.apk
 ```
 
 ### Install onto Android TV via ADB
+> [!NOTE]
+> **One-Time Reinstall Notice**: If upgrading from an older debug-signed build (v1.0.0), uninstall the previous version once before installing this production-signed release:
+> `adb uninstall com.joudjawadtube.player`
+
 1. Enable **Developer Options** and **Network Debugging** on your Android TV.
 2. Connect to your TV's IP address:
 ```bash
 adb connect 192.168.1.xxx:5555
-adb install -r app/build/outputs/apk/debug/JoudJawadTube-v1.0.0.apk
+adb install -r JoudJawadTube-v1.1.0.apk
 ```
 
 ---

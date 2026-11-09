@@ -23,6 +23,7 @@ class JoudJawadTubeApp : Application(), ImageLoaderFactory {
 
     override fun onCreate() {
         super.onCreate()
+        com.joudjawadtube.player.data.settings.AppSettingsRepository.getInstance(this)
         registerDynamicUsbMountListener()
     }
 
