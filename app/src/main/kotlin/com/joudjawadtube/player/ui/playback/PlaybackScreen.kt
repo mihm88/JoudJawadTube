@@ -12,6 +12,7 @@ import androidx.activity.compose.BackHandler
 import androidx.annotation.OptIn
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.focusable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -34,6 +35,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
@@ -41,6 +44,7 @@ import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -370,6 +374,16 @@ fun PlaybackScreen(
         }
     }
 
+    val playerRootFocusRequester = remember { FocusRequester() }
+
+    LaunchedEffect(hudVisible, activeDialogTab) {
+        if (!hudVisible && activeDialogTab == null) {
+            try {
+                playerRootFocusRequester.requestFocus()
+            } catch (_: Throwable) {}
+        }
+    }
+
     LaunchedEffect(currentRepeatMode) {
         exoPlayer.repeatMode = if (currentRepeatMode == RepeatMode.REPEAT_ONE) {
             Player.REPEAT_MODE_ONE
@@ -396,10 +410,8 @@ fun PlaybackScreen(
                 .build()
 
             val resolved = resolvedYouTubeStream
-            if (video.isYoutube && resolved != null && resolved.qualityVariants.isNotEmpty() && newQuality != "Auto") {
-                val match = resolved.qualityVariants.firstOrNull { it.label.contains(newQuality.take(4), ignoreCase = true) }
-                    ?: resolved.qualityVariants.firstOrNull { it.height <= maxH }
-                if (match != null && match.videoUrl.isNotBlank()) {
+            if (video.isYoutube && resolved != null) {
+                if (newQuality == "Auto" && !resolved.hlsManifestUrl.isNullOrBlank()) {
                     val currentPos = exoPlayer.currentPosition.coerceAtLeast(0L)
                     val httpFactory = DefaultHttpDataSource.Factory()
                         .setUserAgent(resolved.userAgent)
@@ -407,21 +419,38 @@ fun PlaybackScreen(
                         .setReadTimeoutMs(12_000)
                         .setAllowCrossProtocolRedirects(true)
                     val dataSourceFactory = DefaultDataSource.Factory(context, httpFactory)
-
-                    val newSource = if (match.isProgressive || resolved.audioStreamUrl.isNullOrBlank()) {
-                        ProgressiveMediaSource.Factory(dataSourceFactory)
-                            .createMediaSource(MediaItem.fromUri(match.videoUrl))
-                    } else {
-                        val vSource = ProgressiveMediaSource.Factory(dataSourceFactory)
-                            .createMediaSource(MediaItem.fromUri(match.videoUrl))
-                        val aSource = ProgressiveMediaSource.Factory(dataSourceFactory)
-                            .createMediaSource(MediaItem.fromUri(resolved.audioStreamUrl))
-                        MergingMediaSource(vSource, aSource)
-                    }
-
-                    exoPlayer.setMediaSource(newSource, currentPos)
+                    val hlsSource = HlsMediaSource.Factory(dataSourceFactory)
+                        .createMediaSource(MediaItem.fromUri(resolved.hlsManifestUrl))
+                    exoPlayer.setMediaSource(hlsSource, currentPos)
                     exoPlayer.prepare()
                     exoPlayer.playWhenReady = true
+                } else if (resolved.qualityVariants.isNotEmpty() && newQuality != "Auto") {
+                    val match = resolved.qualityVariants.firstOrNull { it.label.contains(newQuality.take(4), ignoreCase = true) }
+                        ?: resolved.qualityVariants.firstOrNull { it.height <= maxH }
+                    if (match != null && match.videoUrl.isNotBlank()) {
+                        val currentPos = exoPlayer.currentPosition.coerceAtLeast(0L)
+                        val httpFactory = DefaultHttpDataSource.Factory()
+                            .setUserAgent(resolved.userAgent)
+                            .setConnectTimeoutMs(10_000)
+                            .setReadTimeoutMs(12_000)
+                            .setAllowCrossProtocolRedirects(true)
+                        val dataSourceFactory = DefaultDataSource.Factory(context, httpFactory)
+
+                        val newSource = if (match.isProgressive || resolved.audioStreamUrl.isNullOrBlank()) {
+                            ProgressiveMediaSource.Factory(dataSourceFactory)
+                                .createMediaSource(MediaItem.fromUri(match.videoUrl))
+                        } else {
+                            val vSource = ProgressiveMediaSource.Factory(dataSourceFactory)
+                                .createMediaSource(MediaItem.fromUri(match.videoUrl))
+                            val aSource = ProgressiveMediaSource.Factory(dataSourceFactory)
+                                .createMediaSource(MediaItem.fromUri(resolved.audioStreamUrl))
+                            MergingMediaSource(vSource, aSource)
+                        }
+
+                        exoPlayer.setMediaSource(newSource, currentPos)
+                        exoPlayer.prepare()
+                        exoPlayer.playWhenReady = true
+                    }
                 }
             }
         }
@@ -457,6 +486,9 @@ fun PlaybackScreen(
     BackHandler {
         if (activeDialogTab != null) {
             activeDialogTab = null
+            interactionSignal.tryEmit(Unit)
+        } else if (hudVisible) {
+            hudVisible = false
         } else {
             if (!useWebViewYouTubeFallback) {
                 onSaveProgress(video.videoKey, exoPlayer.currentPosition, durationMs)
@@ -466,18 +498,28 @@ fun PlaybackScreen(
     }
 
     val resizeModeLabel = when (resizeMode) {
-        AspectRatioFrameLayout.RESIZE_MODE_ZOOM -> "Zoom"
-        AspectRatioFrameLayout.RESIZE_MODE_FILL -> "Stretch"
-        else -> "Fit"
+        AspectRatioFrameLayout.RESIZE_MODE_ZOOM -> stringResource(com.joudjawadtube.player.R.string.player_aspect_zoom)
+        AspectRatioFrameLayout.RESIZE_MODE_FILL -> stringResource(com.joudjawadtube.player.R.string.player_aspect_stretch)
+        else -> stringResource(com.joudjawadtube.player.R.string.player_aspect_fit)
     }
 
     Box(
         modifier = Modifier
             .fillMaxSize()
             .background(Color.Black)
+            .focusRequester(playerRootFocusRequester)
+            .focusable()
             .onPreviewKeyEvent { event ->
                 if (event.type == KeyEventType.KeyDown && activeDialogTab == null) {
                     when (event.key) {
+                        Key.Back, Key.Escape -> {
+                            if (hudVisible) {
+                                hudVisible = false
+                                true
+                            } else {
+                                false
+                            }
+                        }
                         Key.MediaPlayPause, Key.Spacebar -> {
                             performTogglePlayPause()
                             hudVisible = true
@@ -530,7 +572,7 @@ fun PlaybackScreen(
                                 false
                             }
                         }
-                        Key.DirectionCenter, Key.Enter -> {
+                        Key.DirectionCenter, Key.Enter, Key.NumPadEnter -> {
                             if (!hudVisible) {
                                 hudVisible = true
                                 interactionSignal.tryEmit(Unit)

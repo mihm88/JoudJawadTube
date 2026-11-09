@@ -75,6 +75,9 @@
     <string name="player_pause">Pause</string>
     <string name="player_previous">Previous</string>
     <string name="player_next">Next</string>
+    <string name="player_favorite">Favorite</string>
+    <string name="player_favorite_saved">Saved</string>
+    <string name="player_aspect">Aspect</string>
     <string name="player_repeat_off">Repeat: Off</string>
     <string name="player_repeat_one">Repeat: One</string>
     <string name="player_repeat_all">Repeat: All</string>
@@ -157,6 +160,8 @@
     <string name="settings_download_update">Download &amp; Install Update</string>
     <string name="settings_downloading_update">Downloading update: %1$d%% (%2$s MB / %3$s MB)</string>
     <string name="settings_update_ready">Update downloaded. Tap to install.</string>
+    <string name="settings_install_permission_required">Permission required: please enable \"Install unknown apps\" for Joud&amp;Jawad Tube, then tap Install.</string>
+    <string name="settings_install_signature_mismatch">Update failed: package signature does not match installed app.</string>
     <string name="settings_update_error">Failed to check or download update: %s</string>
 
     <!-- Settings: Reset & About -->

@@ -75,6 +75,9 @@
     <string name="player_pause">إيقاف مؤقت</string>
     <string name="player_previous">السابق</string>
     <string name="player_next">التالي</string>
+    <string name="player_favorite">تفضيل</string>
+    <string name="player_favorite_saved">المفضلة</string>
+    <string name="player_aspect">الأبعاد</string>
     <string name="player_repeat_off">التكرار: معطل</string>
     <string name="player_repeat_one">التكرار: الفيديو الحالي</string>
     <string name="player_repeat_all">التكرار: كامل القائمة</string>
@@ -157,6 +160,8 @@
     <string name="settings_download_update">تنزيل وتثبيت التحديث</string>
     <string name="settings_downloading_update">جاري تنزيل التحديث: %1$d%% (%2$s ميجابايت / %3$s ميجابايت)</string>
     <string name="settings_update_ready">اكتمل التنزيل. اضغط للتثبيت.</string>
+    <string name="settings_install_permission_required">مطلوب إذن التثبيت: يرجى تفعيل \"تثبيت تطبيقات غير معروفة\" لتطبيق جود وجواد، ثم اضغط تثبيت.</string>
+    <string name="settings_install_signature_mismatch">فشل التثبيت: التوقيع الرقمي لملف التحديث لا يتطابق مع التطبيق المثبت.</string>
     <string name="settings_update_error">فشل التحقق من التحديث أو تنزيله: %s</string>
 
     <!-- Settings: Reset & About -->

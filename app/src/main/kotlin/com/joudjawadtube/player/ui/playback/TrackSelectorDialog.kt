@@ -4,6 +4,8 @@ import androidx.annotation.OptIn
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -37,6 +39,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -47,6 +50,7 @@ import androidx.media3.common.Player
 import androidx.media3.common.TrackSelectionOverride
 import androidx.media3.common.Tracks
 import androidx.media3.common.util.UnstableApi
+import com.joudjawadtube.player.R
 import com.joudjawadtube.player.ui.theme.SmartTubeCardBg
 import com.joudjawadtube.player.ui.theme.SmartTubeCardFocusedBg
 import com.joudjawadtube.player.ui.theme.SmartTubeFocusBorder
@@ -116,28 +120,33 @@ fun TrackSelectorDialog(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(
+                    modifier = Modifier
+                        .weight(1f)
+                        .horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
                     DialogTabChip(
                         icon = Icons.Default.ClosedCaption,
-                        label = "Subtitles (${(subtitleOptions.size - 1).coerceAtLeast(0)})",
+                        label = "${stringResource(R.string.player_subtitles, "").substringBefore(':').trim()} (${(subtitleOptions.size - 1).coerceAtLeast(0)})",
                         isSelected = activeTab == PlayerDialogTab.SUBTITLES,
                         onClick = { activeTab = PlayerDialogTab.SUBTITLES }
                     )
                     DialogTabChip(
                         icon = Icons.Default.Audiotrack,
-                        label = "Audio (${audioOptions.size})",
+                        label = "${stringResource(R.string.player_audio, "").substringBefore(':').trim()} (${audioOptions.size})",
                         isSelected = activeTab == PlayerDialogTab.AUDIO,
                         onClick = { activeTab = PlayerDialogTab.AUDIO }
                     )
                     DialogTabChip(
                         icon = Icons.Default.Speed,
-                        label = "Speed (${currentSpeed}x)",
+                        label = "${currentSpeed}x",
                         isSelected = activeTab == PlayerDialogTab.SPEED,
                         onClick = { activeTab = PlayerDialogTab.SPEED }
                     )
                     DialogTabChip(
                         icon = Icons.Default.Hd,
-                        label = "Quality ($currentQuality)",
+                        label = "$currentQuality",
                         isSelected = activeTab == PlayerDialogTab.QUALITY,
                         onClick = { activeTab = PlayerDialogTab.QUALITY }
                     )

@@ -65,7 +65,8 @@ jobs:
           if [[ "${{ github.ref }}" == refs/tags/v* ]]; then
             TAG="${GITHUB_REF#refs/tags/}"
           else
-            TAG="v1.1.${{ github.run_number }}"
+            APP_VERSION=$(grep 'versionName =' app/build.gradle.kts | head -n 1 | cut -d'"' -f2)
+            TAG="v${APP_VERSION}"
           fi
           echo "RELEASE_TAG=$TAG" >> $GITHUB_ENV
           echo "Determined release tag: $TAG"
@@ -73,15 +74,21 @@ jobs:
       - name: Prepare APK Asset for Release
         run: |
           mkdir -p release-artifacts
-          SOURCE_APK=$(find app/build/outputs/apk -name "*.apk" | head -n 1)
-          DEST_APK="release-artifacts/JoudJawadTube-${{ env.RELEASE_TAG }}.apk"
-          if [ -n "$SOURCE_APK" ] && [ -f "$SOURCE_APK" ]; then
-            cp "$SOURCE_APK" "$DEST_APK"
-            echo "Copied $SOURCE_APK to $DEST_APK"
+          ROOT_APK="JoudJawadTube-${{ env.RELEASE_TAG }}.apk"
+          if [ -f "$ROOT_APK" ]; then
+            echo "Using production-signed APK from repository: $ROOT_APK"
+            cp "$ROOT_APK" "release-artifacts/$ROOT_APK"
           else
-            echo "Error: No APK found in app/build/outputs/apk!"
-            find app/build/outputs/apk -name "*.apk"
-            exit 1
+            SOURCE_APK=$(find app/build/outputs/apk -name "*.apk" | head -n 1)
+            DEST_APK="release-artifacts/JoudJawadTube-${{ env.RELEASE_TAG }}.apk"
+            if [ -n "$SOURCE_APK" ] && [ -f "$SOURCE_APK" ]; then
+              cp "$SOURCE_APK" "$DEST_APK"
+              echo "Copied $SOURCE_APK to $DEST_APK"
+            else
+              echo "Error: No APK found in app/build/outputs/apk!"
+              find app/build/outputs/apk -name "*.apk"
+              exit 1
+            fi
           fi
 
       - name: Cleanup Keystore

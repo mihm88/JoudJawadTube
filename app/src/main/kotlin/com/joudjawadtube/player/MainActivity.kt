@@ -175,84 +175,86 @@ class MainActivity : AppCompatActivity() {
                     }
 
                     Box(modifier = Modifier.fillMaxSize()) {
-                        if (useTvLayout) {
-                            TvCatalogScreen(
-                                uiState = uiState,
-                                lazyListState = tvHomeListState,
-                                hasReadVideoPermission = hasReadPermission,
-                                hasAllFilesAccess = hasAllFilesAccess,
-                                onSelectSection = { viewModel.selectSection(it) },
-                                onSelectTopCategory = { viewModel.selectTopCategory(it) },
-                                onSearchQueryChange = { viewModel.updateSearchQuery(it) },
-                                onSelectFolderFilter = { viewModel.selectFolderFilter(it) },
-                                onVideoClick = { video, playlist ->
-                                    viewModel.openVideo(video, playlist)
-                                },
-                                onToggleFavorite = { viewModel.toggleFavorite(it) },
-                                onOpenVideoOptions = { viewModel.openVideoOptions(it) },
-                                onOpenAddYouTubeDialog = { viewModel.openAddYouTubeDialog() },
-                                onDeletePlaylist = { viewModel.deleteYouTubePlaylist(it) },
-                                onDeleteChannel = { viewModel.deleteYouTubeChannel(it) },
-                                onChangeChannelCategory = { channelId, cat -> viewModel.updateChannelCategory(channelId, cat) },
-                                onChangePlaylistCategory = { playlistId, cat -> viewModel.updatePlaylistCategory(playlistId, cat) },
-                                onOpenKidsPlaylist = { plId, _ -> viewModel.openOrImportKidsPlaylist(plId, playImmediately = true) },
-                                onSaveKidsPlaylist = { plId -> viewModel.openOrImportKidsPlaylist(plId, playImmediately = false) },
-                                onRequestReadPermission = requestReadPermissionAction,
-                                onRequestAllFilesAccess = requestAllFilesAccessAction,
-                                onPickSafFolder = pickFolderAction,
-                                onRescanStorage = { viewModel.rescanStorage() },
-                                onUpdateSettings = { viewModel.updateSettings(it) },
-                                onRegenerateAllThumbnails = { viewModel.regenerateAllThumbnails() },
-                                onClearThumbnailCache = { viewModel.clearThumbnailCache() },
-                                onRemoveSafFolder = { viewModel.removeSafFolder(it) },
-                                onClearWatchHistory = { viewModel.clearWatchHistory() },
-                                onClearFavorites = { viewModel.clearFavorites() },
-                                onClearYouTubeLibrary = { viewModel.clearYouTubeLibrary() },
-                                onResetSettings = { viewModel.resetSettingsToDefaults() },
-                                onCheckForUpdates = { viewModel.checkForAppUpdates(isManual = true) },
-                                onDownloadAndInstallUpdate = { viewModel.downloadAndInstallUpdate(it) },
-                                onDismissUpdateStatus = { viewModel.dismissUpdateStatus() }
-                            )
-                        } else {
-                            TabletCatalogScreen(
-                                uiState = uiState,
-                                lazyListState = tabletHomeListState,
-                                lazyGridState = tabletGridState,
-                                hasReadVideoPermission = hasReadPermission,
-                                hasAllFilesAccess = hasAllFilesAccess,
-                                onSelectSection = { viewModel.selectSection(it) },
-                                onSelectTopCategory = { viewModel.selectTopCategory(it) },
-                                onSearchQueryChange = { viewModel.updateSearchQuery(it) },
-                                onSelectFolderFilter = { viewModel.selectFolderFilter(it) },
-                                onVideoClick = { video, playlist ->
-                                    viewModel.openVideo(video, playlist)
-                                },
-                                onToggleFavorite = { viewModel.toggleFavorite(it) },
-                                onOpenVideoOptions = { viewModel.openVideoOptions(it) },
-                                onOpenAddYouTubeDialog = { viewModel.openAddYouTubeDialog() },
-                                onDeletePlaylist = { viewModel.deleteYouTubePlaylist(it) },
-                                onDeleteChannel = { viewModel.deleteYouTubeChannel(it) },
-                                onChangeChannelCategory = { channelId, cat -> viewModel.updateChannelCategory(channelId, cat) },
-                                onChangePlaylistCategory = { playlistId, cat -> viewModel.updatePlaylistCategory(playlistId, cat) },
-                                onOpenKidsPlaylist = { plId, _ -> viewModel.openOrImportKidsPlaylist(plId, playImmediately = true) },
-                                onSaveKidsPlaylist = { plId -> viewModel.openOrImportKidsPlaylist(plId, playImmediately = false) },
-                                onRequestReadPermission = requestReadPermissionAction,
-                                onRequestAllFilesAccess = requestAllFilesAccessAction,
-                                onPickSafFolder = pickFolderAction,
-                                onRescanStorage = { viewModel.rescanStorage() },
-                                onToggleTabletGridMode = { viewModel.toggleTabletGridMode() },
-                                onUpdateSettings = { viewModel.updateSettings(it) },
-                                onRegenerateAllThumbnails = { viewModel.regenerateAllThumbnails() },
-                                onClearThumbnailCache = { viewModel.clearThumbnailCache() },
-                                onRemoveSafFolder = { viewModel.removeSafFolder(it) },
-                                onClearWatchHistory = { viewModel.clearWatchHistory() },
-                                onClearFavorites = { viewModel.clearFavorites() },
-                                onClearYouTubeLibrary = { viewModel.clearYouTubeLibrary() },
-                                onResetSettings = { viewModel.resetSettingsToDefaults() },
-                                onCheckForUpdates = { viewModel.checkForAppUpdates(isManual = true) },
-                                onDownloadAndInstallUpdate = { viewModel.downloadAndInstallUpdate(it) },
-                                onDismissUpdateStatus = { viewModel.dismissUpdateStatus() }
-                            )
+                        if (activePlaybackSession == null) {
+                            if (useTvLayout) {
+                                TvCatalogScreen(
+                                    uiState = uiState,
+                                    lazyListState = tvHomeListState,
+                                    hasReadVideoPermission = hasReadPermission,
+                                    hasAllFilesAccess = hasAllFilesAccess,
+                                    onSelectSection = { viewModel.selectSection(it) },
+                                    onSelectTopCategory = { viewModel.selectTopCategory(it) },
+                                    onSearchQueryChange = { viewModel.updateSearchQuery(it) },
+                                    onSelectFolderFilter = { viewModel.selectFolderFilter(it) },
+                                    onVideoClick = { video, playlist ->
+                                        viewModel.openVideo(video, playlist)
+                                    },
+                                    onToggleFavorite = { viewModel.toggleFavorite(it) },
+                                    onOpenVideoOptions = { viewModel.openVideoOptions(it) },
+                                    onOpenAddYouTubeDialog = { viewModel.openAddYouTubeDialog() },
+                                    onDeletePlaylist = { viewModel.deleteYouTubePlaylist(it) },
+                                    onDeleteChannel = { viewModel.deleteYouTubeChannel(it) },
+                                    onChangeChannelCategory = { channelId, cat -> viewModel.updateChannelCategory(channelId, cat) },
+                                    onChangePlaylistCategory = { playlistId, cat -> viewModel.updatePlaylistCategory(playlistId, cat) },
+                                    onOpenKidsPlaylist = { plId, _ -> viewModel.openOrImportKidsPlaylist(plId, playImmediately = true) },
+                                    onSaveKidsPlaylist = { plId -> viewModel.openOrImportKidsPlaylist(plId, playImmediately = false) },
+                                    onRequestReadPermission = requestReadPermissionAction,
+                                    onRequestAllFilesAccess = requestAllFilesAccessAction,
+                                    onPickSafFolder = pickFolderAction,
+                                    onRescanStorage = { viewModel.rescanStorage() },
+                                    onUpdateSettings = { viewModel.updateSettings(it) },
+                                    onRegenerateAllThumbnails = { viewModel.regenerateAllThumbnails() },
+                                    onClearThumbnailCache = { viewModel.clearThumbnailCache() },
+                                    onRemoveSafFolder = { viewModel.removeSafFolder(it) },
+                                    onClearWatchHistory = { viewModel.clearWatchHistory() },
+                                    onClearFavorites = { viewModel.clearFavorites() },
+                                    onClearYouTubeLibrary = { viewModel.clearYouTubeLibrary() },
+                                    onResetSettings = { viewModel.resetSettingsToDefaults() },
+                                    onCheckForUpdates = { viewModel.checkForAppUpdates(isManual = true) },
+                                    onDownloadAndInstallUpdate = { viewModel.downloadAndInstallUpdate(it) },
+                                    onDismissUpdateStatus = { viewModel.dismissUpdateStatus() }
+                                )
+                            } else {
+                                TabletCatalogScreen(
+                                    uiState = uiState,
+                                    lazyListState = tabletHomeListState,
+                                    lazyGridState = tabletGridState,
+                                    hasReadVideoPermission = hasReadPermission,
+                                    hasAllFilesAccess = hasAllFilesAccess,
+                                    onSelectSection = { viewModel.selectSection(it) },
+                                    onSelectTopCategory = { viewModel.selectTopCategory(it) },
+                                    onSearchQueryChange = { viewModel.updateSearchQuery(it) },
+                                    onSelectFolderFilter = { viewModel.selectFolderFilter(it) },
+                                    onVideoClick = { video, playlist ->
+                                        viewModel.openVideo(video, playlist)
+                                    },
+                                    onToggleFavorite = { viewModel.toggleFavorite(it) },
+                                    onOpenVideoOptions = { viewModel.openVideoOptions(it) },
+                                    onOpenAddYouTubeDialog = { viewModel.openAddYouTubeDialog() },
+                                    onDeletePlaylist = { viewModel.deleteYouTubePlaylist(it) },
+                                    onDeleteChannel = { viewModel.deleteYouTubeChannel(it) },
+                                    onChangeChannelCategory = { channelId, cat -> viewModel.updateChannelCategory(channelId, cat) },
+                                    onChangePlaylistCategory = { playlistId, cat -> viewModel.updatePlaylistCategory(playlistId, cat) },
+                                    onOpenKidsPlaylist = { plId, _ -> viewModel.openOrImportKidsPlaylist(plId, playImmediately = true) },
+                                    onSaveKidsPlaylist = { plId -> viewModel.openOrImportKidsPlaylist(plId, playImmediately = false) },
+                                    onRequestReadPermission = requestReadPermissionAction,
+                                    onRequestAllFilesAccess = requestAllFilesAccessAction,
+                                    onPickSafFolder = pickFolderAction,
+                                    onRescanStorage = { viewModel.rescanStorage() },
+                                    onToggleTabletGridMode = { viewModel.toggleTabletGridMode() },
+                                    onUpdateSettings = { viewModel.updateSettings(it) },
+                                    onRegenerateAllThumbnails = { viewModel.regenerateAllThumbnails() },
+                                    onClearThumbnailCache = { viewModel.clearThumbnailCache() },
+                                    onRemoveSafFolder = { viewModel.removeSafFolder(it) },
+                                    onClearWatchHistory = { viewModel.clearWatchHistory() },
+                                    onClearFavorites = { viewModel.clearFavorites() },
+                                    onClearYouTubeLibrary = { viewModel.clearYouTubeLibrary() },
+                                    onResetSettings = { viewModel.resetSettingsToDefaults() },
+                                    onCheckForUpdates = { viewModel.checkForAppUpdates(isManual = true) },
+                                    onDownloadAndInstallUpdate = { viewModel.downloadAndInstallUpdate(it) },
+                                    onDismissUpdateStatus = { viewModel.dismissUpdateStatus() }
+                                )
+                            }
                         }
 
                         // Playback overlay when an active playback session is running

@@ -432,8 +432,9 @@ class CatalogViewModel(application: Application) : AndroidViewModel(application)
                     updateState = UpdateState_Antigravity.ReadyToInstall(apkFile, info)
                 )
                 appUpdater.installApk(apkFile).onFailure { err ->
+                    val msg = err.message ?: "Failed to launch installer"
                     _dialogState.value = _dialogState.value.copy(
-                        updateState = UpdateState_Antigravity.Error("Failed to launch installer: ${err.message}")
+                        updateState = UpdateState_Antigravity.Error(msg)
                     )
                 }
             }.onFailure { err ->

@@ -2,9 +2,13 @@ package com.joudjawadtube.player.data.updater
 
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
+import android.net.Uri
 import android.os.Build
+import android.provider.Settings
 import android.util.Log
 import androidx.core.content.FileProvider
+import com.joudjawadtube.player.R
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
@@ -195,11 +199,57 @@ class AppUpdater_Antigravity(private val context: Context) {
             throw IllegalArgumentException("APK file does not exist: ${apkFile.absolutePath}")
         }
 
-        // Verify package archive integrity
         val pm = context.packageManager
-        val archiveInfo = pm.getPackageArchiveInfo(apkFile.absolutePath, 0)
+
+        // 1. Verify unknown sources install permission on Android 8.0+ (Oreo, API 26+)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            if (!pm.canRequestPackageInstalls()) {
+                val settingsIntent = Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES).apply {
+                    data = Uri.parse("package:${context.packageName}")
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                }
+                try {
+                    context.startActivity(settingsIntent)
+                } catch (_: Exception) {
+                    val fallbackIntent = Intent(Settings.ACTION_SECURITY_SETTINGS).apply {
+                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    }
+                    try {
+                        context.startActivity(fallbackIntent)
+                    } catch (_: Exception) {}
+                }
+                throw SecurityException(context.getString(R.string.settings_install_permission_required))
+            }
+        }
+
+        // 2. Verify package archive integrity
+        val archiveInfo = pm.getPackageArchiveInfo(apkFile.absolutePath, PackageManager.GET_SIGNING_CERTIFICATES)
+            ?: pm.getPackageArchiveInfo(apkFile.absolutePath, 0)
         if (archiveInfo == null || archiveInfo.packageName != context.packageName) {
             throw SecurityException("Downloaded update package is invalid or does not match ${context.packageName}")
+        }
+
+        // 3. Verify certificate match on Android 9.0+ (API 28+) to catch signature mismatches cleanly
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            val installedSigningInfo = runCatching {
+                pm.getPackageInfo(context.packageName, PackageManager.GET_SIGNING_CERTIFICATES).signingInfo
+            }.getOrNull()
+            val updateSigningInfo = archiveInfo.signingInfo
+            if (installedSigningInfo != null && updateSigningInfo != null) {
+                val currentSigs = if (installedSigningInfo.hasMultipleSigners()) {
+                    installedSigningInfo.apkContentsSigners.map { it.toByteArray().contentHashCode() }.toSet()
+                } else {
+                    installedSigningInfo.signingCertificateHistory.map { it.toByteArray().contentHashCode() }.toSet()
+                }
+                val updateSigs = if (updateSigningInfo.hasMultipleSigners()) {
+                    updateSigningInfo.apkContentsSigners.map { it.toByteArray().contentHashCode() }.toSet()
+                } else {
+                    updateSigningInfo.signingCertificateHistory.map { it.toByteArray().contentHashCode() }.toSet()
+                }
+                if (updateSigs.intersect(currentSigs).isEmpty()) {
+                    throw SecurityException(context.getString(R.string.settings_install_signature_mismatch))
+                }
+            }
         }
 
         val apkUri = FileProvider.getUriForFile(
