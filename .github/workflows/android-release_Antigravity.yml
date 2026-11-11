@@ -51,7 +51,10 @@ jobs:
           JJT_KEY_ALIAS: ${{ secrets.JJT_KEY_ALIAS }}
           JJT_KEY_PASSWORD: ${{ secrets.JJT_KEY_PASSWORD }}
         run: |
-          if [ -f "$RUNNER_TEMP/release.jks" ]; then
+          APP_VER=$(grep 'versionName =' app/build.gradle.kts | head -n 1 | cut -d'"' -f2)
+          if [ -f "JoudJawadTube-v${APP_VER}.apk" ]; then
+            echo "Found pre-signed production APK (JoudJawadTube-v${APP_VER}.apk) in repository root; skipping redundant Gradle build."
+          elif [ -f "$RUNNER_TEMP/release.jks" ]; then
             echo "Building signed Release APK with production keystore..."
             ./gradlew assembleRelease --stacktrace
           else
