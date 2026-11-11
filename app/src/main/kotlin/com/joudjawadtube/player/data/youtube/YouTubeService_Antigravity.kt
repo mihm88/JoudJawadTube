@@ -149,6 +149,21 @@ data class ResolvedYouTubeStream(
         get() = !hlsManifestUrl.isNullOrBlank() ||
             !progressiveUrl.isNullOrBlank() ||
             (!videoStreamUrl.isNullOrBlank() && !audioStreamUrl.isNullOrBlank())
+
+    fun primaryPlayableUrl(): String? = videoStreamUrl ?: hlsManifestUrl ?: progressiveUrl
+
+    fun isExpired(
+        safetyMarginSec: Long = 120L,
+        nowEpochSec: Long = System.currentTimeMillis() / 1000L
+    ): Boolean {
+        val urlsToCheck = listOfNotNull(
+            primaryPlayableUrl(),
+            audioStreamUrl?.takeIf { !videoStreamUrl.isNullOrBlank() }
+        )
+        return urlsToCheck.any { url ->
+            YouTubeService.isStreamUrlExpired(url, safetyMarginSec, nowEpochSec)
+        }
+    }
 }
 
 sealed class ParsedYouTubeInput {
@@ -651,6 +666,75 @@ object YouTubeService {
 
     private val streamCache = ConcurrentHashMap<String, CachedStreamEntry>()
     private const val STREAM_CACHE_TTL_MS = 15 * 60 * 1000L // 15 minutes
+    private val EXPIRE_PARAM_REGEX = Regex("""(?:[?&]expire=|/expire/)(\d+)""")
+
+    @Volatile
+    private var cachedVisitorData: String? = null
+
+    @Volatile
+    private var visitorDataFetchedAtMs: Long = 0L
+    private const val VISITOR_DATA_TTL_MS = 30 * 60 * 1000L // 30 minutes
+
+    fun extractExpireEpochSec(url: String?): Long? {
+        if (url.isNullOrBlank()) return null
+        return EXPIRE_PARAM_REGEX.find(url)?.groupValues?.getOrNull(1)?.toLongOrNull()
+    }
+
+    fun isStreamUrlExpired(
+        url: String?,
+        safetyMarginSec: Long = 120L,
+        nowEpochSec: Long = System.currentTimeMillis() / 1000L
+    ): Boolean {
+        val expireSec = extractExpireEpochSec(url) ?: return false
+        return (nowEpochSec + safetyMarginSec) >= expireSec
+    }
+
+    fun invalidateStreamCache(videoId: String) {
+        if (videoId.isNotBlank()) {
+            streamCache.remove(videoId)
+        }
+    }
+
+    suspend fun refreshStreamForPlayback(videoId: String): ResolvedYouTubeStream {
+        invalidateStreamCache(videoId)
+        return resolveStreamForPlayback(videoId)
+    }
+
+    private fun getOrFetchVisitorData(): String? {
+        val now = System.currentTimeMillis()
+        cachedVisitorData?.takeIf { it.isNotBlank() && (now - visitorDataFetchedAtMs) < VISITOR_DATA_TTL_MS }?.let {
+            return it
+        }
+        val body = JSONObject().apply {
+            put(
+                "context",
+                JSONObject().apply {
+                    put(
+                        "client",
+                        JSONObject().apply {
+                            put("clientName", "WEB")
+                            put("clientVersion", "2.20250101.00.00")
+                        }
+                    )
+                }
+            )
+        }
+        val resp = httpPostJson(
+            url = "https://www.youtube.com/youtubei/v1/visitor_id?prettyPrint=false",
+            jsonBody = body.toString(),
+            userAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+        ) ?: return cachedVisitorData
+
+        val parsed = runCatching {
+            JSONObject(resp).optJSONObject("responseContext")?.optString("visitorData")
+        }.getOrNull()?.takeIf { it.isNotBlank() }
+
+        if (parsed != null) {
+            cachedVisitorData = parsed
+            visitorDataFetchedAtMs = now
+        }
+        return parsed ?: cachedVisitorData
+    }
 
     /**
      * Pre-warms the stream cache in the background (e.g., for the next video in a playlist).
@@ -658,7 +742,10 @@ object YouTubeService {
     suspend fun preResolveStream(videoId: String) {
         if (videoId.isBlank()) return
         val existing = streamCache[videoId]
-        if (existing != null && (System.currentTimeMillis() - existing.cachedAtMs) < STREAM_CACHE_TTL_MS) {
+        if (existing != null &&
+            (System.currentTimeMillis() - existing.cachedAtMs) < STREAM_CACHE_TTL_MS &&
+            !existing.stream.isExpired()
+        ) {
             return
         }
         runCatching { resolveStreamForPlayback(videoId) }
@@ -671,7 +758,10 @@ object YouTubeService {
     suspend fun resolveStreamForPlayback(videoId: String): ResolvedYouTubeStream = withContext(Dispatchers.IO) {
         val now = System.currentTimeMillis()
         streamCache[videoId]?.let { cached ->
-            if ((now - cached.cachedAtMs) < STREAM_CACHE_TTL_MS && cached.stream.hasDirectStream) {
+            if ((now - cached.cachedAtMs) < STREAM_CACHE_TTL_MS &&
+                cached.stream.hasDirectStream &&
+                !cached.stream.isExpired()
+            ) {
                 return@withContext cached.stream
             }
         }
@@ -689,6 +779,7 @@ object YouTubeService {
                     clientName = "IOS_KIDS",
                     clientVersion = "9.40.0",
                     userAgent = iosKidsUa,
+                    clientNameHeaderId = "6",
                     extraClientFields = mapOf(
                         "deviceMake" to "Apple",
                         "deviceModel" to "iPad14,1",
@@ -735,16 +826,22 @@ object YouTubeService {
             return@withContext wave1Winner
         }
 
-        // Wave 2 Fallback (for general non-Kids videos): Race ANDROID and IOS in parallel,
-        // and sanitize any poToken-protected 403 adaptive URLs so ExoPlayer never stalls.
+        // Wave 2 Fallback (for general non-Kids videos): Race ANDROID, IOS, and ANDROID_VR in parallel
+        // with X-YouTube-Client headers + visitorData, sanitizing any poToken-blocked adaptive streams
+        // while preferring the fastest client that delivers full HD/4K adaptive streams.
+        val visitorData = getOrFetchVisitorData()
         val wave2Winner = coroutineScope {
-            val androidDeferred = async {
+            val resultChannel = Channel<ResolvedYouTubeStream?>(capacity = 3)
+
+            val androidJob = launch {
                 val androidUa = "com.google.android.youtube/20.10.38 (Linux; U; Android 14) gzip"
                 val json = callInnerTubePlayer(
                     videoId = videoId,
                     clientName = "ANDROID",
                     clientVersion = "20.10.38",
                     userAgent = androidUa,
+                    clientNameHeaderId = "3",
+                    visitorData = visitorData,
                     extraClientFields = mapOf(
                         "androidSdkVersion" to 34,
                         "osName" to "Android",
@@ -752,16 +849,19 @@ object YouTubeService {
                     )
                 )
                 val parsed = parseStreamingData(videoId, json, androidUa)?.takeIf { it.hasDirectStream }
-                parsed?.let { sanitizeAdaptiveStreamIfForbidden(it) }?.takeIf { it.hasDirectStream }
+                val clean = parsed?.let { sanitizeAdaptiveStreamIfForbidden(it) }?.takeIf { it.hasDirectStream }
+                resultChannel.trySend(clean)
             }
 
-            val iosDeferred = async {
+            val iosJob = launch {
                 val iosUa = "com.google.ios.youtube/20.10.4 (iPhone16,2; U; CPU iOS 18_3_1 like Mac OS X;)"
                 val json = callInnerTubePlayer(
                     videoId = videoId,
                     clientName = "IOS",
                     clientVersion = "20.10.4",
                     userAgent = iosUa,
+                    clientNameHeaderId = "5",
+                    visitorData = visitorData,
                     extraClientFields = mapOf(
                         "deviceMake" to "Apple",
                         "deviceModel" to "iPhone16,2",
@@ -770,15 +870,53 @@ object YouTubeService {
                     )
                 )
                 val parsed = parseStreamingData(videoId, json, iosUa)?.takeIf { it.hasDirectStream }
-                parsed?.let { sanitizeAdaptiveStreamIfForbidden(it) }?.takeIf { it.hasDirectStream }
+                val clean = parsed?.let { sanitizeAdaptiveStreamIfForbidden(it) }?.takeIf { it.hasDirectStream }
+                resultChannel.trySend(clean)
             }
 
-            val androidRes = androidDeferred.await()
-            if (androidRes != null) {
-                iosDeferred.cancel()
-                return@coroutineScope androidRes
+            val androidVrJob = launch {
+                val vrUa = "com.google.android.apps.youtube.vr.oculus/1.62.27 (Linux; U; Android 12L; eureka-user Build/SQ3A.220605.009.A1) gzip"
+                val json = callInnerTubePlayer(
+                    videoId = videoId,
+                    clientName = "ANDROID_VR",
+                    clientVersion = "1.62.27",
+                    userAgent = vrUa,
+                    clientNameHeaderId = "28",
+                    visitorData = visitorData,
+                    extraClientFields = mapOf(
+                        "deviceMake" to "Oculus",
+                        "deviceModel" to "Quest 3",
+                        "androidSdkVersion" to 32,
+                        "osName" to "Android",
+                        "osVersion" to "12L"
+                    )
+                )
+                val parsed = parseStreamingData(videoId, json, vrUa)?.takeIf { it.hasDirectStream }
+                val clean = parsed?.let { sanitizeAdaptiveStreamIfForbidden(it) }?.takeIf { it.hasDirectStream }
+                resultChannel.trySend(clean)
             }
-            iosDeferred.await()
+
+            var bestFallback: ResolvedYouTubeStream? = null
+            var adaptiveWinner: ResolvedYouTubeStream? = null
+            repeat(3) {
+                val candidate = resultChannel.receive()
+                if (candidate != null) {
+                    if (!candidate.videoStreamUrl.isNullOrBlank() && !candidate.audioStreamUrl.isNullOrBlank()) {
+                        adaptiveWinner = candidate
+                        androidJob.cancel()
+                        iosJob.cancel()
+                        androidVrJob.cancel()
+                        return@coroutineScope candidate
+                    }
+                    if (bestFallback == null) {
+                        bestFallback = candidate
+                    }
+                }
+            }
+            androidJob.cancel()
+            iosJob.cancel()
+            androidVrJob.cancel()
+            adaptiveWinner ?: bestFallback
         }
 
         if (wave2Winner != null) {
@@ -1046,6 +1184,8 @@ object YouTubeService {
         clientName: String,
         clientVersion: String,
         userAgent: String,
+        clientNameHeaderId: String? = null,
+        visitorData: String? = null,
         extraClientFields: Map<String, Any> = emptyMap()
     ): JSONObject? {
         val clientObj = JSONObject().apply {
@@ -1053,6 +1193,9 @@ object YouTubeService {
             put("clientVersion", clientVersion)
             put("hl", "en")
             put("gl", "US")
+            if (!visitorData.isNullOrBlank()) {
+                put("visitorData", visitorData)
+            }
             for ((k, v) in extraClientFields) {
                 put(k, v)
             }
@@ -1064,10 +1207,20 @@ object YouTubeService {
             put("racyCheckOk", true)
         }
 
+        val extraHeaders = mutableMapOf<String, String>()
+        if (!clientNameHeaderId.isNullOrBlank()) {
+            extraHeaders["X-YouTube-Client-Name"] = clientNameHeaderId
+            extraHeaders["X-YouTube-Client-Version"] = clientVersion
+        }
+        if (!visitorData.isNullOrBlank()) {
+            extraHeaders["X-Goog-Visitor-Id"] = visitorData
+        }
+
         val response = httpPostJson(
             url = "https://www.youtube.com/youtubei/v1/player?prettyPrint=false",
             jsonBody = body.toString(),
-            userAgent = userAgent
+            userAgent = userAgent,
+            extraHeaders = extraHeaders
         ) ?: return null
 
         return runCatching { JSONObject(response) }.getOrNull()
@@ -1316,7 +1469,12 @@ object YouTubeService {
         return null
     }
 
-    private fun httpPostJson(url: String, jsonBody: String, userAgent: String): String? {
+    private fun httpPostJson(
+        url: String,
+        jsonBody: String,
+        userAgent: String,
+        extraHeaders: Map<String, String> = emptyMap()
+    ): String? {
         return runCatching {
             val conn = (URL(url).openConnection() as HttpURLConnection).apply {
                 requestMethod = "POST"
@@ -1326,6 +1484,9 @@ object YouTubeService {
                 setRequestProperty("Content-Type", "application/json")
                 setRequestProperty("Accept", "application/json")
                 setRequestProperty("User-Agent", userAgent)
+                for ((k, v) in extraHeaders) {
+                    setRequestProperty(k, v)
+                }
             }
             OutputStreamWriter(conn.outputStream, Charsets.UTF_8).use { writer ->
                 writer.write(jsonBody)

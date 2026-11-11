@@ -24,15 +24,15 @@
 
 <div align="center">
 
-[![Download Latest APK](https://img.shields.io/badge/📥_Download_Latest_APK-JoudJawadTube--v1.1.8.apk-2ea44f?style=for-the-badge&logo=android&logoColor=white)](https://github.com/mihm88/JoudJawadTube/releases/download/v1.1.8/JoudJawadTube-v1.1.8.apk)
+[![Download Latest APK](https://img.shields.io/badge/📥_Download_Latest_APK-JoudJawadTube--v1.1.9.apk-2ea44f?style=for-the-badge&logo=android&logoColor=white)](https://github.com/mihm88/JoudJawadTube/releases/download/v1.1.9/JoudJawadTube-v1.1.9.apk)
 [![All GitHub Releases](https://img.shields.io/badge/📦_GitHub_Releases-All_Versions-0969da?style=for-the-badge&logo=github&logoColor=white)](https://github.com/mihm88/JoudJawadTube/releases)
 
 </div>
 
 | Channel / الرابط | Direct Link / الرابط المباشر | Description / الوصف |
 | :--- | :--- | :--- |
-| **🚀 Direct APK (GitHub Release v1.1.8)** | [**`JoudJawadTube-v1.1.8.apk`**](https://github.com/mihm88/JoudJawadTube/releases/download/v1.1.8/JoudJawadTube-v1.1.8.apk) | Direct one-click download from GitHub Releases (Production-signed `v1+v2+v3`) |
-| **⚡ Direct APK (Repo Root Mirror)** | [**`raw/master/JoudJawadTube-v1.1.8.apk`**](https://github.com/mihm88/JoudJawadTube/raw/master/JoudJawadTube-v1.1.8.apk) | Direct download from the repository root branch |
+| **🚀 Direct APK (GitHub Release v1.1.9)** | [**`JoudJawadTube-v1.1.9.apk`**](https://github.com/mihm88/JoudJawadTube/releases/download/v1.1.9/JoudJawadTube-v1.1.9.apk) | Direct one-click download from GitHub Releases (Production-signed `v1+v2+v3`) |
+| **⚡ Direct APK (Repo Root Mirror)** | [**`raw/master/JoudJawadTube-v1.1.9.apk`**](https://github.com/mihm88/JoudJawadTube/raw/master/JoudJawadTube-v1.1.9.apk) | Direct download from the repository root branch |
 | **🏷️ Latest Release Page** | [**`github.com/mihm88/JoudJawadTube/releases/latest`**](https://github.com/mihm88/JoudJawadTube/releases/latest) | Always redirects to the newest published release |
 | **📦 All Releases Page** | [**`github.com/mihm88/JoudJawadTube/releases`**](https://github.com/mihm88/JoudJawadTube/releases) | Full release history, changelogs, and SHA-256 verification |
 
@@ -247,9 +247,9 @@ cd JoudJawadTube
 ```
 The optimized signed release APK will be generated at:
 ```
-app/build/outputs/apk/release/JoudJawadTube-v1.1.0.apk
+app/build/outputs/apk/release/JoudJawadTube-v1.1.9.apk
 ```
-(A pre-compiled copy is also kept ready at the repository root: `JoudJawadTube-v1.1.0.apk`)
+(A pre-compiled copy is also kept ready at the repository root: `JoudJawadTube-v1.1.9.apk`)
 
 ### Run Unit Tests
 ```bash
@@ -265,7 +265,7 @@ app/build/outputs/apk/release/JoudJawadTube-v1.1.0.apk
 2. Connect to your TV's IP address:
 ```bash
 adb connect 192.168.1.xxx:5555
-adb install -r JoudJawadTube-v1.1.0.apk
+adb install -r JoudJawadTube-v1.1.9.apk
 ```
 
 ---

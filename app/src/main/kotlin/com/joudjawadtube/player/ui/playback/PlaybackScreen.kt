@@ -32,6 +32,8 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -73,6 +75,7 @@ import com.joudjawadtube.player.data.settings.AppSettingsState
 import com.joudjawadtube.player.data.settings.RepeatMode
 import com.joudjawadtube.player.data.settings.ResumeMode
 import com.joudjawadtube.player.data.youtube.QualitySelectorHelper_Antigravity
+import com.joudjawadtube.player.data.youtube.ResolvedYouTubeStream
 import com.joudjawadtube.player.data.youtube.YouTubeChunkedHttpDataSource_Antigravity
 import com.joudjawadtube.player.data.youtube.YouTubeService
 import com.joudjawadtube.player.ui.catalog.PlaybackSession
@@ -83,6 +86,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
 
 @SuppressLint("SetJavaScriptEnabled")
@@ -115,6 +119,19 @@ fun PlaybackScreen(
     var triedFallbackStreamStage by remember(video.id) { mutableIntStateOf(0) }
     var useWebViewYouTubeFallback by remember(video.id) { mutableStateOf(false) }
     var webViewRef by remember { mutableStateOf<WebView?>(null) }
+
+    val coroutineScope = rememberCoroutineScope()
+    var hasAttemptedStreamRefresh by remember(video.id) { mutableStateOf(false) }
+    var isRefreshingExpiredStream by remember(video.id) { mutableStateOf(false) }
+
+    val latestVideo by rememberUpdatedState(video)
+    val latestDurationMs by rememberUpdatedState(durationMs)
+    val latestRepeatMode by rememberUpdatedState(currentRepeatMode)
+    val latestHasNext by rememberUpdatedState(session.hasNext)
+    val latestOnSaveProgress by rememberUpdatedState(onSaveProgress)
+    val latestOnNextVideo by rememberUpdatedState(onNextVideo)
+    val latestResolvedStream by rememberUpdatedState(resolvedYouTubeStream)
+    val latestCurrentQuality by rememberUpdatedState(currentQuality)
 
     var hudVisible by remember { mutableStateOf(true) }
     val interactionSignal = remember { MutableSharedFlow<Unit>(extraBufferCapacity = 1) }
@@ -157,31 +174,12 @@ fun PlaybackScreen(
             .build()
     }
 
-    // Load or switch MediaItem when session.currentVideo changes
-    LaunchedEffect(video.id, video.entity.uri) {
-        useWebViewYouTubeFallback = false
-        observedTrackResolutions = emptyList()
-        val resumePos = if (settings.resumeMode == ResumeMode.ALWAYS_RESUME &&
-            video.positionMs > 3_000L &&
-            video.progressFraction < 0.95f
-        ) {
-            video.positionMs
-        } else {
-            0L
-        }
-
-        if (video.isYoutube && video.youtubeVideoId.isNotBlank()) {
-            isResolvingYouTube = true
-            triedFallbackStreamStage = 0
-            val resolved = YouTubeService.resolveStreamForPlayback(video.youtubeVideoId)
-            resolvedYouTubeStream = resolved
-            isResolvingYouTube = false
-
-            if (resolved.durationMs > 0L) {
-                durationMs = resolved.durationMs
-            }
-
-            if (resolved.hasDirectStream) {
+    // Prepare ExoPlayer MediaSource from a resolved YouTube stream (initial, refresh, or quality change)
+    val prepareYouTubeStreamSource: (ResolvedYouTubeStream, String, Long, Boolean) -> Boolean = remember(exoPlayer, context) {
+        { resolved, requestedQuality, resumePos, applyPlaybackSpeed ->
+            if (!resolved.hasDirectStream) {
+                false
+            } else {
                 val httpFactory = YouTubeChunkedHttpDataSource_Antigravity.Factory(
                     userAgent = resolved.userAgent,
                     connectTimeoutMs = 6_000,
@@ -190,14 +188,15 @@ fun PlaybackScreen(
                 val dataSourceFactory = DefaultDataSource.Factory(context, httpFactory)
                 val fastFailPolicy = DefaultLoadErrorHandlingPolicy(/* minimumLoadableRetryCount = */ 0)
 
-                val preferredVariant = if (!currentQuality.equals("Auto", ignoreCase = true) && resolved.qualityVariants.isNotEmpty()) {
-                    val maxRank = QualitySelectorHelper_Antigravity.qualityRank(currentQuality)
+                val preferredVariant = if (!requestedQuality.equals("Auto", ignoreCase = true) && resolved.qualityVariants.isNotEmpty()) {
+                    val maxRank = QualitySelectorHelper_Antigravity.qualityRank(requestedQuality)
                     val matched = resolved.qualityVariants.firstOrNull {
-                        it.label.equals(currentQuality, ignoreCase = true)
+                        it.label.equals(requestedQuality, ignoreCase = true) ||
+                            QualitySelectorHelper_Antigravity.qualityRank(it.label) == maxRank
                     } ?: resolved.qualityVariants.firstOrNull {
                         QualitySelectorHelper_Antigravity.effectiveVerticalResolution(it.height, it.width) <= maxRank
                     } ?: resolved.qualityVariants.firstOrNull()
-                    if (matched != null && resolved.qualityVariants.none { it.label.equals(currentQuality, ignoreCase = true) }) {
+                    if (matched != null && resolved.qualityVariants.none { it.label.equals(requestedQuality, ignoreCase = true) }) {
                         currentQuality = matched.label
                     }
                     matched
@@ -205,6 +204,7 @@ fun PlaybackScreen(
                     null
                 }
 
+                var prepared = true
                 when {
                     preferredVariant != null && (!preferredVariant.isProgressive && !resolved.audioStreamUrl.isNullOrBlank()) -> {
                         triedFallbackStreamStage = 1
@@ -231,8 +231,7 @@ fun PlaybackScreen(
                         val aSource = ProgressiveMediaSource.Factory(dataSourceFactory)
                             .setLoadErrorHandlingPolicy(fastFailPolicy)
                             .createMediaSource(MediaItem.fromUri(resolved.audioStreamUrl))
-                        val merged = MergingMediaSource(vSource, aSource)
-                        exoPlayer.setMediaSource(merged, resumePos)
+                        exoPlayer.setMediaSource(MergingMediaSource(vSource, aSource), resumePos)
                     }
                     !resolved.hlsManifestUrl.isNullOrBlank() -> {
                         triedFallbackStreamStage = 2
@@ -248,11 +247,47 @@ fun PlaybackScreen(
                             .createMediaSource(MediaItem.fromUri(resolved.progressiveUrl))
                         exoPlayer.setMediaSource(pSource, resumePos)
                     }
+                    else -> prepared = false
                 }
-                exoPlayer.setPlaybackSpeed(playbackSpeed)
-                exoPlayer.prepare()
-                exoPlayer.playWhenReady = true
-            } else {
+                if (prepared) {
+                    if (applyPlaybackSpeed) {
+                        exoPlayer.setPlaybackSpeed(playbackSpeed)
+                    }
+                    exoPlayer.prepare()
+                    exoPlayer.playWhenReady = true
+                }
+                prepared
+            }
+        }
+    }
+
+    // Load or switch MediaItem when session.currentVideo changes
+    LaunchedEffect(video.id, video.entity.uri) {
+        useWebViewYouTubeFallback = false
+        hasAttemptedStreamRefresh = false
+        isRefreshingExpiredStream = false
+        observedTrackResolutions = emptyList()
+        val resumePos = if (settings.resumeMode == ResumeMode.ALWAYS_RESUME &&
+            video.positionMs > 3_000L &&
+            video.progressFraction < 0.95f
+        ) {
+            video.positionMs
+        } else {
+            0L
+        }
+
+        if (video.isYoutube && video.youtubeVideoId.isNotBlank()) {
+            isResolvingYouTube = true
+            triedFallbackStreamStage = 0
+            val resolved = YouTubeService.resolveStreamForPlayback(video.youtubeVideoId)
+            resolvedYouTubeStream = resolved
+            isResolvingYouTube = false
+
+            if (resolved.durationMs > 0L) {
+                durationMs = resolved.durationMs
+            }
+
+            if (!prepareYouTubeStreamSource(resolved, currentQuality, resumePos, true)) {
                 useWebViewYouTubeFallback = true
             }
         } else {
@@ -289,65 +324,127 @@ fun PlaybackScreen(
         }
     }
 
-    // Dynamic error recovery for YouTube streams
-    val tryNextYouTubeFallback: () -> Unit = remember(video.youtubeVideoId, resolvedYouTubeStream) {
-        {
-            val resolved = resolvedYouTubeStream
-            if (video.isYoutube && resolved != null) {
-                val httpFactory = YouTubeChunkedHttpDataSource_Antigravity.Factory(
-                    userAgent = resolved.userAgent,
-                    connectTimeoutMs = 6_000,
-                    readTimeoutMs = 8_000
-                )
-                val dataSourceFactory = DefaultDataSource.Factory(context, httpFactory)
-                val fastFailPolicy = DefaultLoadErrorHandlingPolicy(/* minimumLoadableRetryCount = */ 0)
-                val currentPos = exoPlayer.currentPosition.coerceAtLeast(0L)
+    // Cascade fallback (Stage 2 HLS -> Stage 3 Progressive -> Stage 4 WebView)
+    val cascadeYouTubeFallback: (ResolvedYouTubeStream, Long) -> Unit = remember(exoPlayer, context) {
+        { resolved, currentPos ->
+            val httpFactory = YouTubeChunkedHttpDataSource_Antigravity.Factory(
+                userAgent = resolved.userAgent,
+                connectTimeoutMs = 6_000,
+                readTimeoutMs = 8_000
+            )
+            val dataSourceFactory = DefaultDataSource.Factory(context, httpFactory)
+            val fastFailPolicy = DefaultLoadErrorHandlingPolicy(/* minimumLoadableRetryCount = */ 0)
 
-                when (triedFallbackStreamStage) {
-                    1 -> {
-                        if (!resolved.hlsManifestUrl.isNullOrBlank()) {
-                            triedFallbackStreamStage = 2
-                            val hlsSource = HlsMediaSource.Factory(dataSourceFactory)
-                                .setLoadErrorHandlingPolicy(fastFailPolicy)
-                                .createMediaSource(MediaItem.fromUri(resolved.hlsManifestUrl))
-                            exoPlayer.setMediaSource(hlsSource, currentPos)
-                            exoPlayer.prepare()
-                            exoPlayer.playWhenReady = true
-                        } else if (!resolved.progressiveUrl.isNullOrBlank()) {
-                            triedFallbackStreamStage = 3
-                            val pSource = ProgressiveMediaSource.Factory(dataSourceFactory)
-                                .setLoadErrorHandlingPolicy(fastFailPolicy)
-                                .createMediaSource(MediaItem.fromUri(resolved.progressiveUrl))
-                            exoPlayer.setMediaSource(pSource, currentPos)
-                            exoPlayer.prepare()
-                            exoPlayer.playWhenReady = true
-                        } else {
-                            triedFallbackStreamStage = 4
-                            useWebViewYouTubeFallback = true
-                        }
-                    }
-                    2 -> {
-                        if (!resolved.progressiveUrl.isNullOrBlank()) {
-                            triedFallbackStreamStage = 3
-                            val pSource = ProgressiveMediaSource.Factory(dataSourceFactory)
-                                .setLoadErrorHandlingPolicy(fastFailPolicy)
-                                .createMediaSource(MediaItem.fromUri(resolved.progressiveUrl))
-                            exoPlayer.setMediaSource(pSource, currentPos)
-                            exoPlayer.prepare()
-                            exoPlayer.playWhenReady = true
-                        } else {
-                            triedFallbackStreamStage = 4
-                            useWebViewYouTubeFallback = true
-                        }
-                    }
-                    else -> {
+            when (triedFallbackStreamStage) {
+                1 -> {
+                    if (!resolved.hlsManifestUrl.isNullOrBlank()) {
+                        triedFallbackStreamStage = 2
+                        val hlsSource = HlsMediaSource.Factory(dataSourceFactory)
+                            .setLoadErrorHandlingPolicy(fastFailPolicy)
+                            .createMediaSource(MediaItem.fromUri(resolved.hlsManifestUrl))
+                        exoPlayer.setMediaSource(hlsSource, currentPos)
+                        exoPlayer.prepare()
+                        exoPlayer.playWhenReady = true
+                    } else if (!resolved.progressiveUrl.isNullOrBlank()) {
+                        triedFallbackStreamStage = 3
+                        val pSource = ProgressiveMediaSource.Factory(dataSourceFactory)
+                            .setLoadErrorHandlingPolicy(fastFailPolicy)
+                            .createMediaSource(MediaItem.fromUri(resolved.progressiveUrl))
+                        exoPlayer.setMediaSource(pSource, currentPos)
+                        exoPlayer.prepare()
+                        exoPlayer.playWhenReady = true
+                    } else {
                         triedFallbackStreamStage = 4
                         useWebViewYouTubeFallback = true
+                    }
+                }
+                2 -> {
+                    if (!resolved.progressiveUrl.isNullOrBlank()) {
+                        triedFallbackStreamStage = 3
+                        val pSource = ProgressiveMediaSource.Factory(dataSourceFactory)
+                            .setLoadErrorHandlingPolicy(fastFailPolicy)
+                            .createMediaSource(MediaItem.fromUri(resolved.progressiveUrl))
+                        exoPlayer.setMediaSource(pSource, currentPos)
+                        exoPlayer.prepare()
+                        exoPlayer.playWhenReady = true
+                    } else {
+                        triedFallbackStreamStage = 4
+                        useWebViewYouTubeFallback = true
+                    }
+                }
+                else -> {
+                    triedFallbackStreamStage = 4
+                    useWebViewYouTubeFallback = true
+                }
+            }
+        }
+    }
+
+    // Shared helper to refresh an expired/failed YouTube stream and resume seamlessly at resumePos
+    val refreshAndResumeYouTubeStream: (Long, (ResolvedYouTubeStream?) -> Unit) -> Unit = remember(
+        coroutineScope,
+        prepareYouTubeStreamSource
+    ) {
+        { resumePos, onFallback ->
+            if (!isRefreshingExpiredStream) {
+                val expectedVideoId = latestVideo.youtubeVideoId
+                val requestedQuality = latestCurrentQuality
+                if (expectedVideoId.isBlank()) {
+                    onFallback(null)
+                } else {
+                    isRefreshingExpiredStream = true
+                    coroutineScope.launch {
+                        try {
+                            val fresh = YouTubeService.refreshStreamForPlayback(expectedVideoId)
+                            if (latestVideo.youtubeVideoId == expectedVideoId) {
+                                resolvedYouTubeStream = fresh
+                                if (fresh.durationMs > 0L) {
+                                    durationMs = fresh.durationMs
+                                }
+                                if (!prepareYouTubeStreamSource(fresh, requestedQuality, resumePos, true)) {
+                                    onFallback(fresh)
+                                }
+                            }
+                        } catch (_: Throwable) {
+                            if (latestVideo.youtubeVideoId == expectedVideoId) {
+                                onFallback(null)
+                            }
+                        } finally {
+                            if (latestVideo.youtubeVideoId == expectedVideoId) {
+                                isRefreshingExpiredStream = false
+                            }
+                        }
                     }
                 }
             }
         }
     }
+
+    // Dynamic error recovery: refresh expired/failing stream URL once before cascading fallbacks
+    val tryNextYouTubeFallback: () -> Unit = remember(exoPlayer, refreshAndResumeYouTubeStream, cascadeYouTubeFallback) {
+        {
+            val resolved = latestResolvedStream
+            val activeVideo = latestVideo
+            if (activeVideo.isYoutube && resolved != null) {
+                val currentPos = exoPlayer.currentPosition.coerceAtLeast(0L)
+                val shouldAttemptRefresh = !hasAttemptedStreamRefresh &&
+                    !isRefreshingExpiredStream &&
+                    activeVideo.youtubeVideoId.isNotBlank() &&
+                    (resolved.isExpired(safetyMarginSec = 300L) || currentPos > 5_000L)
+
+                if (shouldAttemptRefresh) {
+                    hasAttemptedStreamRefresh = true
+                    refreshAndResumeYouTubeStream(currentPos) {
+                        cascadeYouTubeFallback(resolved, currentPos)
+                    }
+                } else {
+                    cascadeYouTubeFallback(resolved, currentPos)
+                }
+            }
+        }
+    }
+
+    val latestTryNextYouTubeFallback by rememberUpdatedState(tryNextYouTubeFallback)
 
     // Attach ExoPlayer State and Error Listeners
     DisposableEffect(exoPlayer) {
@@ -389,17 +486,19 @@ fun PlaybackScreen(
                         durationMs = exoPlayer.duration
                     }
                 } else if (playbackState == Player.STATE_ENDED) {
-                    onSaveProgress(video.videoKey, durationMs, durationMs)
-                    when (currentRepeatMode) {
+                    val activeVideo = latestVideo
+                    val activeDuration = latestDurationMs
+                    latestOnSaveProgress(activeVideo.videoKey, activeDuration, activeDuration)
+                    when (latestRepeatMode) {
                         RepeatMode.REPEAT_ONE -> {
                             // Handled by Player.REPEAT_MODE_ONE
                         }
                         RepeatMode.REPEAT_ALL -> {
-                            onNextVideo()
+                            latestOnNextVideo()
                         }
                         RepeatMode.OFF -> {
-                            if (settings.autoPlayNext && session.hasNext) {
-                                onNextVideo()
+                            if (settings.autoPlayNext && latestHasNext) {
+                                latestOnNextVideo()
                             }
                         }
                     }
@@ -407,8 +506,8 @@ fun PlaybackScreen(
             }
 
             override fun onPlayerError(error: PlaybackException) {
-                if (video.isYoutube) {
-                    tryNextYouTubeFallback()
+                if (latestVideo.isYoutube) {
+                    latestTryNextYouTubeFallback()
                 }
             }
         }
@@ -474,7 +573,7 @@ fun PlaybackScreen(
         }
     }
 
-    val applyQualitySelection: (String) -> Unit = remember(exoPlayer, video, resolvedYouTubeStream) {
+    val applyQualitySelection: (String) -> Unit = remember(exoPlayer, video, resolvedYouTubeStream, prepareYouTubeStreamSource) {
         { newQuality ->
             currentQuality = newQuality
             val (maxW, maxH) = when {
@@ -493,89 +592,40 @@ fun PlaybackScreen(
                 .build()
 
             val resolved = resolvedYouTubeStream
-            if (video.isYoutube && resolved != null) {
-                if (newQuality == "Auto") {
-                    val currentPos = exoPlayer.currentPosition.coerceAtLeast(0L)
-                    val httpFactory = YouTubeChunkedHttpDataSource_Antigravity.Factory(
-                        userAgent = resolved.userAgent,
-                        connectTimeoutMs = 6_000,
-                        readTimeoutMs = 8_000
-                    )
-                    val dataSourceFactory = DefaultDataSource.Factory(context, httpFactory)
-                    val fastFailPolicy = DefaultLoadErrorHandlingPolicy(0)
-                    when {
-                        !resolved.videoStreamUrl.isNullOrBlank() && !resolved.audioStreamUrl.isNullOrBlank() -> {
-                            val vSource = ProgressiveMediaSource.Factory(dataSourceFactory)
-                                .setLoadErrorHandlingPolicy(fastFailPolicy)
-                                .createMediaSource(MediaItem.fromUri(resolved.videoStreamUrl))
-                            val aSource = ProgressiveMediaSource.Factory(dataSourceFactory)
-                                .setLoadErrorHandlingPolicy(fastFailPolicy)
-                                .createMediaSource(MediaItem.fromUri(resolved.audioStreamUrl))
-                            exoPlayer.setMediaSource(MergingMediaSource(vSource, aSource), currentPos)
-                        }
-                        !resolved.hlsManifestUrl.isNullOrBlank() -> {
-                            val hlsSource = HlsMediaSource.Factory(dataSourceFactory)
-                                .setLoadErrorHandlingPolicy(fastFailPolicy)
-                                .createMediaSource(MediaItem.fromUri(resolved.hlsManifestUrl))
-                            exoPlayer.setMediaSource(hlsSource, currentPos)
-                        }
-                        !resolved.progressiveUrl.isNullOrBlank() -> {
-                            val pSource = ProgressiveMediaSource.Factory(dataSourceFactory)
-                                .setLoadErrorHandlingPolicy(fastFailPolicy)
-                                .createMediaSource(MediaItem.fromUri(resolved.progressiveUrl))
-                            exoPlayer.setMediaSource(pSource, currentPos)
-                        }
-                    }
-                    exoPlayer.prepare()
-                    exoPlayer.playWhenReady = true
-                } else if (resolved.qualityVariants.isNotEmpty()) {
-                    val match = resolved.qualityVariants.firstOrNull {
-                        it.label.equals(newQuality, ignoreCase = true) ||
-                            QualitySelectorHelper_Antigravity.qualityRank(it.label) == maxH
-                    } ?: resolved.qualityVariants.firstOrNull {
-                        QualitySelectorHelper_Antigravity.effectiveVerticalResolution(it.height, it.width) <= maxH
-                    }
-                    if (match != null && match.videoUrl.isNotBlank()) {
-                        val currentPos = exoPlayer.currentPosition.coerceAtLeast(0L)
-                        val httpFactory = YouTubeChunkedHttpDataSource_Antigravity.Factory(
-                            userAgent = resolved.userAgent,
-                            connectTimeoutMs = 6_000,
-                            readTimeoutMs = 8_000
-                        )
-                        val dataSourceFactory = DefaultDataSource.Factory(context, httpFactory)
-                        val fastFailPolicy = DefaultLoadErrorHandlingPolicy(0)
-
-                        val newSource = if (match.isProgressive || resolved.audioStreamUrl.isNullOrBlank()) {
-                            ProgressiveMediaSource.Factory(dataSourceFactory)
-                                .setLoadErrorHandlingPolicy(fastFailPolicy)
-                                .createMediaSource(MediaItem.fromUri(match.videoUrl))
-                        } else {
-                            val vSource = ProgressiveMediaSource.Factory(dataSourceFactory)
-                                .setLoadErrorHandlingPolicy(fastFailPolicy)
-                                .createMediaSource(MediaItem.fromUri(match.videoUrl))
-                            val aSource = ProgressiveMediaSource.Factory(dataSourceFactory)
-                                .setLoadErrorHandlingPolicy(fastFailPolicy)
-                                .createMediaSource(MediaItem.fromUri(resolved.audioStreamUrl))
-                            MergingMediaSource(vSource, aSource)
-                        }
-
-                        exoPlayer.setMediaSource(newSource, currentPos)
-                        exoPlayer.prepare()
-                        exoPlayer.playWhenReady = true
-                    }
-                }
+            if (video.isYoutube && resolved != null && (newQuality == "Auto" || resolved.qualityVariants.isNotEmpty())) {
+                val currentPos = exoPlayer.currentPosition.coerceAtLeast(0L)
+                prepareYouTubeStreamSource(resolved, newQuality, currentPos, false)
             }
         }
     }
 
-    val performTogglePlayPause: () -> Unit = remember(useWebViewYouTubeFallback, isPlaying) {
+    val performTogglePlayPause: () -> Unit = remember(
+        useWebViewYouTubeFallback,
+        isPlaying,
+        exoPlayer,
+        refreshAndResumeYouTubeStream
+    ) {
         {
             if (useWebViewYouTubeFallback) {
                 isPlaying = !isPlaying
                 val js = if (isPlaying) "player.playVideo();" else "player.pauseVideo();"
                 webViewRef?.evaluateJavascript(js, null)
+            } else if (exoPlayer.isPlaying) {
+                exoPlayer.pause()
             } else {
-                if (exoPlayer.isPlaying) exoPlayer.pause() else exoPlayer.play()
+                val activeVideo = latestVideo
+                val resolved = latestResolvedStream
+                val needsStreamRenewal = activeVideo.isYoutube &&
+                    activeVideo.youtubeVideoId.isNotBlank() &&
+                    resolved?.isExpired(safetyMarginSec = 120L) == true
+
+                if (needsStreamRenewal) {
+                    refreshAndResumeYouTubeStream(exoPlayer.currentPosition.coerceAtLeast(0L)) { fresh ->
+                        if (fresh != null) useWebViewYouTubeFallback = true else exoPlayer.play()
+                    }
+                } else {
+                    exoPlayer.play()
+                }
             }
         }
     }
@@ -761,7 +811,7 @@ fun PlaybackScreen(
             )
         }
 
-        if (isResolvingYouTube) {
+        if (isResolvingYouTube || isRefreshingExpiredStream) {
             Column(
                 modifier = Modifier.align(Alignment.Center),
                 horizontalAlignment = Alignment.CenterHorizontally,

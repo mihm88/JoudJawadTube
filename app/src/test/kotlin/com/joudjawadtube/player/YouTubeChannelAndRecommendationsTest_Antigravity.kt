@@ -3,11 +3,14 @@ package com.joudjawadtube.player
 import com.joudjawadtube.player.data.repository.KidsCatalogRepository_Antigravity
 import com.joudjawadtube.player.data.youtube.ParsedYouTubeInput
 import com.joudjawadtube.player.data.youtube.QualitySelectorHelper_Antigravity
+import com.joudjawadtube.player.data.youtube.ResolvedYouTubeStream
 import com.joudjawadtube.player.data.youtube.YouTubeQualityVariant
 import com.joudjawadtube.player.data.youtube.YouTubeService
 import com.joudjawadtube.player.ui.components.WindowWidthClass
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.File
@@ -139,6 +142,74 @@ class YouTubeChannelAndRecommendationsTest_Antigravity {
                 observedTrackResolutions = listOf(1920 to 1080)
             )
         )
+    }
+
+    @Test
+    fun streamExpirationHelpers_detectExpiredAndMarginUrlsCorrectly() {
+        val nowEpochSec = 1_800_000_000L
+
+        val queryMidUrl = "https://rr1---sn.googlevideo.com/videoplayback?itag=137&expire=1800001000&sparams=expire"
+        val queryStartUrl = "https://rr1---sn.googlevideo.com/videoplayback?expire=1799999900&itag=140"
+        val noExpireUrl = "https://rr1---sn.googlevideo.com/videoplayback?itag=18"
+
+        assertEquals(1_800_001_000L, YouTubeService.extractExpireEpochSec(queryMidUrl))
+        assertEquals(1_799_999_900L, YouTubeService.extractExpireEpochSec(queryStartUrl))
+        assertNull(YouTubeService.extractExpireEpochSec(noExpireUrl))
+        assertNull(YouTubeService.extractExpireEpochSec(null))
+
+        // Far enough in future (> 120s safety margin): not expired
+        assertFalse(
+            YouTubeService.isStreamUrlExpired(
+                url = queryMidUrl,
+                safetyMarginSec = 120L,
+                nowEpochSec = nowEpochSec
+            )
+        )
+        // Inside larger safety margin (1200s): treated as expired so preemptive refresh runs
+        assertTrue(
+            YouTubeService.isStreamUrlExpired(
+                url = queryMidUrl,
+                safetyMarginSec = 1_200L,
+                nowEpochSec = nowEpochSec
+            )
+        )
+        // Strictly in the past: expired
+        assertTrue(
+            YouTubeService.isStreamUrlExpired(
+                url = queryStartUrl,
+                safetyMarginSec = 0L,
+                nowEpochSec = nowEpochSec
+            )
+        )
+        // Missing expire param or null URL defaults to not expired
+        assertFalse(YouTubeService.isStreamUrlExpired(noExpireUrl, 120L, nowEpochSec))
+        assertFalse(YouTubeService.isStreamUrlExpired(null, 120L, nowEpochSec))
+
+        val freshStream = ResolvedYouTubeStream(
+            videoId = "LXb3EKWsInQ",
+            videoStreamUrl = queryMidUrl,
+            audioStreamUrl = "https://rr1---sn.googlevideo.com/videoplayback?itag=140&expire=1800002000"
+        )
+        assertFalse(freshStream.isExpired(safetyMarginSec = 120L, nowEpochSec = nowEpochSec))
+
+        val expiringAudioStream = ResolvedYouTubeStream(
+            videoId = "LXb3EKWsInQ",
+            videoStreamUrl = queryMidUrl,
+            audioStreamUrl = "https://rr1---sn.googlevideo.com/videoplayback?itag=140&expire=1800000050"
+        )
+        assertTrue(expiringAudioStream.isExpired(safetyMarginSec = 120L, nowEpochSec = nowEpochSec))
+
+        val expiredHlsStream = ResolvedYouTubeStream(
+            videoId = "LXb3EKWsInQ",
+            hlsManifestUrl = "https://manifest.googlevideo.com/api/manifest/hls_variant?expire=1799999000"
+        )
+        assertTrue(expiredHlsStream.isExpired(safetyMarginSec = 120L, nowEpochSec = nowEpochSec))
+
+        val expiredHlsPathStream = ResolvedYouTubeStream(
+            videoId = "LXb3EKWsInQ",
+            hlsManifestUrl = "https://manifest.googlevideo.com/api/manifest/hls_variant/expire/1799999000/ei/abc/file/index.m3u8"
+        )
+        assertTrue(expiredHlsPathStream.isExpired(safetyMarginSec = 120L, nowEpochSec = nowEpochSec))
     }
 }
 
