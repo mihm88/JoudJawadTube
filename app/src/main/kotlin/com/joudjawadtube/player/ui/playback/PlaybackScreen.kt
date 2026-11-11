@@ -58,6 +58,7 @@ import androidx.media3.common.VideoSize
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.DefaultDataSource
 import androidx.media3.datasource.DefaultHttpDataSource
+import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.hls.HlsMediaSource
@@ -127,8 +128,19 @@ fun PlaybackScreen(
             )
         }
 
+        val loadControl = DefaultLoadControl.Builder()
+            .setBufferDurationsMs(
+                /* minBufferMs = */ 15_000,
+                /* maxBufferMs = */ 50_000,
+                /* bufferForPlaybackMs = */ 600,
+                /* bufferForPlaybackAfterRebufferMs = */ 1_200
+            )
+            .setPrioritizeTimeOverSizeThresholds(true)
+            .build()
+
         ExoPlayer.Builder(context, renderersFactory)
             .setTrackSelector(trackSelector)
+            .setLoadControl(loadControl)
             .setAudioAttributes(
                 AudioAttributes.Builder()
                     .setUsage(C.USAGE_MEDIA)
@@ -166,26 +178,26 @@ fun PlaybackScreen(
             if (resolved.hasDirectStream) {
                 val httpFactory = DefaultHttpDataSource.Factory()
                     .setUserAgent(resolved.userAgent)
-                    .setConnectTimeoutMs(10_000)
-                    .setReadTimeoutMs(12_000)
+                    .setConnectTimeoutMs(6_000)
+                    .setReadTimeoutMs(8_000)
                     .setAllowCrossProtocolRedirects(true)
                 val dataSourceFactory = DefaultDataSource.Factory(context, httpFactory)
 
                 when {
-                    !resolved.hlsManifestUrl.isNullOrBlank() -> {
-                        triedFallbackStreamStage = 1
-                        val hlsSource = HlsMediaSource.Factory(dataSourceFactory)
-                            .createMediaSource(MediaItem.fromUri(resolved.hlsManifestUrl))
-                        exoPlayer.setMediaSource(hlsSource, resumePos)
-                    }
                     !resolved.videoStreamUrl.isNullOrBlank() && !resolved.audioStreamUrl.isNullOrBlank() -> {
-                        triedFallbackStreamStage = 2
+                        triedFallbackStreamStage = 1
                         val vSource = ProgressiveMediaSource.Factory(dataSourceFactory)
                             .createMediaSource(MediaItem.fromUri(resolved.videoStreamUrl))
                         val aSource = ProgressiveMediaSource.Factory(dataSourceFactory)
                             .createMediaSource(MediaItem.fromUri(resolved.audioStreamUrl))
                         val merged = MergingMediaSource(vSource, aSource)
                         exoPlayer.setMediaSource(merged, resumePos)
+                    }
+                    !resolved.hlsManifestUrl.isNullOrBlank() -> {
+                        triedFallbackStreamStage = 2
+                        val hlsSource = HlsMediaSource.Factory(dataSourceFactory)
+                            .createMediaSource(MediaItem.fromUri(resolved.hlsManifestUrl))
+                        exoPlayer.setMediaSource(hlsSource, resumePos)
                     }
                     !resolved.progressiveUrl.isNullOrBlank() -> {
                         triedFallbackStreamStage = 3
@@ -223,6 +235,17 @@ fun PlaybackScreen(
         }
     }
 
+    // Pre-warm the next YouTube video in the playlist in the background for near-zero transition latency
+    LaunchedEffect(video.id, session.currentIndex) {
+        delay(2_500L)
+        if (session.hasNext) {
+            val nextVid = session.playlist.getOrNull(session.currentIndex + 1)
+            if (nextVid != null && nextVid.isYoutube && nextVid.youtubeVideoId.isNotBlank()) {
+                YouTubeService.preResolveStream(nextVid.youtubeVideoId)
+            }
+        }
+    }
+
     // Dynamic error recovery for YouTube streams
     val tryNextYouTubeFallback: () -> Unit = remember(video.youtubeVideoId, resolvedYouTubeStream) {
         {
@@ -230,22 +253,19 @@ fun PlaybackScreen(
             if (video.isYoutube && resolved != null) {
                 val httpFactory = DefaultHttpDataSource.Factory()
                     .setUserAgent(resolved.userAgent)
-                    .setConnectTimeoutMs(10_000)
-                    .setReadTimeoutMs(12_000)
+                    .setConnectTimeoutMs(6_000)
+                    .setReadTimeoutMs(8_000)
                     .setAllowCrossProtocolRedirects(true)
                 val dataSourceFactory = DefaultDataSource.Factory(context, httpFactory)
                 val currentPos = exoPlayer.currentPosition.coerceAtLeast(0L)
 
                 when (triedFallbackStreamStage) {
                     1 -> {
-                        if (!resolved.videoStreamUrl.isNullOrBlank() && !resolved.audioStreamUrl.isNullOrBlank()) {
+                        if (!resolved.hlsManifestUrl.isNullOrBlank()) {
                             triedFallbackStreamStage = 2
-                            val vSource = ProgressiveMediaSource.Factory(dataSourceFactory)
-                                .createMediaSource(MediaItem.fromUri(resolved.videoStreamUrl))
-                            val aSource = ProgressiveMediaSource.Factory(dataSourceFactory)
-                                .createMediaSource(MediaItem.fromUri(resolved.audioStreamUrl))
-                            val merged = MergingMediaSource(vSource, aSource)
-                            exoPlayer.setMediaSource(merged, currentPos)
+                            val hlsSource = HlsMediaSource.Factory(dataSourceFactory)
+                                .createMediaSource(MediaItem.fromUri(resolved.hlsManifestUrl))
+                            exoPlayer.setMediaSource(hlsSource, currentPos)
                             exoPlayer.prepare()
                             exoPlayer.playWhenReady = true
                         } else if (!resolved.progressiveUrl.isNullOrBlank()) {

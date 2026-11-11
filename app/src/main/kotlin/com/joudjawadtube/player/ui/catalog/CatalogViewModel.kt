@@ -725,17 +725,23 @@ class CatalogViewModel(application: Application) : AndroidViewModel(application)
     }
 
     fun openVideo(video: VideoItem, contextPlaylist: List<VideoItem> = emptyList()) {
-        viewModelScope.launch {
-            val freshVideo = repository.getVideoItemById(video.id) ?: video
-            val playlist = if (contextPlaylist.isNotEmpty()) {
-                contextPlaylist
-            } else {
-                repository.getFolderPlaylist(freshVideo.entity.folderPath).ifEmpty { listOf(freshVideo) }
+        // Immediate 0ms UI transition so stream resolution starts right away without waiting for SQLite locks
+        val initialPlaylist = if (contextPlaylist.isNotEmpty()) contextPlaylist else listOf(video)
+        _activePlaybackSession.value = PlaybackSession(
+            currentVideo = video,
+            playlist = initialPlaylist
+        )
+
+        if (contextPlaylist.isEmpty()) {
+            viewModelScope.launch(Dispatchers.IO) {
+                val folderPlaylist = repository.getFolderPlaylist(video.entity.folderPath)
+                if (folderPlaylist.size > 1) {
+                    val current = _activePlaybackSession.value
+                    if (current != null && current.currentVideo.id == video.id) {
+                        _activePlaybackSession.value = current.copy(playlist = folderPlaylist)
+                    }
+                }
             }
-            _activePlaybackSession.value = PlaybackSession(
-                currentVideo = freshVideo,
-                playlist = playlist
-            )
         }
     }
 
