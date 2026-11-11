@@ -24,8 +24,8 @@ android {
         applicationId = "com.joudjawadtube.player"
         minSdk = 23
         targetSdk = 36
-        versionCode = 4
-        versionName = "1.1.6"
+        versionCode = 5
+        versionName = "1.1.7"
         resourceConfigurations += listOf("en", "ar")
     }
 

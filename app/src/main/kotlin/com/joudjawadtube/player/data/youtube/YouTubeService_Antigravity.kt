@@ -4,7 +4,9 @@ import com.joudjawadtube.player.data.local.SidecarSubtitle
 import com.joudjawadtube.player.data.local.YouTubeIdExtractor
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
@@ -551,8 +553,68 @@ object YouTubeService {
             }
         }
 
-        // Wave 1: Race the fastest direct MP4 & HLS clients in parallel (~300-500ms)
+        // Wave 1: True first-to-finish parallel race between IOS_KIDS and ANDROID_KIDS (~300ms).
+        // Neither Kids client requires a poToken, so their 1080p adaptiveFormats & HLS streams
+        // always return HTTP 200/206 immediately without 403 Forbidden errors.
         val wave1Winner = coroutineScope {
+            val resultChannel = Channel<ResolvedYouTubeStream?>(capacity = 2)
+
+            val iosKidsJob = launch {
+                val iosKidsUa = "com.google.ios.youtubekids/9.40.0 (iPad14,1; U; CPU iOS 18_1_0 like Mac OS X;)"
+                val json = callInnerTubePlayer(
+                    videoId = videoId,
+                    clientName = "IOS_KIDS",
+                    clientVersion = "9.40.0",
+                    userAgent = iosKidsUa,
+                    extraClientFields = mapOf(
+                        "deviceMake" to "Apple",
+                        "deviceModel" to "iPad14,1",
+                        "osName" to "iOS",
+                        "osVersion" to "18.1.0.22B83"
+                    )
+                )
+                val parsed = parseStreamingData(videoId, json, iosKidsUa)?.takeIf { it.hasDirectStream }
+                resultChannel.trySend(parsed)
+            }
+
+            val androidKidsJob = launch {
+                val androidKidsUa = "com.google.android.apps.youtube.kids/9.40.00 (Linux; U; Android 14) gzip"
+                val json = callInnerTubePlayer(
+                    videoId = videoId,
+                    clientName = "ANDROID_KIDS",
+                    clientVersion = "9.40.00",
+                    userAgent = androidKidsUa,
+                    extraClientFields = mapOf(
+                        "androidSdkVersion" to 34,
+                        "osName" to "Android",
+                        "osVersion" to "14"
+                    )
+                )
+                val parsed = parseStreamingData(videoId, json, androidKidsUa)?.takeIf { it.hasDirectStream }
+                resultChannel.trySend(parsed)
+            }
+
+            val first = resultChannel.receive()
+            if (first != null) {
+                iosKidsJob.cancel()
+                androidKidsJob.cancel()
+                return@coroutineScope first
+            }
+
+            val second = resultChannel.receive()
+            iosKidsJob.cancel()
+            androidKidsJob.cancel()
+            second
+        }
+
+        if (wave1Winner != null) {
+            streamCache[videoId] = CachedStreamEntry(wave1Winner, System.currentTimeMillis())
+            return@withContext wave1Winner
+        }
+
+        // Wave 2 Fallback (for general non-Kids videos): Race ANDROID and IOS in parallel,
+        // and sanitize any poToken-protected 403 adaptive URLs so ExoPlayer never stalls.
+        val wave2Winner = coroutineScope {
             val androidDeferred = async {
                 val androidUa = "com.google.android.youtube/20.10.38 (Linux; U; Android 14) gzip"
                 val json = callInnerTubePlayer(
@@ -566,23 +628,8 @@ object YouTubeService {
                         "osVersion" to "14"
                     )
                 )
-                parseStreamingData(videoId, json, androidUa)?.takeIf { it.hasDirectStream }
-            }
-
-            val androidKidsDeferred = async {
-                val androidKidsUa = "com.google.android.apps.youtube.kids/9.40.00 (Linux; U; Android 14) gzip"
-                val json = callInnerTubePlayer(
-                    videoId = videoId,
-                    clientName = "ANDROID_KIDS",
-                    clientVersion = "9.40.00",
-                    userAgent = androidKidsUa,
-                    extraClientFields = mapOf(
-                        "androidSdkVersion" to 34,
-                        "osName" to "Android",
-                        "osVersion" to "14"
-                    )
-                )
-                parseStreamingData(videoId, json, androidKidsUa)?.takeIf { it.hasDirectStream }
+                val parsed = parseStreamingData(videoId, json, androidUa)?.takeIf { it.hasDirectStream }
+                parsed?.let { sanitizeAdaptiveStreamIfForbidden(it) }?.takeIf { it.hasDirectStream }
             }
 
             val iosDeferred = async {
@@ -599,73 +646,16 @@ object YouTubeService {
                         "osVersion" to "18.3.1.22D72"
                     )
                 )
-                parseStreamingData(videoId, json, iosUa)?.takeIf { it.hasDirectStream }
+                val parsed = parseStreamingData(videoId, json, iosUa)?.takeIf { it.hasDirectStream }
+                parsed?.let { sanitizeAdaptiveStreamIfForbidden(it) }?.takeIf { it.hasDirectStream }
             }
 
             val androidRes = androidDeferred.await()
             if (androidRes != null) {
-                androidKidsDeferred.cancel()
                 iosDeferred.cancel()
                 return@coroutineScope androidRes
             }
-
-            val androidKidsRes = androidKidsDeferred.await()
-            if (androidKidsRes != null) {
-                iosDeferred.cancel()
-                return@coroutineScope androidKidsRes
-            }
-
             iosDeferred.await()
-        }
-
-        if (wave1Winner != null) {
-            streamCache[videoId] = CachedStreamEntry(wave1Winner, System.currentTimeMillis())
-            return@withContext wave1Winner
-        }
-
-        // Wave 2 Fallback: Race IOS_KIDS and ANDROID_VR in parallel if Wave 1 returned no streams
-        val wave2Winner = coroutineScope {
-            val iosKidsDeferred = async {
-                val iosKidsUa = "com.google.ios.youtubekids/9.40.0 (iPad14,1; U; CPU iOS 18_1_0 like Mac OS X;)"
-                val json = callInnerTubePlayer(
-                    videoId = videoId,
-                    clientName = "IOS_KIDS",
-                    clientVersion = "9.40.0",
-                    userAgent = iosKidsUa,
-                    extraClientFields = mapOf(
-                        "deviceMake" to "Apple",
-                        "deviceModel" to "iPad14,1",
-                        "osName" to "iOS",
-                        "osVersion" to "18.1.0.22B83"
-                    )
-                )
-                parseStreamingData(videoId, json, iosKidsUa)?.takeIf { it.hasDirectStream }
-            }
-
-            val vrDeferred = async {
-                val vrUa = "com.google.android.apps.youtube.vr.oculus/1.60.19 (Linux; U; Android 12L; eureka-user Build/SQ3A.220605.009.A1) gzip"
-                val json = callInnerTubePlayer(
-                    videoId = videoId,
-                    clientName = "ANDROID_VR",
-                    clientVersion = "1.60.19",
-                    userAgent = vrUa,
-                    extraClientFields = mapOf(
-                        "androidSdkVersion" to 32,
-                        "osName" to "Android",
-                        "osVersion" to "12L",
-                        "deviceMake" to "Oculus",
-                        "deviceModel" to "Quest 3"
-                    )
-                )
-                parseStreamingData(videoId, json, vrUa)?.takeIf { it.hasDirectStream }
-            }
-
-            val iosKidsRes = iosKidsDeferred.await()
-            if (iosKidsRes != null) {
-                vrDeferred.cancel()
-                return@coroutineScope iosKidsRes
-            }
-            vrDeferred.await()
         }
 
         if (wave2Winner != null) {
@@ -674,6 +664,38 @@ object YouTubeService {
         }
 
         ResolvedYouTubeStream(videoId = videoId)
+    }
+
+    /**
+     * Checks whether a Wave-2 (ANDROID/IOS) adaptive video URL responds with HTTP 200/206.
+     * If Google CDN returns 403 Forbidden (due to missing poToken on non-Kids clients),
+     * strips the dead adaptive URLs so ExoPlayer plays the working progressive or HLS stream immediately.
+     */
+    private fun sanitizeAdaptiveStreamIfForbidden(stream: ResolvedYouTubeStream): ResolvedYouTubeStream {
+        val adaptiveUrl = stream.videoStreamUrl
+        if (adaptiveUrl.isNullOrBlank()) return stream
+        val probeOk = runCatching {
+            val sep = if (adaptiveUrl.contains('?')) '&' else '?'
+            val conn = (URL("${adaptiveUrl}${sep}range=0-1023").openConnection() as HttpURLConnection).apply {
+                requestMethod = "GET"
+                connectTimeout = 2_000
+                readTimeout = 2_000
+                setRequestProperty("User-Agent", stream.userAgent)
+            }
+            val code = conn.responseCode
+            conn.disconnect()
+            code in 200..299
+        }.getOrDefault(false)
+
+        return if (probeOk) {
+            stream
+        } else {
+            stream.copy(
+                videoStreamUrl = null,
+                audioStreamUrl = null,
+                qualityVariants = stream.qualityVariants.filter { it.isProgressive }
+            )
+        }
     }
 
     /**

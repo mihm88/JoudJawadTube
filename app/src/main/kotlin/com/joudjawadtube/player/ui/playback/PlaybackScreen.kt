@@ -65,11 +65,13 @@ import androidx.media3.exoplayer.hls.HlsMediaSource
 import androidx.media3.exoplayer.source.MergingMediaSource
 import androidx.media3.exoplayer.source.ProgressiveMediaSource
 import androidx.media3.exoplayer.trackselection.DefaultTrackSelector
+import androidx.media3.exoplayer.upstream.DefaultLoadErrorHandlingPolicy
 import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.PlayerView
 import com.joudjawadtube.player.data.settings.AppSettingsState
 import com.joudjawadtube.player.data.settings.RepeatMode
 import com.joudjawadtube.player.data.settings.ResumeMode
+import com.joudjawadtube.player.data.youtube.YouTubeChunkedHttpDataSource_Antigravity
 import com.joudjawadtube.player.data.youtube.YouTubeService
 import com.joudjawadtube.player.ui.catalog.PlaybackSession
 import com.joudjawadtube.player.ui.theme.SmartTubeRed
@@ -176,19 +178,22 @@ fun PlaybackScreen(
             }
 
             if (resolved.hasDirectStream) {
-                val httpFactory = DefaultHttpDataSource.Factory()
-                    .setUserAgent(resolved.userAgent)
-                    .setConnectTimeoutMs(6_000)
-                    .setReadTimeoutMs(8_000)
-                    .setAllowCrossProtocolRedirects(true)
+                val httpFactory = YouTubeChunkedHttpDataSource_Antigravity.Factory(
+                    userAgent = resolved.userAgent,
+                    connectTimeoutMs = 6_000,
+                    readTimeoutMs = 8_000
+                )
                 val dataSourceFactory = DefaultDataSource.Factory(context, httpFactory)
+                val fastFailPolicy = DefaultLoadErrorHandlingPolicy(/* minimumLoadableRetryCount = */ 0)
 
                 when {
                     !resolved.videoStreamUrl.isNullOrBlank() && !resolved.audioStreamUrl.isNullOrBlank() -> {
                         triedFallbackStreamStage = 1
                         val vSource = ProgressiveMediaSource.Factory(dataSourceFactory)
+                            .setLoadErrorHandlingPolicy(fastFailPolicy)
                             .createMediaSource(MediaItem.fromUri(resolved.videoStreamUrl))
                         val aSource = ProgressiveMediaSource.Factory(dataSourceFactory)
+                            .setLoadErrorHandlingPolicy(fastFailPolicy)
                             .createMediaSource(MediaItem.fromUri(resolved.audioStreamUrl))
                         val merged = MergingMediaSource(vSource, aSource)
                         exoPlayer.setMediaSource(merged, resumePos)
@@ -196,12 +201,14 @@ fun PlaybackScreen(
                     !resolved.hlsManifestUrl.isNullOrBlank() -> {
                         triedFallbackStreamStage = 2
                         val hlsSource = HlsMediaSource.Factory(dataSourceFactory)
+                            .setLoadErrorHandlingPolicy(fastFailPolicy)
                             .createMediaSource(MediaItem.fromUri(resolved.hlsManifestUrl))
                         exoPlayer.setMediaSource(hlsSource, resumePos)
                     }
                     !resolved.progressiveUrl.isNullOrBlank() -> {
                         triedFallbackStreamStage = 3
                         val pSource = ProgressiveMediaSource.Factory(dataSourceFactory)
+                            .setLoadErrorHandlingPolicy(fastFailPolicy)
                             .createMediaSource(MediaItem.fromUri(resolved.progressiveUrl))
                         exoPlayer.setMediaSource(pSource, resumePos)
                     }
@@ -251,12 +258,13 @@ fun PlaybackScreen(
         {
             val resolved = resolvedYouTubeStream
             if (video.isYoutube && resolved != null) {
-                val httpFactory = DefaultHttpDataSource.Factory()
-                    .setUserAgent(resolved.userAgent)
-                    .setConnectTimeoutMs(6_000)
-                    .setReadTimeoutMs(8_000)
-                    .setAllowCrossProtocolRedirects(true)
+                val httpFactory = YouTubeChunkedHttpDataSource_Antigravity.Factory(
+                    userAgent = resolved.userAgent,
+                    connectTimeoutMs = 6_000,
+                    readTimeoutMs = 8_000
+                )
                 val dataSourceFactory = DefaultDataSource.Factory(context, httpFactory)
+                val fastFailPolicy = DefaultLoadErrorHandlingPolicy(/* minimumLoadableRetryCount = */ 0)
                 val currentPos = exoPlayer.currentPosition.coerceAtLeast(0L)
 
                 when (triedFallbackStreamStage) {
@@ -264,6 +272,7 @@ fun PlaybackScreen(
                         if (!resolved.hlsManifestUrl.isNullOrBlank()) {
                             triedFallbackStreamStage = 2
                             val hlsSource = HlsMediaSource.Factory(dataSourceFactory)
+                                .setLoadErrorHandlingPolicy(fastFailPolicy)
                                 .createMediaSource(MediaItem.fromUri(resolved.hlsManifestUrl))
                             exoPlayer.setMediaSource(hlsSource, currentPos)
                             exoPlayer.prepare()
@@ -271,6 +280,7 @@ fun PlaybackScreen(
                         } else if (!resolved.progressiveUrl.isNullOrBlank()) {
                             triedFallbackStreamStage = 3
                             val pSource = ProgressiveMediaSource.Factory(dataSourceFactory)
+                                .setLoadErrorHandlingPolicy(fastFailPolicy)
                                 .createMediaSource(MediaItem.fromUri(resolved.progressiveUrl))
                             exoPlayer.setMediaSource(pSource, currentPos)
                             exoPlayer.prepare()
@@ -284,6 +294,7 @@ fun PlaybackScreen(
                         if (!resolved.progressiveUrl.isNullOrBlank()) {
                             triedFallbackStreamStage = 3
                             val pSource = ProgressiveMediaSource.Factory(dataSourceFactory)
+                                .setLoadErrorHandlingPolicy(fastFailPolicy)
                                 .createMediaSource(MediaItem.fromUri(resolved.progressiveUrl))
                             exoPlayer.setMediaSource(pSource, currentPos)
                             exoPlayer.prepare()
@@ -433,13 +444,14 @@ fun PlaybackScreen(
             if (video.isYoutube && resolved != null) {
                 if (newQuality == "Auto" && !resolved.hlsManifestUrl.isNullOrBlank()) {
                     val currentPos = exoPlayer.currentPosition.coerceAtLeast(0L)
-                    val httpFactory = DefaultHttpDataSource.Factory()
-                        .setUserAgent(resolved.userAgent)
-                        .setConnectTimeoutMs(10_000)
-                        .setReadTimeoutMs(12_000)
-                        .setAllowCrossProtocolRedirects(true)
+                    val httpFactory = YouTubeChunkedHttpDataSource_Antigravity.Factory(
+                        userAgent = resolved.userAgent,
+                        connectTimeoutMs = 6_000,
+                        readTimeoutMs = 8_000
+                    )
                     val dataSourceFactory = DefaultDataSource.Factory(context, httpFactory)
                     val hlsSource = HlsMediaSource.Factory(dataSourceFactory)
+                        .setLoadErrorHandlingPolicy(DefaultLoadErrorHandlingPolicy(0))
                         .createMediaSource(MediaItem.fromUri(resolved.hlsManifestUrl))
                     exoPlayer.setMediaSource(hlsSource, currentPos)
                     exoPlayer.prepare()
@@ -449,20 +461,24 @@ fun PlaybackScreen(
                         ?: resolved.qualityVariants.firstOrNull { it.height <= maxH }
                     if (match != null && match.videoUrl.isNotBlank()) {
                         val currentPos = exoPlayer.currentPosition.coerceAtLeast(0L)
-                        val httpFactory = DefaultHttpDataSource.Factory()
-                            .setUserAgent(resolved.userAgent)
-                            .setConnectTimeoutMs(10_000)
-                            .setReadTimeoutMs(12_000)
-                            .setAllowCrossProtocolRedirects(true)
+                        val httpFactory = YouTubeChunkedHttpDataSource_Antigravity.Factory(
+                            userAgent = resolved.userAgent,
+                            connectTimeoutMs = 6_000,
+                            readTimeoutMs = 8_000
+                        )
                         val dataSourceFactory = DefaultDataSource.Factory(context, httpFactory)
+                        val fastFailPolicy = DefaultLoadErrorHandlingPolicy(0)
 
                         val newSource = if (match.isProgressive || resolved.audioStreamUrl.isNullOrBlank()) {
                             ProgressiveMediaSource.Factory(dataSourceFactory)
+                                .setLoadErrorHandlingPolicy(fastFailPolicy)
                                 .createMediaSource(MediaItem.fromUri(match.videoUrl))
                         } else {
                             val vSource = ProgressiveMediaSource.Factory(dataSourceFactory)
+                                .setLoadErrorHandlingPolicy(fastFailPolicy)
                                 .createMediaSource(MediaItem.fromUri(match.videoUrl))
                             val aSource = ProgressiveMediaSource.Factory(dataSourceFactory)
+                                .setLoadErrorHandlingPolicy(fastFailPolicy)
                                 .createMediaSource(MediaItem.fromUri(resolved.audioStreamUrl))
                             MergingMediaSource(vSource, aSource)
                         }
