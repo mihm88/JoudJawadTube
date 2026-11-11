@@ -51,8 +51,86 @@ data class YouTubeQualityVariant(
     val height: Int,
     val width: Int,
     val videoUrl: String,
-    val isProgressive: Boolean = false
+    val isProgressive: Boolean = false,
+    val isAvc1: Boolean = false
 )
+
+object QualitySelectorHelper_Antigravity {
+    fun effectiveVerticalResolution(height: Int, width: Int): Int {
+        if (height <= 0 && width <= 0) return 0
+        if (width <= 0) return height
+        if (height <= 0) return (width * 9) / 16
+        return if (width >= height) {
+            maxOf(height, (width * 9) / 16)
+        } else {
+            maxOf(width, (height * 9) / 16)
+        }
+    }
+
+    fun formatQualityLabel(height: Int, width: Int = 0): String {
+        val eff = effectiveVerticalResolution(height, width)
+        return when {
+            eff >= 2160 -> "4K (2160p)"
+            eff >= 1440 -> "2K (1440p)"
+            eff >= 1080 -> "1080p"
+            eff >= 720 -> "720p"
+            eff >= 480 -> "480p"
+            eff >= 360 -> "360p"
+            eff >= 240 -> "240p"
+            eff > 0 -> "${eff}p"
+            else -> "Auto"
+        }
+    }
+
+    fun qualityRank(label: String): Int {
+        return when {
+            label.contains("2160") || label.contains("4K", ignoreCase = true) -> 2160
+            label.contains("1440") || label.contains("2K", ignoreCase = true) -> 1440
+            label.contains("1080") -> 1080
+            label.contains("720") -> 720
+            label.contains("480") -> 480
+            label.contains("360") -> 360
+            label.contains("240") -> 240
+            else -> label.filter { it.isDigit() }.toIntOrNull() ?: 0
+        }
+    }
+
+    fun buildAvailableQualities(
+        variants: List<YouTubeQualityVariant>,
+        observedTrackResolutions: List<Pair<Int, Int>> = emptyList(),
+        fallbackHeight: Int = 0,
+        fallbackWidth: Int = 0
+    ): List<String> {
+        val labelsWithRank = linkedMapOf<String, Int>()
+        variants.forEach { v ->
+            val label = v.label.ifBlank { formatQualityLabel(v.height, v.width) }
+            val rank = qualityRank(label).coerceAtLeast(effectiveVerticalResolution(v.height, v.width))
+            if (rank >= 144 && label != "Auto") {
+                labelsWithRank[label] = maxOf(labelsWithRank[label] ?: 0, rank)
+            }
+        }
+        observedTrackResolutions.forEach { (w, h) ->
+            if (h > 0 || w > 0) {
+                val label = formatQualityLabel(h, w)
+                val rank = qualityRank(label).coerceAtLeast(effectiveVerticalResolution(h, w))
+                if (rank >= 144 && label != "Auto") {
+                    labelsWithRank[label] = maxOf(labelsWithRank[label] ?: 0, rank)
+                }
+            }
+        }
+        if (labelsWithRank.isEmpty() && (fallbackHeight > 0 || fallbackWidth > 0)) {
+            val label = formatQualityLabel(fallbackHeight, fallbackWidth)
+            val rank = qualityRank(label)
+            if (rank >= 144 && label != "Auto") {
+                labelsWithRank[label] = rank
+            }
+        }
+        val sortedTiers = labelsWithRank.entries
+            .sortedByDescending { it.value }
+            .map { it.key }
+        return listOf("Auto") + sortedTiers
+    }
+}
 
 data class ResolvedYouTubeStream(
     val videoId: String,
@@ -344,6 +422,51 @@ object YouTubeService {
                         node = nextRoot,
                         defaultAuthor = playlistAuthor ?: "YouTube Playlist",
                         sink = videos
+                    )
+                }
+            }
+        }
+
+        // Fallback to YouTube public XML/Atom RSS feed if InnerTube browse/next returned empty (e.g., hidden UU tab)
+        if (videos.isEmpty()) {
+            val rssUrl = if (playlistId.startsWith("UU") && playlistId.length >= 24) {
+                val channelId = "UC" + playlistId.substring(2)
+                "https://www.youtube.com/feeds/videos.xml?channel_id=$channelId"
+            } else {
+                "https://www.youtube.com/feeds/videos.xml?playlist_id=$playlistId"
+            }
+            val xml = httpGet(rssUrl)
+            if (!xml.isNullOrBlank()) {
+                val feedTitle = Regex("""<feed[^>]*>[\s\S]*?<title>([^<]+)</title>""").find(xml)?.groupValues?.getOrNull(1)?.trim()
+                if (playlistTitle == null && !feedTitle.isNullOrBlank()) playlistTitle = feedTitle
+                if (playlistAuthor == null && !feedTitle.isNullOrBlank()) playlistAuthor = feedTitle
+                val entryRegex = Regex("""<entry>([\s\S]*?)</entry>""")
+                val vidRegex = Regex("""<yt:videoId>([a-zA-Z0-9_-]{11})</yt:videoId>""")
+                val titleRegex = Regex("""<title>([\s\S]*?)</title>""")
+                val authorRegex = Regex("""<author>\s*<name>([\s\S]*?)</name>""")
+                entryRegex.findAll(xml).forEach { match ->
+                    val block = match.groupValues[1]
+                    val vid = vidRegex.find(block)?.groupValues?.getOrNull(1) ?: return@forEach
+                    val rawTitle = titleRegex.find(block)?.groupValues?.getOrNull(1)?.trim().orEmpty()
+                    val cleanTitle = rawTitle
+                        .replace("&amp;", "&")
+                        .replace("&lt;", "<")
+                        .replace("&gt;", ">")
+                        .replace("&quot;", "\"")
+                        .replace("&#39;", "'")
+                        .ifBlank { "Video $vid" }
+                    val author = authorRegex.find(block)?.groupValues?.getOrNull(1)?.trim()
+                        ?.replace("&amp;", "&")
+                        ?: playlistAuthor
+                        ?: "YouTube Channel"
+                    videos.add(
+                        YouTubeVideoMetadata(
+                            videoId = vid,
+                            title = cleanTitle,
+                            author = author,
+                            durationMs = 0L,
+                            thumbnailUrl = YouTubeIdExtractor.buildYouTubeThumbnailUrl(vid)
+                        )
                     )
                 }
             }
@@ -824,15 +947,18 @@ object YouTubeService {
                 val url = fmt.optString("url").takeIf { it.isNotBlank() } ?: continue
                 val h = fmt.optInt("height", 360)
                 val w = fmt.optInt("width", (h * 16) / 9)
-                val label = when {
-                    h >= 2160 || w >= 3840 -> "4K (2160p)"
-                    h >= 1440 || w >= 2560 -> "2K (1440p)"
-                    h >= 1080 -> "1080p"
-                    h >= 720 -> "720p"
-                    h >= 480 -> "480p"
-                    else -> "${h}p"
-                }
-                variants.add(YouTubeQualityVariant(label, h, w, url, isProgressive = true))
+                val label = QualitySelectorHelper_Antigravity.formatQualityLabel(h, w)
+                val mime = fmt.optString("mimeType")
+                variants.add(
+                    YouTubeQualityVariant(
+                        label = label,
+                        height = h,
+                        width = w,
+                        videoUrl = url,
+                        isProgressive = true,
+                        isAvc1 = mime.contains("avc1")
+                    )
+                )
             }
         }
         if (adaptive != null) {
@@ -844,22 +970,30 @@ object YouTubeService {
                     if (mime.contains("av01")) continue
                     val h = fmt.optInt("height", 0)
                     val w = fmt.optInt("width", (h * 16) / 9)
-                    if (h >= 240) {
-                        val label = when {
-                            h >= 2160 || w >= 3840 -> "4K (2160p)"
-                            h >= 1440 || w >= 2560 -> "2K (1440p)"
-                            h >= 1080 -> "1080p"
-                            h >= 720 -> "720p"
-                            h >= 480 -> "480p"
-                            else -> "${h}p"
-                        }
-                        variants.add(YouTubeQualityVariant(label, h, w, url, isProgressive = false))
+                    if (QualitySelectorHelper_Antigravity.effectiveVerticalResolution(h, w) >= 240) {
+                        val label = QualitySelectorHelper_Antigravity.formatQualityLabel(h, w)
+                        variants.add(
+                            YouTubeQualityVariant(
+                                label = label,
+                                height = h,
+                                width = w,
+                                videoUrl = url,
+                                isProgressive = false,
+                                isAvc1 = mime.contains("avc1")
+                            )
+                        )
                     }
                 }
             }
         }
         val distinctVariants = variants
-            .sortedByDescending { it.height }
+            .sortedWith(
+                compareByDescending<YouTubeQualityVariant> {
+                    QualitySelectorHelper_Antigravity.effectiveVerticalResolution(it.height, it.width)
+                }
+                    .thenBy { it.isProgressive }
+                    .thenByDescending { it.isAvc1 }
+            )
             .distinctBy { it.label }
 
         val subtitles = extractSubtitles(playerJson)

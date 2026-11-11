@@ -54,6 +54,7 @@ import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
+import androidx.media3.common.Tracks
 import androidx.media3.common.VideoSize
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.DefaultDataSource
@@ -71,6 +72,7 @@ import androidx.media3.ui.PlayerView
 import com.joudjawadtube.player.data.settings.AppSettingsState
 import com.joudjawadtube.player.data.settings.RepeatMode
 import com.joudjawadtube.player.data.settings.ResumeMode
+import com.joudjawadtube.player.data.youtube.QualitySelectorHelper_Antigravity
 import com.joudjawadtube.player.data.youtube.YouTubeChunkedHttpDataSource_Antigravity
 import com.joudjawadtube.player.data.youtube.YouTubeService
 import com.joudjawadtube.player.ui.catalog.PlaybackSession
@@ -105,10 +107,11 @@ fun PlaybackScreen(
     var playbackSpeed by remember { mutableFloatStateOf(settings.defaultPlaybackSpeed) }
     var resizeMode by remember { mutableIntStateOf(settings.defaultResizeMode) }
     var currentRepeatMode by remember { mutableStateOf(settings.repeatMode) }
-    var currentQuality by remember { mutableStateOf(settings.preferredQuality) }
+    var currentQuality by remember(video.id) { mutableStateOf(settings.preferredQuality) }
 
     var isResolvingYouTube by remember(video.id) { mutableStateOf(video.isYoutube) }
     var resolvedYouTubeStream by remember(video.id) { mutableStateOf<com.joudjawadtube.player.data.youtube.ResolvedYouTubeStream?>(null) }
+    var observedTrackResolutions by remember(video.id) { mutableStateOf<List<Pair<Int, Int>>>(emptyList()) }
     var triedFallbackStreamStage by remember(video.id) { mutableIntStateOf(0) }
     var useWebViewYouTubeFallback by remember(video.id) { mutableStateOf(false) }
     var webViewRef by remember { mutableStateOf<WebView?>(null) }
@@ -134,8 +137,8 @@ fun PlaybackScreen(
             .setBufferDurationsMs(
                 /* minBufferMs = */ 15_000,
                 /* maxBufferMs = */ 50_000,
-                /* bufferForPlaybackMs = */ 600,
-                /* bufferForPlaybackAfterRebufferMs = */ 1_200
+                /* bufferForPlaybackMs = */ 300,
+                /* bufferForPlaybackAfterRebufferMs = */ 800
             )
             .setPrioritizeTimeOverSizeThresholds(true)
             .build()
@@ -157,6 +160,7 @@ fun PlaybackScreen(
     // Load or switch MediaItem when session.currentVideo changes
     LaunchedEffect(video.id, video.entity.uri) {
         useWebViewYouTubeFallback = false
+        observedTrackResolutions = emptyList()
         val resumePos = if (settings.resumeMode == ResumeMode.ALWAYS_RESUME &&
             video.positionMs > 3_000L &&
             video.progressFraction < 0.95f
@@ -186,7 +190,39 @@ fun PlaybackScreen(
                 val dataSourceFactory = DefaultDataSource.Factory(context, httpFactory)
                 val fastFailPolicy = DefaultLoadErrorHandlingPolicy(/* minimumLoadableRetryCount = */ 0)
 
+                val preferredVariant = if (!currentQuality.equals("Auto", ignoreCase = true) && resolved.qualityVariants.isNotEmpty()) {
+                    val maxRank = QualitySelectorHelper_Antigravity.qualityRank(currentQuality)
+                    val matched = resolved.qualityVariants.firstOrNull {
+                        it.label.equals(currentQuality, ignoreCase = true)
+                    } ?: resolved.qualityVariants.firstOrNull {
+                        QualitySelectorHelper_Antigravity.effectiveVerticalResolution(it.height, it.width) <= maxRank
+                    } ?: resolved.qualityVariants.firstOrNull()
+                    if (matched != null && resolved.qualityVariants.none { it.label.equals(currentQuality, ignoreCase = true) }) {
+                        currentQuality = matched.label
+                    }
+                    matched
+                } else {
+                    null
+                }
+
                 when {
+                    preferredVariant != null && (!preferredVariant.isProgressive && !resolved.audioStreamUrl.isNullOrBlank()) -> {
+                        triedFallbackStreamStage = 1
+                        val vSource = ProgressiveMediaSource.Factory(dataSourceFactory)
+                            .setLoadErrorHandlingPolicy(fastFailPolicy)
+                            .createMediaSource(MediaItem.fromUri(preferredVariant.videoUrl))
+                        val aSource = ProgressiveMediaSource.Factory(dataSourceFactory)
+                            .setLoadErrorHandlingPolicy(fastFailPolicy)
+                            .createMediaSource(MediaItem.fromUri(resolved.audioStreamUrl))
+                        exoPlayer.setMediaSource(MergingMediaSource(vSource, aSource), resumePos)
+                    }
+                    preferredVariant != null && preferredVariant.isProgressive -> {
+                        triedFallbackStreamStage = 3
+                        val pSource = ProgressiveMediaSource.Factory(dataSourceFactory)
+                            .setLoadErrorHandlingPolicy(fastFailPolicy)
+                            .createMediaSource(MediaItem.fromUri(preferredVariant.videoUrl))
+                        exoPlayer.setMediaSource(pSource, resumePos)
+                    }
                     !resolved.videoStreamUrl.isNullOrBlank() && !resolved.audioStreamUrl.isNullOrBlank() -> {
                         triedFallbackStreamStage = 1
                         val vSource = ProgressiveMediaSource.Factory(dataSourceFactory)
@@ -322,13 +358,28 @@ fun PlaybackScreen(
 
             override fun onVideoSizeChanged(videoSize: VideoSize) {
                 if (videoSize.width > 0 && videoSize.height > 0) {
-                    videoStreamBadge = when {
-                        videoSize.height >= 2160 || videoSize.width >= 3840 -> "4K"
-                        videoSize.height >= 1440 || videoSize.width >= 2560 -> "2K"
-                        videoSize.height >= 1080 || videoSize.width >= 1920 -> "1080p"
-                        videoSize.height >= 720 || videoSize.width >= 1280 -> "720p"
-                        else -> "${videoSize.height}p"
+                    videoStreamBadge = QualitySelectorHelper_Antigravity.formatQualityLabel(
+                        height = videoSize.height,
+                        width = videoSize.width
+                    ).let { if (it.startsWith("4K")) "4K" else if (it.startsWith("2K")) "2K" else it }
+                }
+            }
+
+            override fun onTracksChanged(tracks: Tracks) {
+                val resolutions = mutableListOf<Pair<Int, Int>>()
+                tracks.groups.forEach { group ->
+                    if (group.type == C.TRACK_TYPE_VIDEO) {
+                        for (i in 0 until group.length) {
+                            if (!group.isTrackSupported(i)) continue
+                            val fmt = group.getTrackFormat(i)
+                            if (fmt.width > 0 || fmt.height > 0) {
+                                resolutions.add(fmt.width to fmt.height)
+                            }
+                        }
                     }
+                }
+                if (resolutions.isNotEmpty()) {
+                    observedTrackResolutions = resolutions.distinct()
                 }
             }
 
@@ -433,6 +484,7 @@ fun PlaybackScreen(
                 newQuality.contains("720", ignoreCase = true) -> 1280 to 720
                 newQuality.contains("480", ignoreCase = true) -> 854 to 480
                 newQuality.contains("360", ignoreCase = true) -> 640 to 360
+                newQuality.contains("240", ignoreCase = true) -> 426 to 240
                 else -> Int.MAX_VALUE to Int.MAX_VALUE
             }
             exoPlayer.trackSelectionParameters = exoPlayer.trackSelectionParameters
@@ -442,7 +494,7 @@ fun PlaybackScreen(
 
             val resolved = resolvedYouTubeStream
             if (video.isYoutube && resolved != null) {
-                if (newQuality == "Auto" && !resolved.hlsManifestUrl.isNullOrBlank()) {
+                if (newQuality == "Auto") {
                     val currentPos = exoPlayer.currentPosition.coerceAtLeast(0L)
                     val httpFactory = YouTubeChunkedHttpDataSource_Antigravity.Factory(
                         userAgent = resolved.userAgent,
@@ -450,15 +502,39 @@ fun PlaybackScreen(
                         readTimeoutMs = 8_000
                     )
                     val dataSourceFactory = DefaultDataSource.Factory(context, httpFactory)
-                    val hlsSource = HlsMediaSource.Factory(dataSourceFactory)
-                        .setLoadErrorHandlingPolicy(DefaultLoadErrorHandlingPolicy(0))
-                        .createMediaSource(MediaItem.fromUri(resolved.hlsManifestUrl))
-                    exoPlayer.setMediaSource(hlsSource, currentPos)
+                    val fastFailPolicy = DefaultLoadErrorHandlingPolicy(0)
+                    when {
+                        !resolved.videoStreamUrl.isNullOrBlank() && !resolved.audioStreamUrl.isNullOrBlank() -> {
+                            val vSource = ProgressiveMediaSource.Factory(dataSourceFactory)
+                                .setLoadErrorHandlingPolicy(fastFailPolicy)
+                                .createMediaSource(MediaItem.fromUri(resolved.videoStreamUrl))
+                            val aSource = ProgressiveMediaSource.Factory(dataSourceFactory)
+                                .setLoadErrorHandlingPolicy(fastFailPolicy)
+                                .createMediaSource(MediaItem.fromUri(resolved.audioStreamUrl))
+                            exoPlayer.setMediaSource(MergingMediaSource(vSource, aSource), currentPos)
+                        }
+                        !resolved.hlsManifestUrl.isNullOrBlank() -> {
+                            val hlsSource = HlsMediaSource.Factory(dataSourceFactory)
+                                .setLoadErrorHandlingPolicy(fastFailPolicy)
+                                .createMediaSource(MediaItem.fromUri(resolved.hlsManifestUrl))
+                            exoPlayer.setMediaSource(hlsSource, currentPos)
+                        }
+                        !resolved.progressiveUrl.isNullOrBlank() -> {
+                            val pSource = ProgressiveMediaSource.Factory(dataSourceFactory)
+                                .setLoadErrorHandlingPolicy(fastFailPolicy)
+                                .createMediaSource(MediaItem.fromUri(resolved.progressiveUrl))
+                            exoPlayer.setMediaSource(pSource, currentPos)
+                        }
+                    }
                     exoPlayer.prepare()
                     exoPlayer.playWhenReady = true
-                } else if (resolved.qualityVariants.isNotEmpty() && newQuality != "Auto") {
-                    val match = resolved.qualityVariants.firstOrNull { it.label.contains(newQuality.take(4), ignoreCase = true) }
-                        ?: resolved.qualityVariants.firstOrNull { it.height <= maxH }
+                } else if (resolved.qualityVariants.isNotEmpty()) {
+                    val match = resolved.qualityVariants.firstOrNull {
+                        it.label.equals(newQuality, ignoreCase = true) ||
+                            QualitySelectorHelper_Antigravity.qualityRank(it.label) == maxH
+                    } ?: resolved.qualityVariants.firstOrNull {
+                        QualitySelectorHelper_Antigravity.effectiveVerticalResolution(it.height, it.width) <= maxH
+                    }
                     if (match != null && match.videoUrl.isNotBlank()) {
                         val currentPos = exoPlayer.currentPosition.coerceAtLeast(0L)
                         val httpFactory = YouTubeChunkedHttpDataSource_Antigravity.Factory(
@@ -711,6 +787,25 @@ fun PlaybackScreen(
             }
         }
 
+        val availableQualities = remember(
+            resolvedYouTubeStream,
+            observedTrackResolutions,
+            video.entity.height,
+            video.entity.width
+        ) {
+            QualitySelectorHelper_Antigravity.buildAvailableQualities(
+                variants = resolvedYouTubeStream?.qualityVariants.orEmpty(),
+                observedTrackResolutions = observedTrackResolutions,
+                fallbackHeight = video.entity.height,
+                fallbackWidth = video.entity.width
+            )
+        }
+        val effectiveCurrentQuality = if (currentQuality in availableQualities) {
+            currentQuality
+        } else {
+            "Auto"
+        }
+
         SmartTubePlayerHud(
             visible = hudVisible,
             video = video,
@@ -749,7 +844,7 @@ fun PlaybackScreen(
                 }
             },
             onToggleFavorite = onToggleFavorite,
-            currentQuality = currentQuality,
+            currentQuality = effectiveCurrentQuality,
             repeatMode = currentRepeatMode,
             onOpenQualityDialog = { activeDialogTab = PlayerDialogTab.QUALITY },
             onCycleRepeatMode = {
@@ -775,7 +870,8 @@ fun PlaybackScreen(
                 player = exoPlayer,
                 initialTab = tab,
                 currentSpeed = playbackSpeed,
-                currentQuality = currentQuality,
+                currentQuality = effectiveCurrentQuality,
+                availableQualities = availableQualities,
                 onSelectSpeed = { newSpeed ->
                     playbackSpeed = newSpeed
                     exoPlayer.setPlaybackSpeed(newSpeed)

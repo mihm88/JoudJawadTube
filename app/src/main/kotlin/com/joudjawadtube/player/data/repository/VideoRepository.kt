@@ -12,15 +12,21 @@ import com.joudjawadtube.player.data.local.VideoItem
 import com.joudjawadtube.player.data.scanner.LocalVideoScanner
 import com.joudjawadtube.player.data.scanner.MountedVolumeInfo
 import com.joudjawadtube.player.data.scanner.StorageVolumeHelper
+import com.joudjawadtube.player.data.settings.AppLanguage
 import com.joudjawadtube.player.data.youtube.ParsedYouTubeInput
 import com.joudjawadtube.player.data.youtube.YouTubeService
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flowOn
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
 import java.util.Random
 import java.util.UUID
 
@@ -240,48 +246,212 @@ class VideoRepository(
             val scanned = LocalVideoScanner.scanAllSources(appContext, safFolders, hideBootPartitions)
             videoDao.replaceCatalog(scanned)
 
-            // Auto-sync saved YouTube channels to pull new uploads
-            syncSavedChannels()
+            // Auto-sync saved YouTube channels if unsynced or stale
+            syncSavedChannels(onlyUnsyncedOrStale = true)
         } finally {
             _isScanning.value = false
         }
     }
 
-    suspend fun syncSavedChannels() {
-        val channels = videoDao.getSavedChannels()
-        for (channel in channels) {
-            runCatching {
-                val uploadsPl = YouTubeService.fetchPlaylist(channel.uploadsPlaylistId, maxVideos = channel.videoCap)
-                if (uploadsPl != null && uploadsPl.videos.isNotEmpty()) {
-                    val baseTime = System.currentTimeMillis()
-                    val entities = uploadsPl.videos.mapIndexed { index, vid ->
-                        VideoEntity(
-                            id = "yt_${channel.uploadsPlaylistId}_${vid.videoId}",
-                            videoKey = "yt_${vid.videoId}",
-                            uri = "https://www.youtube.com/watch?v=${vid.videoId}",
-                            filePath = "",
-                            title = vid.title,
-                            fileName = "${vid.title} [${vid.videoId}].mp4",
-                            folderName = channel.title,
-                            folderPath = "youtube_channel_${channel.channelId}",
-                            volumeLabel = "YouTube Channel",
-                            isUsb = false,
-                            durationMs = vid.durationMs,
-                            sizeBytes = 0L,
-                            width = vid.width,
-                            height = vid.height,
-                            mimeType = "video/mp4",
-                            dateModified = baseTime - (index * 1000L),
-                            sidecarSubtitles = "",
-                            isYoutube = true,
-                            youtubeVideoId = vid.videoId,
-                            playlistId = channel.uploadsPlaylistId,
-                            playlistTitle = "${channel.title} - Uploads",
-                            thumbnailUrl = vid.thumbnailUrl
+    suspend fun seedAndSyncBuiltInChannels(
+        removedChannelIds: Set<String>,
+        appLanguage: AppLanguage = AppLanguage.FOLLOW_SYSTEM
+    ) {
+        val builtInChannels = KidsCatalogRepository_Antigravity.loadKidsChannels(appContext, appLanguage)
+        if (builtInChannels.isEmpty()) return
+
+        val existingChannels = videoDao.getSavedChannels().associateBy { it.channelId }
+        val existingPlaylists = videoDao.getSavedPlaylists().associateBy { it.playlistId }
+        val baseTime = System.currentTimeMillis()
+        val playlistsToInsert = mutableListOf<SavedPlaylistEntity>()
+
+        builtInChannels.forEachIndexed { idx, item ->
+            if (item.channelId in removedChannelIds) return@forEachIndexed
+            val existing = existingChannels[item.channelId]
+            val targetCategory = existing?.category?.takeIf { it.isNotBlank() && it != "General" } ?: item.category
+
+            if (existing == null) {
+                videoDao.insertChannel(
+                    SavedChannelEntity(
+                        channelId = item.channelId,
+                        handle = item.handle,
+                        title = item.channelName,
+                        avatarUrl = "",
+                        uploadsPlaylistId = item.uploadsPlaylistId,
+                        category = targetCategory,
+                        importedAt = baseTime + idx,
+                        lastSyncedAt = 0L,
+                        videoCap = 30
+                    )
+                )
+            } else if (existing.title != item.channelName || existing.handle != item.handle) {
+                videoDao.insertChannel(
+                    existing.copy(
+                        title = item.channelName,
+                        handle = item.handle.ifBlank { existing.handle }
+                    )
+                )
+            }
+
+            item.playlists.forEachIndexed { pIdx, pl ->
+                val existingPl = existingPlaylists[pl.id]
+                if (existingPl == null) {
+                    playlistsToInsert.add(
+                        SavedPlaylistEntity(
+                            playlistId = pl.id,
+                            title = pl.title,
+                            author = item.channelName,
+                            sourceUrl = if (pl.id == item.uploadsPlaylistId) {
+                                item.preferredUrl
+                            } else {
+                                "https://www.youtube.com/playlist?list=${pl.id}"
+                            },
+                            thumbnailUrl = "",
+                            videoCount = 0,
+                            category = targetCategory,
+                            channelId = item.channelId,
+                            isAutoCreatedFromChannel = true,
+                            addedAt = baseTime + (idx * 10L) + pIdx
                         )
+                    )
+                } else if (existingPl.isAutoCreatedFromChannel && existingPl.author != item.channelName) {
+                    playlistsToInsert.add(
+                        existingPl.copy(
+                            title = pl.title,
+                            author = item.channelName
+                        )
+                    )
+                }
+            }
+        }
+
+        if (playlistsToInsert.isNotEmpty()) {
+            videoDao.insertPlaylists(playlistsToInsert)
+        }
+
+        syncSavedChannels(onlyUnsyncedOrStale = true)
+    }
+
+    suspend fun addBuiltInChannelToLibrary(
+        channelItem: KidsChannelItem
+    ) {
+        val baseTime = System.currentTimeMillis()
+        videoDao.insertChannel(
+            SavedChannelEntity(
+                channelId = channelItem.channelId,
+                handle = channelItem.handle,
+                title = channelItem.channelName,
+                avatarUrl = "",
+                uploadsPlaylistId = channelItem.uploadsPlaylistId,
+                category = channelItem.category.ifBlank { "General" },
+                importedAt = baseTime,
+                lastSyncedAt = 0L,
+                videoCap = 30
+            )
+        )
+        val playlists = channelItem.playlists.mapIndexed { pIdx, pl ->
+            SavedPlaylistEntity(
+                playlistId = pl.id,
+                title = pl.title,
+                author = channelItem.channelName,
+                sourceUrl = if (pl.id == channelItem.uploadsPlaylistId) {
+                    channelItem.preferredUrl
+                } else {
+                    "https://www.youtube.com/playlist?list=${pl.id}"
+                },
+                thumbnailUrl = "",
+                videoCount = 0,
+                category = channelItem.category.ifBlank { "General" },
+                channelId = channelItem.channelId,
+                isAutoCreatedFromChannel = true,
+                addedAt = baseTime + pIdx
+            )
+        }
+        if (playlists.isNotEmpty()) {
+            videoDao.insertPlaylists(playlists)
+        }
+        syncChannel(
+            SavedChannelEntity(
+                channelId = channelItem.channelId,
+                handle = channelItem.handle,
+                title = channelItem.channelName,
+                avatarUrl = "",
+                uploadsPlaylistId = channelItem.uploadsPlaylistId,
+                category = channelItem.category.ifBlank { "General" },
+                importedAt = baseTime,
+                lastSyncedAt = 0L,
+                videoCap = 30
+            )
+        )
+    }
+
+    suspend fun syncSavedChannels(onlyUnsyncedOrStale: Boolean = false) = coroutineScope {
+        val channels = videoDao.getSavedChannels()
+        if (channels.isEmpty()) return@coroutineScope
+        val now = System.currentTimeMillis()
+        val staleThresholdMs = 30 * 60 * 1000L
+        val semaphore = Semaphore(4)
+
+        channels.map { channel ->
+            async(Dispatchers.IO) {
+                val hasVideos = videoDao.getVideosByPlaylistId(channel.uploadsPlaylistId).isNotEmpty()
+                val isStale = (now - channel.lastSyncedAt) > staleThresholdMs || channel.lastSyncedAt == 0L
+                if (!onlyUnsyncedOrStale || !hasVideos || isStale) {
+                    semaphore.withPermit {
+                        syncChannel(channel)
                     }
-                    videoDao.insertVideos(entities)
-                    videoDao.insertChannel(channel.copy(lastSyncedAt = System.currentTimeMillis()))
+                }
+            }
+        }.awaitAll()
+    }
+
+    private suspend fun syncChannel(channel: SavedChannelEntity) {
+        runCatching {
+            val uploadsPl = YouTubeService.fetchPlaylist(channel.uploadsPlaylistId, maxVideos = channel.videoCap)
+            if (uploadsPl != null && uploadsPl.videos.isNotEmpty()) {
+                val baseTime = System.currentTimeMillis()
+                val entities = uploadsPl.videos.mapIndexed { index, vid ->
+                    VideoEntity(
+                        id = "yt_${channel.uploadsPlaylistId}_${vid.videoId}",
+                        videoKey = "yt_${vid.videoId}",
+                        uri = "https://www.youtube.com/watch?v=${vid.videoId}",
+                        filePath = "",
+                        title = vid.title,
+                        fileName = "${vid.title} [${vid.videoId}].mp4",
+                        folderName = channel.title,
+                        folderPath = "youtube_channel_${channel.channelId}",
+                        volumeLabel = "YouTube Channel",
+                        isUsb = false,
+                        durationMs = vid.durationMs,
+                        sizeBytes = 0L,
+                        width = vid.width,
+                        height = vid.height,
+                        mimeType = "video/mp4",
+                        dateModified = baseTime - (index * 1000L),
+                        sidecarSubtitles = "",
+                        isYoutube = true,
+                        youtubeVideoId = vid.videoId,
+                        playlistId = channel.uploadsPlaylistId,
+                        playlistTitle = "${channel.title} - Uploads",
+                        thumbnailUrl = vid.thumbnailUrl
+                    )
+                }
+                videoDao.insertVideos(entities)
+                val firstThumb = uploadsPl.videos.firstOrNull()?.thumbnailUrl.orEmpty()
+                videoDao.insertChannel(
+                    channel.copy(
+                        avatarUrl = channel.avatarUrl.ifBlank { firstThumb },
+                        lastSyncedAt = System.currentTimeMillis()
+                    )
+                )
+                val existingPl = videoDao.getSavedPlaylists().firstOrNull { it.playlistId == channel.uploadsPlaylistId }
+                if (existingPl != null && (existingPl.videoCount != entities.size || existingPl.thumbnailUrl.isBlank())) {
+                    videoDao.insertPlaylist(
+                        existingPl.copy(
+                            videoCount = entities.size,
+                            thumbnailUrl = existingPl.thumbnailUrl.ifBlank { firstThumb }
+                        )
+                    )
                 }
             }
         }
@@ -550,6 +720,8 @@ class VideoRepository(
 
     suspend fun deleteYouTubeChannel(channelId: String) {
         val uploadsId = if (channelId.startsWith("UC")) "UU" + channelId.substring(2) else channelId
+        val channelPlaylists = videoDao.getSavedPlaylists().filter { it.channelId == channelId }
+        channelPlaylists.forEach { videoDao.deleteVideosByPlaylistId(it.playlistId) }
         videoDao.deleteChannel(channelId)
         videoDao.deletePlaylist(uploadsId)
         videoDao.deletePlaylistsByChannelId(channelId)

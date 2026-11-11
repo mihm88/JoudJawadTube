@@ -83,6 +83,7 @@ fun TrackSelectorDialog(
     initialTab: PlayerDialogTab,
     currentSpeed: Float,
     currentQuality: String = "Auto",
+    availableQualities: List<String> = listOf("Auto"),
     onSelectSpeed: (Float) -> Unit,
     onSelectQuality: (String) -> Unit = {},
     onDismiss: () -> Unit
@@ -288,7 +289,7 @@ fun TrackSelectorDialog(
                 }
 
                 PlayerDialogTab.QUALITY -> {
-                    val qualityList = listOf("Auto", "4K (2160p)", "2K (1440p)", "1080p", "720p", "480p", "360p")
+                    val qualityList = availableQualities.ifEmpty { listOf("Auto") }
                     LazyColumn(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -300,15 +301,16 @@ fun TrackSelectorDialog(
                                 (qualityOption == "Auto" && (currentQuality.isBlank() || currentQuality.equals("Auto", ignoreCase = true)))
                             DialogOptionRow(
                                 title = qualityOption,
-                                subtitle = when (qualityOption) {
-                                    "Auto" -> "Best available adaptive resolution"
-                                    "4K (2160p)" -> "3840 x 2160 Ultra HD"
-                                    "2K (1440p)" -> "2560 x 1440 Quad HD"
-                                    "1080p" -> "1920 x 1080 Full HD"
-                                    "720p" -> "1280 x 720 HD"
-                                    "480p" -> "Standard Definition"
-                                    "360p" -> "Data saver"
-                                    else -> ""
+                                subtitle = when {
+                                    qualityOption == "Auto" -> "Best available adaptive resolution"
+                                    qualityOption.contains("2160") || qualityOption.contains("4K", ignoreCase = true) -> "3840 x 2160 Ultra HD"
+                                    qualityOption.contains("1440") || qualityOption.contains("2K", ignoreCase = true) -> "2560 x 1440 Quad HD"
+                                    qualityOption.contains("1080") -> "1920 x 1080 Full HD"
+                                    qualityOption.contains("720") -> "1280 x 720 HD"
+                                    qualityOption.contains("480") -> "Standard Definition"
+                                    qualityOption.contains("360") -> "Data saver"
+                                    qualityOption.contains("240") -> "Low bandwidth"
+                                    else -> "Available stream resolution"
                                 },
                                 isSelected = isSelected,
                                 onClick = {

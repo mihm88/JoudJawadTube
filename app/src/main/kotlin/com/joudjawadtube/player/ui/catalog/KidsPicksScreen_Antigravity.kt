@@ -23,6 +23,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.Button
@@ -47,6 +48,7 @@ import androidx.compose.ui.unit.sp
 import com.joudjawadtube.player.data.repository.KidsCatalogRepository_Antigravity
 import com.joudjawadtube.player.data.repository.KidsChannelItem
 import com.joudjawadtube.player.data.repository.KidsPlaylistItem
+import com.joudjawadtube.player.data.settings.AppLanguage
 import com.joudjawadtube.player.ui.theme.SmartTubeCardBg
 import com.joudjawadtube.player.ui.theme.SmartTubeCardFocusedBg
 import com.joudjawadtube.player.ui.theme.SmartTubeFocusBorder
@@ -58,12 +60,21 @@ import com.joudjawadtube.player.ui.theme.SmartTubeTextSecondary
 @Composable
 fun KidsPicksScreen_Antigravity(
     savedPlaylistIds: Set<String>,
+    savedChannelIds: Set<String> = emptySet(),
+    appLanguage: AppLanguage = AppLanguage.FOLLOW_SYSTEM,
     onOpenPlaylist: (playlistId: String, title: String) -> Unit,
     onSavePlaylistToLibrary: (playlistId: String) -> Unit,
+    onAddChannelToLibrary: (KidsChannelItem) -> Unit = {},
+    onRemoveChannelFromLibrary: (channelId: String) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
-    val channels = remember { KidsCatalogRepository_Antigravity.loadKidsChannels(context) }
+    val isArabicUi = KidsCatalogRepository_Antigravity.isArabicLocale(appLanguage)
+    val channels = remember(appLanguage) {
+        KidsCatalogRepository_Antigravity.loadKidsChannels(context, appLanguage)
+    }
+    val arabicCount = remember(channels) { channels.count { it.lang == "ar" } }
+    val englishCount = remember(channels) { channels.count { it.lang == "en" } }
     var selectedLangFilter by remember { mutableStateOf<String?>("all") } // "all", "ar", "en"
 
     val filteredChannels = remember(selectedLangFilter, channels) {
@@ -107,13 +118,17 @@ fun KidsPicksScreen_Antigravity(
                 }
                 Column {
                     Text(
-                        text = "Kids Picks (Ages 5–9)",
+                        text = if (isArabicUi) "قنوات الأطفال المدمجة" else "Kids Picks (Built-In Channels)",
                         color = SmartTubeTextPrimary,
                         fontSize = 18.sp,
                         fontWeight = FontWeight.ExtraBold
                     )
                     Text(
-                        text = "14 Hand-picked Educational Channels (Arabic & English)",
+                        text = if (isArabicUi) {
+                            "${channels.size} قناة تعليمية وتربوية مدمجة (عربي وإنجليزي)"
+                        } else {
+                            "${channels.size} Built-in Educational Channels (Arabic & English)"
+                        },
                         color = SmartTubeTextSecondary,
                         fontSize = 12.sp
                     )
@@ -123,17 +138,17 @@ fun KidsPicksScreen_Antigravity(
             // Language Filter Chips
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 LangFilterChip(
-                    label = "All Channels",
+                    label = if (isArabicUi) "الكل (${channels.size})" else "All (${channels.size})",
                     isSelected = selectedLangFilter == "all",
                     onClick = { selectedLangFilter = "all" }
                 )
                 LangFilterChip(
-                    label = "عربي (7)",
+                    label = "عربي ($arabicCount)",
                     isSelected = selectedLangFilter == "ar",
                     onClick = { selectedLangFilter = "ar" }
                 )
                 LangFilterChip(
-                    label = "English (7)",
+                    label = "English ($englishCount)",
                     isSelected = selectedLangFilter == "en",
                     onClick = { selectedLangFilter = "en" }
                 )
@@ -151,9 +166,13 @@ fun KidsPicksScreen_Antigravity(
             ) { channel ->
                 KidsChannelRowSection(
                     channel = channel,
+                    isArabicUi = isArabicUi,
+                    isChannelSaved = channel.channelId in savedChannelIds,
                     savedPlaylistIds = savedPlaylistIds,
                     onOpenPlaylist = onOpenPlaylist,
-                    onSavePlaylistToLibrary = onSavePlaylistToLibrary
+                    onSavePlaylistToLibrary = onSavePlaylistToLibrary,
+                    onAddChannelToLibrary = { onAddChannelToLibrary(channel) },
+                    onRemoveChannelFromLibrary = { onRemoveChannelFromLibrary(channel.channelId) }
                 )
             }
         }
@@ -163,9 +182,13 @@ fun KidsPicksScreen_Antigravity(
 @Composable
 private fun KidsChannelRowSection(
     channel: KidsChannelItem,
+    isArabicUi: Boolean,
+    isChannelSaved: Boolean,
     savedPlaylistIds: Set<String>,
     onOpenPlaylist: (playlistId: String, title: String) -> Unit,
-    onSavePlaylistToLibrary: (playlistId: String) -> Unit
+    onSavePlaylistToLibrary: (playlistId: String) -> Unit,
+    onAddChannelToLibrary: () -> Unit,
+    onRemoveChannelFromLibrary: () -> Unit
 ) {
     Column(modifier = Modifier.fillMaxWidth()) {
         Row(
@@ -175,34 +198,100 @@ private fun KidsChannelRowSection(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                Text(
-                    text = channel.channelName,
-                    color = SmartTubeTextPrimary,
-                    fontSize = 15.sp,
-                    fontWeight = FontWeight.Bold
-                )
-                Box(
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(4.dp))
-                        .background(if (channel.lang == "ar") SmartTubeRed.copy(alpha = 0.2f) else Color(0xFF1E3A8A))
-                        .padding(horizontal = 6.dp, vertical = 2.dp)
+            Column(modifier = Modifier.weight(1f).padding(end = 12.dp)) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     Text(
-                        text = if (channel.lang == "ar") "عربي" else "English",
-                        color = if (channel.lang == "ar") SmartTubeRed else Color(0xFF93C5FD),
+                        text = channel.channelName,
+                        color = SmartTubeTextPrimary,
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(4.dp))
+                            .background(if (channel.lang == "ar") SmartTubeRed.copy(alpha = 0.2f) else Color(0xFF1E3A8A))
+                            .padding(horizontal = 6.dp, vertical = 2.dp)
+                    ) {
+                        Text(
+                            text = if (channel.lang == "ar") "عربي" else "English",
+                            color = if (channel.lang == "ar") SmartTubeRed else Color(0xFF93C5FD),
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                    val displayCat = channel.localizedCategory.ifBlank { channel.category }
+                    if (displayCat.isNotBlank()) {
+                        Text(
+                            text = if (channel.ageRange.isNotBlank()) "$displayCat • ${channel.ageRange}" else displayCat,
+                            color = SmartTubeTextSecondary,
+                            fontSize = 12.sp,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                }
+                if (channel.description.isNotBlank()) {
+                    Spacer(modifier = Modifier.height(3.dp))
+                    Text(
+                        text = channel.description,
+                        color = SmartTubeTextSecondary.copy(alpha = 0.85f),
+                        fontSize = 11.sp,
+                        lineHeight = 15.sp,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+            }
+
+            if (isChannelSaved) {
+                Button(
+                    onClick = onRemoveChannelFromLibrary,
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = Color(0xFF3F1D1D),
+                        contentColor = Color(0xFFFCA5A5)
+                    ),
+                    shape = RoundedCornerShape(8.dp),
+                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                    modifier = Modifier.height(32.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.DeleteOutline,
+                        contentDescription = null,
+                        modifier = Modifier.size(14.dp)
+                    )
+                    Spacer(modifier = Modifier.width(5.dp))
+                    Text(
+                        text = if (isArabicUi) "إزالة من المكتبة" else "Remove from Library",
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                }
+            } else {
+                Button(
+                    onClick = onAddChannelToLibrary,
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = SmartTubeGold4K.copy(alpha = 0.22f),
+                        contentColor = SmartTubeGold4K
+                    ),
+                    shape = RoundedCornerShape(8.dp),
+                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                    modifier = Modifier.height(32.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Add,
+                        contentDescription = null,
+                        modifier = Modifier.size(14.dp)
+                    )
+                    Spacer(modifier = Modifier.width(5.dp))
+                    Text(
+                        text = if (isArabicUi) "إضافة للمكتبة" else "Add to Library",
                         fontSize = 11.sp,
                         fontWeight = FontWeight.Bold
                     )
                 }
-                Text(
-                    text = "${channel.category} • ${channel.ageRange}",
-                    color = SmartTubeTextSecondary,
-                    fontSize = 12.sp
-                )
             }
         }
 
@@ -218,6 +307,7 @@ private fun KidsChannelRowSection(
                 KidsPlaylistCard(
                     playlist = playlist,
                     channel = channel,
+                    isArabicUi = isArabicUi,
                     isSaved = isSaved,
                     onOpen = { onOpenPlaylist(playlist.id, playlist.title) },
                     onSave = { onSavePlaylistToLibrary(playlist.id) }
@@ -231,6 +321,7 @@ private fun KidsChannelRowSection(
 private fun KidsPlaylistCard(
     playlist: KidsPlaylistItem,
     channel: KidsChannelItem,
+    isArabicUi: Boolean,
     isSaved: Boolean,
     onOpen: () -> Unit,
     onSave: () -> Unit
@@ -305,7 +396,7 @@ private fun KidsPlaylistCard(
                     modifier = Modifier.size(14.dp)
                 )
                 Text(
-                    text = "In My Library",
+                    text = if (isArabicUi) "في المكتبة" else "In My Library",
                     color = SmartTubeGold4K,
                     fontSize = 11.sp,
                     fontWeight = FontWeight.Bold
@@ -328,7 +419,10 @@ private fun KidsPlaylistCard(
                     modifier = Modifier.size(12.dp)
                 )
                 Spacer(modifier = Modifier.width(4.dp))
-                Text(text = "Add to Library", fontSize = 11.sp)
+                Text(
+                    text = if (isArabicUi) "إضافة قائمة" else "Add Playlist",
+                    fontSize = 11.sp
+                )
             }
         }
     }

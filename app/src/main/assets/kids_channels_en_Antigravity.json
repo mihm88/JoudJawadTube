@@ -1,0 +1,458 @@
+{
+    "version":  2,
+    "appLocale":  "en",
+    "totalChannels":  21,
+    "channels":  [
+                     {
+                         "id":  "siraj",
+                         "channelId":  "UCfEOy302XpjN00cQ2GW4aZA",
+                         "handle":  "@sirajshowofficial",
+                         "channelName":  "Siraj",
+                         "lang":  "ar",
+                         "language":  "Arabic",
+                         "category":  "Arabic Language",
+                         "localizedCategory":  "Arabic Language \u0026 Moral Values",
+                         "description":  "A 3D animated series produced by Qatar Foundation, focusing on Classical Arabic literacy, moral values, and interactive discovery.",
+                         "url":  "https://www.youtube.com/@SirajAnimation",
+                         "uploadsPlaylistId":  "UUfEOy302XpjN00cQ2GW4aZA",
+                         "playlists":  [
+                                           {
+                                               "id":  "UUfEOy302XpjN00cQ2GW4aZA",
+                                               "title":  "Siraj - Latest Videos"
+                                           },
+                                           {
+                                               "id":  "PLea2wRHny0jWrVOMG1qNvyBm_yJ2Jfsw5",
+                                               "title":  "حكايات الحروف العربية - سراج"
+                                           },
+                                           {
+                                               "id":  "PLea2wRHny0jXbcaVlTzYduwafn1v-6c7H",
+                                               "title":  "قصص الأخلاق والآداب"
+                                           }
+                                       ]
+                     },
+                     {
+                         "id":  "ahlan_simsim",
+                         "channelId":  "UC48pfslXOUx-PZTLQxZjS4g",
+                         "handle":  "@AhlanSimsim",
+                         "channelName":  "Ahlan Simsim",
+                         "lang":  "ar",
+                         "language":  "Arabic",
+                         "category":  "Early Learning",
+                         "localizedCategory":  "Social Development \u0026 Emotional Learning",
+                         "description":  "A Sesame Workshop regional initiative for the Arab world, emphasizing emotional regulation, mindful problem-solving, and positive peer relationships.",
+                         "url":  "https://www.youtube.com/@AhlanSimsim",
+                         "uploadsPlaylistId":  "UU48pfslXOUx-PZTLQxZjS4g",
+                         "playlists":  [
+                                           {
+                                               "id":  "UU48pfslXOUx-PZTLQxZjS4g",
+                                               "title":  "Ahlan Simsim - Latest Videos"
+                                           },
+                                           {
+                                               "id":  "PLbPwPmDMqfy0",
+                                               "title":  "أغاني وأناشيد أهلاً سمسم"
+                                           }
+                                       ]
+                     },
+                     {
+                         "id":  "learn_with_zakaria",
+                         "channelId":  "UCtlcIZVBdFPSAtCoNZsTusg",
+                         "handle":  "@LearnWithZakaria",
+                         "channelName":  "Learn with Zakaria",
+                         "lang":  "ar",
+                         "language":  "Arabic",
+                         "category":  "Islamic \u0026 Arabic",
+                         "localizedCategory":  "Early Literacy, Numeracy \u0026 Etiquette",
+                         "description":  "A calm foundational channel teaching the Arabic alphabet, numbers, everyday vocabulary, prayer fundamentals, and good manners.",
+                         "url":  "https://www.youtube.com/@LearnWithZakaria",
+                         "uploadsPlaylistId":  "UUtlcIZVBdFPSAtCoNZsTusg",
+                         "playlists":  [
+                                           {
+                                               "id":  "UUtlcIZVBdFPSAtCoNZsTusg",
+                                               "title":  "Learn with Zakaria - Latest Videos"
+                                           },
+                                           {
+                                               "id":  "PLEaGEZnOHpUP86gDxpeT56YCHNrsIGPrm",
+                                               "title":  "تعليم الحروف والأرقام للأطفال"
+                                           },
+                                           {
+                                               "id":  "PLEaGEZnOHpUOr1op5y4_roEVh5CCen4u3",
+                                               "title":  "أناشيد الروضة والحيوانات"
+                                           }
+                                       ]
+                     },
+                     {
+                         "id":  "majid_kids",
+                         "channelId":  "UCrvTAKeiHkB-ZTKxVBtk48A",
+                         "handle":  "@MajidKids",
+                         "channelName":  "Majid Kids",
+                         "lang":  "ar",
+                         "language":  "Arabic",
+                         "category":  "Stories \u0026 Values",
+                         "localizedCategory":  "Stories, Animation \u0026 Culture",
+                         "description":  "A renowned UAE-based channel by Abu Dhabi Media, broadcasting animated adventures in Classical Arabic that honor regional heritage and conservative cultural values.",
+                         "url":  "https://www.youtube.com/@MajidKidsTV",
+                         "uploadsPlaylistId":  "UUrvTAKeiHkB-ZTKxVBtk48A",
+                         "playlists":  [
+                                           {
+                                               "id":  "UUrvTAKeiHkB-ZTKxVBtk48A",
+                                               "title":  "Majid Kids - Latest Videos"
+                                           }
+                                       ]
+                     },
+                     {
+                         "id":  "zad_al_huroof",
+                         "channelId":  "UCvr9YT7AwMTxKDqou3e_OUQ",
+                         "handle":  "@zad_alhuroof",
+                         "channelName":  "Zad Al Huroof",
+                         "lang":  "ar",
+                         "language":  "Arabic",
+                         "category":  "Arabic Language",
+                         "localizedCategory":  "Stories, Ethics \u0026 Moral Values",
+                         "description":  "Presents animated children\u0027s stories designed to foster reading, ethical character, and virtue in a peaceful, family-safe format.",
+                         "url":  "https://www.youtube.com/@zad_alhuroof",
+                         "uploadsPlaylistId":  "UUvr9YT7AwMTxKDqou3e_OUQ",
+                         "playlists":  [
+                                           {
+                                               "id":  "UUvr9YT7AwMTxKDqou3e_OUQ",
+                                               "title":  "Zad Al Huroof - Latest Videos"
+                                           }
+                                       ]
+                     },
+                     {
+                         "id":  "learn_with_noor",
+                         "channelId":  "UCoCDD5hipO8RhDkOkvwhe1Q",
+                         "handle":  "@learnwithnoor",
+                         "channelName":  "Learn with Noor",
+                         "lang":  "ar",
+                         "language":  "Arabic",
+                         "category":  "Stories \u0026 Values",
+                         "localizedCategory":  "Science, Grammar \u0026 Historical Stories",
+                         "description":  "Uses narrative storytelling to simplify introductory science concepts, basic Arabic grammar, and prophet stories tailored for primary school children.",
+                         "url":  "https://www.youtube.com/@learnwithnoor",
+                         "uploadsPlaylistId":  "UUoCDD5hipO8RhDkOkvwhe1Q",
+                         "playlists":  [
+                                           {
+                                               "id":  "UUoCDD5hipO8RhDkOkvwhe1Q",
+                                               "title":  "Learn with Noor - Latest Videos"
+                                           }
+                                       ]
+                     },
+                     {
+                         "id":  "adam_wa_mishmish",
+                         "channelId":  "UC2mcPN2YDX31oaLnfZScx_g",
+                         "handle":  "@AdamWaMishmish",
+                         "channelName":  "Adam Wa Mishmish",
+                         "lang":  "ar",
+                         "language":  "Arabic",
+                         "category":  "Early Learning",
+                         "localizedCategory":  "Vocabulary \u0026 Interactive Music",
+                         "description":  "Engaging musical cartoon content for children ages 4 to 6, introducing vocabulary, foundational science, and appreciation of nature.",
+                         "url":  "https://www.youtube.com/@AdamWaMishmish",
+                         "uploadsPlaylistId":  "UU2mcPN2YDX31oaLnfZScx_g",
+                         "playlists":  [
+                                           {
+                                               "id":  "UU2mcPN2YDX31oaLnfZScx_g",
+                                               "title":  "Adam Wa Mishmish - Latest Videos"
+                                           },
+                                           {
+                                               "id":  "PLrSBSFHjB6e2MF8wufUyP4oxislW5lSgu",
+                                               "title":  "أغاني ومفردات اللغة العربية"
+                                           },
+                                           {
+                                               "id":  "PLrSBSFHjB6e06iZE06f7ifM4Xo6VYik28",
+                                               "title":  "قصص مصورة سهلة الحفظ"
+                                           }
+                                       ]
+                     },
+                     {
+                         "id":  "osratouna_tv",
+                         "channelId":  "UCWIdqSQekeGmUWlSFeCiEnA",
+                         "handle":  "@Osratouna",
+                         "channelName":  "Osratouna TV",
+                         "lang":  "ar",
+                         "language":  "Arabic",
+                         "category":  "Islamic \u0026 Arabic",
+                         "localizedCategory":  "Early Education \u0026 Quran Memorization",
+                         "description":  "An Arabic educational channel dedicated to teaching alphabet basics and helping young children memorize short Quranic surahs interactively.",
+                         "url":  "https://www.youtube.com/@Osratouna",
+                         "uploadsPlaylistId":  "UUWIdqSQekeGmUWlSFeCiEnA",
+                         "playlists":  [
+                                           {
+                                               "id":  "UUWIdqSQekeGmUWlSFeCiEnA",
+                                               "title":  "Osratouna TV - Latest Videos"
+                                           }
+                                       ]
+                     },
+                     {
+                         "id":  "madrasetna_break_time",
+                         "channelId":  "UCYzhdxeCQGMlj1EjkuDs3JA",
+                         "handle":  "@MadrasetnaBreakTime",
+                         "channelName":  "Madrasetna Break Time",
+                         "lang":  "ar",
+                         "language":  "Arabic",
+                         "category":  "Science \u0026 Learning",
+                         "localizedCategory":  "Practical Skills, Science \u0026 Logic",
+                         "description":  "An official educational channel providing practical activities including beginner chess, light science experiments, introductory coding, and life skills.",
+                         "url":  "https://www.youtube.com/@MadrasetnaBreakTime",
+                         "uploadsPlaylistId":  "UUYzhdxeCQGMlj1EjkuDs3JA",
+                         "playlists":  [
+                                           {
+                                               "id":  "UUYzhdxeCQGMlj1EjkuDs3JA",
+                                               "title":  "Madrasetna Break Time - Latest Videos"
+                                           }
+                                       ]
+                     },
+                     {
+                         "id":  "dawood_kids_tv",
+                         "channelId":  "UClzEuix0DYhYTAgb1_kONpQ",
+                         "handle":  "@dawoodkidstv",
+                         "channelName":  "Dawood Kids TV",
+                         "lang":  "ar",
+                         "language":  "Arabic",
+                         "category":  "Stories \u0026 Values",
+                         "localizedCategory":  "Quran Learning \u0026 Islamic Values",
+                         "description":  "An interactive platform created to help children learn and memorize short Quranic chapters through purposeful repetition and engaging visual guidance.",
+                         "url":  "https://www.youtube.com/@dawoodkidstv",
+                         "uploadsPlaylistId":  "UUlzEuix0DYhYTAgb1_kONpQ",
+                         "playlists":  [
+                                           {
+                                               "id":  "UUlzEuix0DYhYTAgb1_kONpQ",
+                                               "title":  "Dawood Kids TV - Latest Videos"
+                                           }
+                                       ]
+                     },
+                     {
+                         "id":  "numberblocks",
+                         "channelId":  "UCPlwvN0w4qFSP1FllALB92w",
+                         "handle":  "@Numberblocks",
+                         "channelName":  "Numberblocks",
+                         "lang":  "en",
+                         "language":  "English",
+                         "category":  "Math \u0026 Logic",
+                         "localizedCategory":  "Mathematics \u0026 Early Numeracy",
+                         "description":  "An acclaimed British series teaching visual math and arithmetic fundamentals through engaging, modular number characters.",
+                         "url":  "https://www.youtube.com/@Numberblocks",
+                         "uploadsPlaylistId":  "UUPlwvN0w4qFSP1FllALB92w",
+                         "playlists":  [
+                                           {
+                                               "id":  "UUPlwvN0w4qFSP1FllALB92w",
+                                               "title":  "Numberblocks - Latest Videos"
+                                           },
+                                           {
+                                               "id":  "PL9swKX1PviEr95h5MkXhVGcrv3DlARpsK",
+                                               "title":  "Learn Math, Adding \u0026 Counting"
+                                           }
+                                       ]
+                     },
+                     {
+                         "id":  "alphablocks",
+                         "channelId":  "UC_qs3c0ehDvZkbiEbOj6Drg",
+                         "handle":  "@Alphablocks",
+                         "channelName":  "Alphablocks",
+                         "lang":  "en",
+                         "language":  "English",
+                         "category":  "Reading \u0026 Phonics",
+                         "localizedCategory":  "Phonics, Spelling \u0026 Reading",
+                         "description":  "From the creators of Numberblocks, this series systematically teaches phonemic awareness, word blending, and foundational English reading skills.",
+                         "url":  "https://www.youtube.com/@Alphablocks",
+                         "uploadsPlaylistId":  "UU_qs3c0ehDvZkbiEbOj6Drg",
+                         "playlists":  [
+                                           {
+                                               "id":  "UU_qs3c0ehDvZkbiEbOj6Drg",
+                                               "title":  "Alphablocks - Latest Videos"
+                                           },
+                                           {
+                                               "id":  "PLSW2D61TnopRIW2RXBR9xuBCbNiWnSdNy",
+                                               "title":  "A to Z Phonics \u0026 Word Building"
+                                           }
+                                       ]
+                     },
+                     {
+                         "id":  "scishow_kids",
+                         "channelId":  "UCRFIPG2u1DxKLNuE3y2SjHA",
+                         "handle":  "@scishowkids",
+                         "channelName":  "SciShow Kids",
+                         "lang":  "en",
+                         "language":  "English",
+                         "category":  "Science \u0026 Learning",
+                         "localizedCategory":  "Science \u0026 Inquiry-Based Discovery",
+                         "description":  "An engaging STEM channel answering real science questions with simple physics, chemistry, and biology demonstrations for ages 5 to 9.",
+                         "url":  "https://www.youtube.com/@scishowkids",
+                         "uploadsPlaylistId":  "UURFIPG2u1DxKLNuE3y2SjHA",
+                         "playlists":  [
+                                           {
+                                               "id":  "UURFIPG2u1DxKLNuE3y2SjHA",
+                                               "title":  "SciShow Kids - Latest Videos"
+                                           },
+                                           {
+                                               "id":  "PLw2cuKNQvZ2eDFhpfoCCEOw86_J0A1kQl",
+                                               "title":  "Simple Science Experiments"
+                                           }
+                                       ]
+                     },
+                     {
+                         "id":  "art_for_kids_hub",
+                         "channelId":  "UC5XMF3Inoi8R9nSI8ChOsdQ",
+                         "handle":  "@ArtforKidsHub",
+                         "channelName":  "Art for Kids Hub",
+                         "lang":  "en",
+                         "language":  "English",
+                         "category":  "Art \u0026 Crafts",
+                         "localizedCategory":  "Art \u0026 Step-by-Step Drawing",
+                         "description":  "A family-run channel where parents and kids draw together, providing step-by-step art tutorials that enhance fine motor skills and creativity.",
+                         "url":  "https://www.youtube.com/@ArtforKidsHub",
+                         "uploadsPlaylistId":  "UU5XMF3Inoi8R9nSI8ChOsdQ",
+                         "playlists":  [
+                                           {
+                                               "id":  "UU5XMF3Inoi8R9nSI8ChOsdQ",
+                                               "title":  "Art for Kids Hub - Latest Videos"
+                                           },
+                                           {
+                                               "id":  "PLnoO3k54vcBTVO3cufvl5lCwuuJmSOnDg",
+                                               "title":  "How to Draw Animals \u0026 Characters"
+                                           }
+                                       ]
+                     },
+                     {
+                         "id":  "mystery_doug",
+                         "channelId":  "UCPRCRM3JKm3sw55lB_427qg",
+                         "handle":  "@MysteryScience",
+                         "channelName":  "Mystery Doug",
+                         "lang":  "en",
+                         "language":  "English",
+                         "category":  "Science \u0026 Learning",
+                         "localizedCategory":  "Scientific Inquiry \u0026 Curiosity",
+                         "description":  "A weekly interactive video series addressing real-world questions submitted by kids, paired with hands-on, concise scientific explanations.",
+                         "url":  "https://www.youtube.com/@MysteryDoug",
+                         "uploadsPlaylistId":  "UUPRCRM3JKm3sw55lB_427qg",
+                         "playlists":  [
+                                           {
+                                               "id":  "UUPRCRM3JKm3sw55lB_427qg",
+                                               "title":  "Mystery Doug - Latest Videos"
+                                           }
+                                       ]
+                     },
+                     {
+                         "id":  "national_geographic_kids",
+                         "channelId":  "UCXVCgDuD_QCkI7gTKU7-tpg",
+                         "handle":  "@natgeokids",
+                         "channelName":  "National Geographic Kids",
+                         "lang":  "en",
+                         "language":  "English",
+                         "category":  "Nature \u0026 Animals",
+                         "localizedCategory":  "Wildlife, Nature \u0026 Geography",
+                         "description":  "A factual documentary-style channel exploring wildlife, natural phenomena, and our planet without social agendas.",
+                         "url":  "https://www.youtube.com/@natgeokids",
+                         "uploadsPlaylistId":  "UUXVCgDuD_QCkI7gTKU7-tpg",
+                         "playlists":  [
+                                           {
+                                               "id":  "UUXVCgDuD_QCkI7gTKU7-tpg",
+                                               "title":  "National Geographic Kids - Latest Videos"
+                                           }
+                                       ]
+                     },
+                     {
+                         "id":  "thedadlab",
+                         "channelId":  "UCc_-hy0u9-oKlNdMKHBudcQ",
+                         "handle":  "@TheDadLab",
+                         "channelName":  "TheDadLab",
+                         "lang":  "en",
+                         "language":  "English",
+                         "category":  "Science \u0026 Learning",
+                         "localizedCategory":  "Hands-on Science \u0026 Home Crafts",
+                         "description":  "Showcases fun, safe household science experiments, mechanical crafts, and practical physics challenges designed for curious kids and parents.",
+                         "url":  "https://www.youtube.com/@TheDadLab",
+                         "uploadsPlaylistId":  "UUc_-hy0u9-oKlNdMKHBudcQ",
+                         "playlists":  [
+                                           {
+                                               "id":  "UUc_-hy0u9-oKlNdMKHBudcQ",
+                                               "title":  "TheDadLab - Latest Videos"
+                                           }
+                                       ]
+                     },
+                     {
+                         "id":  "crash_course_kids",
+                         "channelId":  "UCONtPx56PSebXJOxbFv-2jQ",
+                         "handle":  "@crashcoursekids",
+                         "channelName":  "Crash Course Kids",
+                         "lang":  "en",
+                         "language":  "English",
+                         "category":  "Science \u0026 Learning",
+                         "localizedCategory":  "Elementary Science \u0026 Engineering",
+                         "description":  "A grade-school science curriculum series explaining life, earth, and physical science topics through intuitive animations.",
+                         "url":  "https://www.youtube.com/@crashcoursekids",
+                         "uploadsPlaylistId":  "UUONtPx56PSebXJOxbFv-2jQ",
+                         "playlists":  [
+                                           {
+                                               "id":  "UUONtPx56PSebXJOxbFv-2jQ",
+                                               "title":  "Crash Course Kids - Latest Videos"
+                                           }
+                                       ]
+                     },
+                     {
+                         "id":  "little_sports",
+                         "channelId":  "UCTIwFB4ciFi5ZCIu-VlwaOg",
+                         "handle":  "@LittleSports",
+                         "channelName":  "Little Sports",
+                         "lang":  "en",
+                         "language":  "English",
+                         "category":  "Fitness \u0026 Movement",
+                         "localizedCategory":  "Physical Fitness \u0026 Movement",
+                         "description":  "Features fun, animated workout routines and light stretches that inspire kids to stay active, build coordination, and exercise indoors.",
+                         "url":  "https://www.youtube.com/@LittleSports",
+                         "uploadsPlaylistId":  "UUTIwFB4ciFi5ZCIu-VlwaOg",
+                         "playlists":  [
+                                           {
+                                               "id":  "UUTIwFB4ciFi5ZCIu-VlwaOg",
+                                               "title":  "Little Sports - Latest Videos"
+                                           }
+                                       ]
+                     },
+                     {
+                         "id":  "homeschool_pop",
+                         "channelId":  "UCfPyVJEBD7Di1YYjTdS2v8g",
+                         "handle":  "@HomeschoolPop",
+                         "channelName":  "Homeschool Pop",
+                         "lang":  "en",
+                         "language":  "English",
+                         "category":  "General Knowledge",
+                         "localizedCategory":  "Social Studies \u0026 Elementary Concepts",
+                         "description":  "An elementary learning channel offering clear lessons on geography, history, nature cycles, and community concepts in a calm setting.",
+                         "url":  "https://www.youtube.com/@HomeschoolPop",
+                         "uploadsPlaylistId":  "UUfPyVJEBD7Di1YYjTdS2v8g",
+                         "playlists":  [
+                                           {
+                                               "id":  "UUfPyVJEBD7Di1YYjTdS2v8g",
+                                               "title":  "Homeschool Pop - Latest Videos"
+                                           }
+                                       ]
+                     },
+                     {
+                         "id":  "bbc_earth_kids",
+                         "channelId":  "UCO_DaPp4ifhMAmiyybSLx9w",
+                         "handle":  "@BBCEarthKids",
+                         "channelName":  "BBC Earth Kids",
+                         "lang":  "en",
+                         "language":  "English",
+                         "category":  "Nature \u0026 Animals",
+                         "localizedCategory":  "Wildlife, Ecology \u0026 Animal Kingdom",
+                         "description":  "A BBC Studios channel created for young explorers, showcasing animal habitats, natural history highlights, and fascinating planetary facts.",
+                         "url":  "https://www.youtube.com/@BBCEarthKids",
+                         "uploadsPlaylistId":  "UUO_DaPp4ifhMAmiyybSLx9w",
+                         "playlists":  [
+                                           {
+                                               "id":  "UUO_DaPp4ifhMAmiyybSLx9w",
+                                               "title":  "BBC Earth Kids - Latest Videos"
+                                           },
+                                           {
+                                               "id":  "PLGeqoKNPj1db6IU3_dbKFm-BmVCxDeR06",
+                                               "title":  "Wild Animals \u0026 Habitats"
+                                           },
+                                           {
+                                               "id":  "PLGeqoKNPj1dZrpGFQEIF_5kUCl3HUq_Lo",
+                                               "title":  "Ocean \u0026 Deep Sea Creatures"
+                                           }
+                                       ]
+                     }
+                 ]
+}

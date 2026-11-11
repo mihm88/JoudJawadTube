@@ -1,0 +1,458 @@
+{
+    "version":  2,
+    "appLocale":  "ar",
+    "totalChannels":  21,
+    "channels":  [
+                     {
+                         "id":  "siraj",
+                         "channelId":  "UCfEOy302XpjN00cQ2GW4aZA",
+                         "handle":  "@sirajshowofficial",
+                         "channelName":  "سراج (Siraj)",
+                         "lang":  "ar",
+                         "language":  "العربية",
+                         "category":  "Arabic Language",
+                         "localizedCategory":  "لغة عربية وقيم أخلاقية",
+                         "description":  "مسلسل ثلاثي الأبعاد صادر عن مؤسسة قطر؛ يركز على سلامة اللغة العربية الفصحى والقيم الأخلاقية والاستكشاف التفاعلي.",
+                         "url":  "https://www.youtube.com/@SirajAnimation",
+                         "uploadsPlaylistId":  "UUfEOy302XpjN00cQ2GW4aZA",
+                         "playlists":  [
+                                           {
+                                               "id":  "UUfEOy302XpjN00cQ2GW4aZA",
+                                               "title":  "أحدث مقاطع سراج (Siraj)"
+                                           },
+                                           {
+                                               "id":  "PLea2wRHny0jWrVOMG1qNvyBm_yJ2Jfsw5",
+                                               "title":  "حكايات الحروف العربية - سراج"
+                                           },
+                                           {
+                                               "id":  "PLea2wRHny0jXbcaVlTzYduwafn1v-6c7H",
+                                               "title":  "قصص الأخلاق والآداب"
+                                           }
+                                       ]
+                     },
+                     {
+                         "id":  "ahlan_simsim",
+                         "channelId":  "UC48pfslXOUx-PZTLQxZjS4g",
+                         "handle":  "@AhlanSimsim",
+                         "channelName":  "أهلاً سمسم (Ahlan Simsim)",
+                         "lang":  "ar",
+                         "language":  "العربية",
+                         "category":  "Early Learning",
+                         "localizedCategory":  "تنمية اجتماعية وذكاء عاطفي",
+                         "description":  "مبادرة من ورشة سمسم الموجهة للمنطقة العربية؛ تركز على إدارة المشاعر، وحل المشكلات بذكاء، وبناء العلاقات الاجتماعية السليمة.",
+                         "url":  "https://www.youtube.com/@AhlanSimsim",
+                         "uploadsPlaylistId":  "UU48pfslXOUx-PZTLQxZjS4g",
+                         "playlists":  [
+                                           {
+                                               "id":  "UU48pfslXOUx-PZTLQxZjS4g",
+                                               "title":  "أحدث مقاطع أهلاً سمسم (Ahlan Simsim)"
+                                           },
+                                           {
+                                               "id":  "PLbPwPmDMqfy0",
+                                               "title":  "أغاني وأناشيد أهلاً سمسم"
+                                           }
+                                       ]
+                     },
+                     {
+                         "id":  "learn_with_zakaria",
+                         "channelId":  "UCtlcIZVBdFPSAtCoNZsTusg",
+                         "handle":  "@LearnWithZakaria",
+                         "channelName":  "تعلم مع زكريا (Learn with Zakaria)",
+                         "lang":  "ar",
+                         "language":  "العربية",
+                         "category":  "Islamic \u0026 Arabic",
+                         "localizedCategory":  "تأسيس لغوي وتعليمي وديني",
+                         "description":  "قناة هادئة متخصصة في تأسيس الحروف، الأرقام، وأسماء الكائنات، إضافة إلى تعاليم الصلاة والآداب الإسلامية السلوكية.",
+                         "url":  "https://www.youtube.com/@LearnWithZakaria",
+                         "uploadsPlaylistId":  "UUtlcIZVBdFPSAtCoNZsTusg",
+                         "playlists":  [
+                                           {
+                                               "id":  "UUtlcIZVBdFPSAtCoNZsTusg",
+                                               "title":  "أحدث مقاطع تعلم مع زكريا (Learn with Zakaria)"
+                                           },
+                                           {
+                                               "id":  "PLEaGEZnOHpUP86gDxpeT56YCHNrsIGPrm",
+                                               "title":  "تعليم الحروف والأرقام للأطفال"
+                                           },
+                                           {
+                                               "id":  "PLEaGEZnOHpUOr1op5y4_roEVh5CCen4u3",
+                                               "title":  "أناشيد الروضة والحيوانات"
+                                           }
+                                       ]
+                     },
+                     {
+                         "id":  "majid_kids",
+                         "channelId":  "UCrvTAKeiHkB-ZTKxVBtk48A",
+                         "handle":  "@MajidKids",
+                         "channelName":  "ماجد (Majid Kids)",
+                         "lang":  "ar",
+                         "language":  "العربية",
+                         "category":  "Stories \u0026 Values",
+                         "localizedCategory":  "قصص ورسوم متحركة وثقافة",
+                         "description":  "قناة إماراتية عريقة تتبع شبكة أبوظبي للإعلام؛ تعرض مغامرات كرتونية باللغة الفصحى تراعي ثقافة المجتمع وقيمه المحافظة.",
+                         "url":  "https://www.youtube.com/@MajidKidsTV",
+                         "uploadsPlaylistId":  "UUrvTAKeiHkB-ZTKxVBtk48A",
+                         "playlists":  [
+                                           {
+                                               "id":  "UUrvTAKeiHkB-ZTKxVBtk48A",
+                                               "title":  "أحدث مقاطع ماجد (Majid Kids)"
+                                           }
+                                       ]
+                     },
+                     {
+                         "id":  "zad_al_huroof",
+                         "channelId":  "UCvr9YT7AwMTxKDqou3e_OUQ",
+                         "handle":  "@zad_alhuroof",
+                         "channelName":  "زاد الحروف (Zad Al Huroof)",
+                         "lang":  "ar",
+                         "language":  "العربية",
+                         "category":  "Arabic Language",
+                         "localizedCategory":  "قصص وقيم وأخلاق",
+                         "description":  "قناة تقدم قصص أطفال ورسوم متحركة تهدف إلى تعزيز القراءة والقيم الإسلامية والأخلاق الفاضلة دون صخب أو لقطات غير لائقة.",
+                         "url":  "https://www.youtube.com/@zad_alhuroof",
+                         "uploadsPlaylistId":  "UUvr9YT7AwMTxKDqou3e_OUQ",
+                         "playlists":  [
+                                           {
+                                               "id":  "UUvr9YT7AwMTxKDqou3e_OUQ",
+                                               "title":  "أحدث مقاطع زاد الحروف (Zad Al Huroof)"
+                                           }
+                                       ]
+                     },
+                     {
+                         "id":  "learn_with_noor",
+                         "channelId":  "UCoCDD5hipO8RhDkOkvwhe1Q",
+                         "handle":  "@learnwithnoor",
+                         "channelName":  "تعلم مع نور (Learn with Noor)",
+                         "lang":  "ar",
+                         "language":  "العربية",
+                         "category":  "Stories \u0026 Values",
+                         "localizedCategory":  "علوم ولغة وقصص الأنبياء",
+                         "description":  "تعتمد على أسلوب قصصي لتعليم مبادئ العلوم، وقواعد اللغة العربية، وقصص الأنبياء، بأسلوب مبسط ومناسب للمرحلة الابتدائية.",
+                         "url":  "https://www.youtube.com/@learnwithnoor",
+                         "uploadsPlaylistId":  "UUoCDD5hipO8RhDkOkvwhe1Q",
+                         "playlists":  [
+                                           {
+                                               "id":  "UUoCDD5hipO8RhDkOkvwhe1Q",
+                                               "title":  "أحدث مقاطع تعلم مع نور (Learn with Noor)"
+                                           }
+                                       ]
+                     },
+                     {
+                         "id":  "adam_wa_mishmish",
+                         "channelId":  "UC2mcPN2YDX31oaLnfZScx_g",
+                         "handle":  "@AdamWaMishmish",
+                         "channelName":  "آدم ومشمش (Adam Wa Mishmish)",
+                         "lang":  "ar",
+                         "language":  "العربية",
+                         "category":  "Early Learning",
+                         "localizedCategory":  "مفردات وموسيقى تفاعلية",
+                         "description":  "محتوى كرتوني موسيقي مرح يخدم سن 4 إلى 6 سنوات؛ يركز على الكلمات والبيئة والعلوم الأساسية.",
+                         "url":  "https://www.youtube.com/@AdamWaMishmish",
+                         "uploadsPlaylistId":  "UU2mcPN2YDX31oaLnfZScx_g",
+                         "playlists":  [
+                                           {
+                                               "id":  "UU2mcPN2YDX31oaLnfZScx_g",
+                                               "title":  "أحدث مقاطع آدم ومشمش (Adam Wa Mishmish)"
+                                           },
+                                           {
+                                               "id":  "PLrSBSFHjB6e2MF8wufUyP4oxislW5lSgu",
+                                               "title":  "أغاني ومفردات اللغة العربية"
+                                           },
+                                           {
+                                               "id":  "PLrSBSFHjB6e06iZE06f7ifM4Xo6VYik28",
+                                               "title":  "قصص مصورة سهلة الحفظ"
+                                           }
+                                       ]
+                     },
+                     {
+                         "id":  "osratouna_tv",
+                         "channelId":  "UCWIdqSQekeGmUWlSFeCiEnA",
+                         "handle":  "@Osratouna",
+                         "channelName":  "أسرتنا (Osratouna tv)",
+                         "lang":  "ar",
+                         "language":  "العربية",
+                         "category":  "Islamic \u0026 Arabic",
+                         "localizedCategory":  "تعليم تأسيسي وتحفيظ القرآن الكريم",
+                         "description":  "قناة عربية تهتم بتعليم الحروف وتحفيظ قصار السور من القرآن الكريم بأسلوب تفاعلي وجذاب.",
+                         "url":  "https://www.youtube.com/@Osratouna",
+                         "uploadsPlaylistId":  "UUWIdqSQekeGmUWlSFeCiEnA",
+                         "playlists":  [
+                                           {
+                                               "id":  "UUWIdqSQekeGmUWlSFeCiEnA",
+                                               "title":  "أحدث مقاطع أسرتنا (Osratouna tv)"
+                                           }
+                                       ]
+                     },
+                     {
+                         "id":  "madrasetna_break_time",
+                         "channelId":  "UCYzhdxeCQGMlj1EjkuDs3JA",
+                         "handle":  "@MadrasetnaBreakTime",
+                         "channelName":  "مدرستنا بريك تايم (Madrasetna Break Time)",
+                         "lang":  "ar",
+                         "language":  "العربية",
+                         "category":  "Science \u0026 Learning",
+                         "localizedCategory":  "أنشطة وتجارب ومهارات حياتية",
+                         "description":  "قناة رسمية تقدم فقرات تطبيقية متنوعة للأطفال مثل الشطرنج، التجارب العلمية الخفيفة، والبرمجة المبسطة، والمهارات الحياتية.",
+                         "url":  "https://www.youtube.com/@MadrasetnaBreakTime",
+                         "uploadsPlaylistId":  "UUYzhdxeCQGMlj1EjkuDs3JA",
+                         "playlists":  [
+                                           {
+                                               "id":  "UUYzhdxeCQGMlj1EjkuDs3JA",
+                                               "title":  "أحدث مقاطع مدرستنا بريك تايم (Madrasetna Break Time)"
+                                           }
+                                       ]
+                     },
+                     {
+                         "id":  "dawood_kids_tv",
+                         "channelId":  "UClzEuix0DYhYTAgb1_kONpQ",
+                         "handle":  "@dawoodkidstv",
+                         "channelName":  "قناة داوود للأطفال (Dawood Kids TV)",
+                         "lang":  "ar",
+                         "language":  "العربية",
+                         "category":  "Stories \u0026 Values",
+                         "localizedCategory":  "تعليم القرآن الكريم والقيم الإسلامية",
+                         "description":  "منصة تفاعلية مخصصة لتعليم القرآن الكريم وتيسير حفظ قصار السور للأطفال عبر التكرار والتفاعل المرئي الهادف.",
+                         "url":  "https://www.youtube.com/@dawoodkidstv",
+                         "uploadsPlaylistId":  "UUlzEuix0DYhYTAgb1_kONpQ",
+                         "playlists":  [
+                                           {
+                                               "id":  "UUlzEuix0DYhYTAgb1_kONpQ",
+                                               "title":  "أحدث مقاطع قناة داوود للأطفال (Dawood Kids TV)"
+                                           }
+                                       ]
+                     },
+                     {
+                         "id":  "numberblocks",
+                         "channelId":  "UCPlwvN0w4qFSP1FllALB92w",
+                         "handle":  "@Numberblocks",
+                         "channelName":  "Numberblocks",
+                         "lang":  "en",
+                         "language":  "الإنجليزية",
+                         "category":  "Math \u0026 Logic",
+                         "localizedCategory":  "رياضيات وحساب",
+                         "description":  "سلسلة بريطانية تركز على الرياضيات البصرية والعمليات الحسابية من خلال كتل وشخصيات رقمية متطورة ومجردة.",
+                         "url":  "https://www.youtube.com/@Numberblocks",
+                         "uploadsPlaylistId":  "UUPlwvN0w4qFSP1FllALB92w",
+                         "playlists":  [
+                                           {
+                                               "id":  "UUPlwvN0w4qFSP1FllALB92w",
+                                               "title":  "أحدث مقاطع Numberblocks"
+                                           },
+                                           {
+                                               "id":  "PL9swKX1PviEr95h5MkXhVGcrv3DlARpsK",
+                                               "title":  "Learn Math, Adding \u0026 Counting"
+                                           }
+                                       ]
+                     },
+                     {
+                         "id":  "alphablocks",
+                         "channelId":  "UC_qs3c0ehDvZkbiEbOj6Drg",
+                         "handle":  "@Alphablocks",
+                         "channelName":  "Alphablocks",
+                         "lang":  "en",
+                         "language":  "الإنجليزية",
+                         "category":  "Reading \u0026 Phonics",
+                         "localizedCategory":  "هجاء ولغة إنجليزية",
+                         "description":  "من نفس الفريق المطور لـ Numberblocks، تركز على الأصوات الفونيمية وهجاء الكلمات الإنجليزية بأسلوب لغوي دقيق وتدريجي.",
+                         "url":  "https://www.youtube.com/@Alphablocks",
+                         "uploadsPlaylistId":  "UU_qs3c0ehDvZkbiEbOj6Drg",
+                         "playlists":  [
+                                           {
+                                               "id":  "UU_qs3c0ehDvZkbiEbOj6Drg",
+                                               "title":  "أحدث مقاطع Alphablocks"
+                                           },
+                                           {
+                                               "id":  "PLSW2D61TnopRIW2RXBR9xuBCbNiWnSdNy",
+                                               "title":  "A to Z Phonics \u0026 Word Building"
+                                           }
+                                       ]
+                     },
+                     {
+                         "id":  "scishow_kids",
+                         "channelId":  "UCRFIPG2u1DxKLNuE3y2SjHA",
+                         "handle":  "@scishowkids",
+                         "channelName":  "SciShow Kids",
+                         "lang":  "en",
+                         "language":  "الإنجليزية",
+                         "category":  "Science \u0026 Learning",
+                         "localizedCategory":  "علوم وتجارب استكشافية",
+                         "description":  "قناة علمية تقدم إجابات وتجارب كيميائية وفيزيائية مبسطة تناسب عقول الأطفال من سن 5 إلى 9 سنوات.",
+                         "url":  "https://www.youtube.com/@scishowkids",
+                         "uploadsPlaylistId":  "UURFIPG2u1DxKLNuE3y2SjHA",
+                         "playlists":  [
+                                           {
+                                               "id":  "UURFIPG2u1DxKLNuE3y2SjHA",
+                                               "title":  "أحدث مقاطع SciShow Kids"
+                                           },
+                                           {
+                                               "id":  "PLw2cuKNQvZ2eDFhpfoCCEOw86_J0A1kQl",
+                                               "title":  "Simple Science Experiments"
+                                           }
+                                       ]
+                     },
+                     {
+                         "id":  "art_for_kids_hub",
+                         "channelId":  "UC5XMF3Inoi8R9nSI8ChOsdQ",
+                         "handle":  "@ArtforKidsHub",
+                         "channelName":  "Art for Kids Hub",
+                         "lang":  "en",
+                         "language":  "الإنجليزية",
+                         "category":  "Art \u0026 Crafts",
+                         "localizedCategory":  "فنون ورسم",
+                         "description":  "قناة عائلية يقدمها أب مع أطفاله لتعليم الرسم والتلوين خطوة بخطوة؛ ممتازة لتدريب اليد وتحسين التركيز.",
+                         "url":  "https://www.youtube.com/@ArtforKidsHub",
+                         "uploadsPlaylistId":  "UU5XMF3Inoi8R9nSI8ChOsdQ",
+                         "playlists":  [
+                                           {
+                                               "id":  "UU5XMF3Inoi8R9nSI8ChOsdQ",
+                                               "title":  "أحدث مقاطع Art for Kids Hub"
+                                           },
+                                           {
+                                               "id":  "PLnoO3k54vcBTVO3cufvl5lCwuuJmSOnDg",
+                                               "title":  "How to Draw Animals \u0026 Characters"
+                                           }
+                                       ]
+                     },
+                     {
+                         "id":  "mystery_doug",
+                         "channelId":  "UCPRCRM3JKm3sw55lB_427qg",
+                         "handle":  "@MysteryScience",
+                         "channelName":  "Mystery Doug",
+                         "lang":  "en",
+                         "language":  "الإنجليزية",
+                         "category":  "Science \u0026 Learning",
+                         "localizedCategory":  "تفكير علمي وأسئلة تفاعلية",
+                         "description":  "قناة تفاعلية أسبوعية تعتمد على أسئلة حقيقية يطرحها الأطفال، مع شروح علمية وعملية موجزة ومباشرة.",
+                         "url":  "https://www.youtube.com/@MysteryDoug",
+                         "uploadsPlaylistId":  "UUPRCRM3JKm3sw55lB_427qg",
+                         "playlists":  [
+                                           {
+                                               "id":  "UUPRCRM3JKm3sw55lB_427qg",
+                                               "title":  "أحدث مقاطع Mystery Doug"
+                                           }
+                                       ]
+                     },
+                     {
+                         "id":  "national_geographic_kids",
+                         "channelId":  "UCXVCgDuD_QCkI7gTKU7-tpg",
+                         "handle":  "@natgeokids",
+                         "channelName":  "National Geographic Kids",
+                         "lang":  "en",
+                         "language":  "الإنجليزية",
+                         "category":  "Nature \u0026 Animals",
+                         "localizedCategory":  "طبيعة وحيوانات وجغرافيا",
+                         "description":  "قناة وثائقية تركز على الحيوانات، وظواهر الطبيعة، واكتشاف الكوكب، بعيداً عن القضايا الاجتماعية أو الأيديولوجية.",
+                         "url":  "https://www.youtube.com/@natgeokids",
+                         "uploadsPlaylistId":  "UUXVCgDuD_QCkI7gTKU7-tpg",
+                         "playlists":  [
+                                           {
+                                               "id":  "UUXVCgDuD_QCkI7gTKU7-tpg",
+                                               "title":  "أحدث مقاطع National Geographic Kids"
+                                           }
+                                       ]
+                     },
+                     {
+                         "id":  "thedadlab",
+                         "channelId":  "UCc_-hy0u9-oKlNdMKHBudcQ",
+                         "handle":  "@TheDadLab",
+                         "channelName":  "TheDadLab",
+                         "lang":  "en",
+                         "language":  "الإنجليزية",
+                         "category":  "Science \u0026 Learning",
+                         "localizedCategory":  "أنشطة وتجارب منزلية",
+                         "description":  "قناة يديرها أب يقدم تجارب علمية وأنشطة يدوية وتحديات فيزيائية سهلة التنفيذ بمواد منزلية.",
+                         "url":  "https://www.youtube.com/@TheDadLab",
+                         "uploadsPlaylistId":  "UUc_-hy0u9-oKlNdMKHBudcQ",
+                         "playlists":  [
+                                           {
+                                               "id":  "UUc_-hy0u9-oKlNdMKHBudcQ",
+                                               "title":  "أحدث مقاطع TheDadLab"
+                                           }
+                                       ]
+                     },
+                     {
+                         "id":  "crash_course_kids",
+                         "channelId":  "UCONtPx56PSebXJOxbFv-2jQ",
+                         "handle":  "@crashcoursekids",
+                         "channelName":  "Crash Course Kids",
+                         "lang":  "en",
+                         "language":  "الإنجليزية",
+                         "category":  "Science \u0026 Learning",
+                         "localizedCategory":  "علوم وهندسة للمرحلة الابتدائية",
+                         "description":  "سلسلة تعليمية تشرح علوم الأحياء، الأرض، والهندسة للمرحلة الابتدائية عبر رسوم بيانية توضيحية خالية من أية مضامين أيديولوجية.",
+                         "url":  "https://www.youtube.com/@crashcoursekids",
+                         "uploadsPlaylistId":  "UUONtPx56PSebXJOxbFv-2jQ",
+                         "playlists":  [
+                                           {
+                                               "id":  "UUONtPx56PSebXJOxbFv-2jQ",
+                                               "title":  "أحدث مقاطع Crash Course Kids"
+                                           }
+                                       ]
+                     },
+                     {
+                         "id":  "little_sports",
+                         "channelId":  "UCTIwFB4ciFi5ZCIu-VlwaOg",
+                         "handle":  "@LittleSports",
+                         "channelName":  "Little Sports",
+                         "lang":  "en",
+                         "language":  "الإنجليزية",
+                         "category":  "Fitness \u0026 Movement",
+                         "localizedCategory":  "لياقة بدنية ورياضة أطفال",
+                         "description":  "قناة رياضية تعرض تمارين وحركات إحماء خفيفة برسوم كرتونية لتشجيع الطفل على النشاط البدني والحركة داخل المنزل.",
+                         "url":  "https://www.youtube.com/@LittleSports",
+                         "uploadsPlaylistId":  "UUTIwFB4ciFi5ZCIu-VlwaOg",
+                         "playlists":  [
+                                           {
+                                               "id":  "UUTIwFB4ciFi5ZCIu-VlwaOg",
+                                               "title":  "أحدث مقاطع Little Sports"
+                                           }
+                                       ]
+                     },
+                     {
+                         "id":  "homeschool_pop",
+                         "channelId":  "UCfPyVJEBD7Di1YYjTdS2v8g",
+                         "handle":  "@HomeschoolPop",
+                         "channelName":  "Homeschool Pop",
+                         "lang":  "en",
+                         "language":  "الإنجليزية",
+                         "category":  "General Knowledge",
+                         "localizedCategory":  "تعليم مدرسي واجتماعيات",
+                         "description":  "قناة مدرسية تتناول الجغرافيا، وفصول السنة، والتاريخ البسيط، والمفاهيم الأساسية بأسلوب هادئ وواضح.",
+                         "url":  "https://www.youtube.com/@HomeschoolPop",
+                         "uploadsPlaylistId":  "UUfPyVJEBD7Di1YYjTdS2v8g",
+                         "playlists":  [
+                                           {
+                                               "id":  "UUfPyVJEBD7Di1YYjTdS2v8g",
+                                               "title":  "أحدث مقاطع Homeschool Pop"
+                                           }
+                                       ]
+                     },
+                     {
+                         "id":  "bbc_earth_kids",
+                         "channelId":  "UCO_DaPp4ifhMAmiyybSLx9w",
+                         "handle":  "@BBCEarthKids",
+                         "channelName":  "BBC Earth Kids",
+                         "lang":  "en",
+                         "language":  "الإنجليزية",
+                         "category":  "Nature \u0026 Animals",
+                         "localizedCategory":  "حياة برية وبيئة وعالم الحيوان",
+                         "description":  "قناة وثائقية تابعة لـ BBC مخصصة للأطفال، تستعرض كائنات الكوكب، وعجائب الحياة البرية، وحقائق الطبيعة الممتعة.",
+                         "url":  "https://www.youtube.com/@BBCEarthKids",
+                         "uploadsPlaylistId":  "UUO_DaPp4ifhMAmiyybSLx9w",
+                         "playlists":  [
+                                           {
+                                               "id":  "UUO_DaPp4ifhMAmiyybSLx9w",
+                                               "title":  "أحدث مقاطع BBC Earth Kids"
+                                           },
+                                           {
+                                               "id":  "PLGeqoKNPj1db6IU3_dbKFm-BmVCxDeR06",
+                                               "title":  "Wild Animals \u0026 Habitats"
+                                           },
+                                           {
+                                               "id":  "PLGeqoKNPj1dZrpGFQEIF_5kUCl3HUq_Lo",
+                                               "title":  "Ocean \u0026 Deep Sea Creatures"
+                                           }
+                                       ]
+                     }
+                 ]
+}

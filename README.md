@@ -24,15 +24,15 @@
 
 <div align="center">
 
-[![Download Latest APK](https://img.shields.io/badge/📥_Download_Latest_APK-JoudJawadTube--v1.1.7.apk-2ea44f?style=for-the-badge&logo=android&logoColor=white)](https://github.com/mihm88/JoudJawadTube/releases/download/v1.1.7/JoudJawadTube-v1.1.7.apk)
+[![Download Latest APK](https://img.shields.io/badge/📥_Download_Latest_APK-JoudJawadTube--v1.1.8.apk-2ea44f?style=for-the-badge&logo=android&logoColor=white)](https://github.com/mihm88/JoudJawadTube/releases/download/v1.1.8/JoudJawadTube-v1.1.8.apk)
 [![All GitHub Releases](https://img.shields.io/badge/📦_GitHub_Releases-All_Versions-0969da?style=for-the-badge&logo=github&logoColor=white)](https://github.com/mihm88/JoudJawadTube/releases)
 
 </div>
 
 | Channel / الرابط | Direct Link / الرابط المباشر | Description / الوصف |
 | :--- | :--- | :--- |
-| **🚀 Direct APK (GitHub Release v1.1.7)** | [**`JoudJawadTube-v1.1.7.apk`**](https://github.com/mihm88/JoudJawadTube/releases/download/v1.1.7/JoudJawadTube-v1.1.7.apk) | Direct one-click download from GitHub Releases (Production-signed `v1+v2+v3`, ~3.9 MB) |
-| **⚡ Direct APK (Repo Root Mirror)** | [**`raw/master/JoudJawadTube-v1.1.7.apk`**](https://github.com/mihm88/JoudJawadTube/raw/master/JoudJawadTube-v1.1.7.apk) | Direct download from the repository root branch |
+| **🚀 Direct APK (GitHub Release v1.1.8)** | [**`JoudJawadTube-v1.1.8.apk`**](https://github.com/mihm88/JoudJawadTube/releases/download/v1.1.8/JoudJawadTube-v1.1.8.apk) | Direct one-click download from GitHub Releases (Production-signed `v1+v2+v3`) |
+| **⚡ Direct APK (Repo Root Mirror)** | [**`raw/master/JoudJawadTube-v1.1.8.apk`**](https://github.com/mihm88/JoudJawadTube/raw/master/JoudJawadTube-v1.1.8.apk) | Direct download from the repository root branch |
 | **🏷️ Latest Release Page** | [**`github.com/mihm88/JoudJawadTube/releases/latest`**](https://github.com/mihm88/JoudJawadTube/releases/latest) | Always redirects to the newest published release |
 | **📦 All Releases Page** | [**`github.com/mihm88/JoudJawadTube/releases`**](https://github.com/mihm88/JoudJawadTube/releases) | Full release history, changelogs, and SHA-256 verification |
 

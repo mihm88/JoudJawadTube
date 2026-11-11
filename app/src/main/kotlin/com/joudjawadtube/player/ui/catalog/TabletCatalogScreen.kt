@@ -66,6 +66,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.joudjawadtube.player.data.local.VideoItem
+import com.joudjawadtube.player.data.repository.KidsChannelItem
 import com.joudjawadtube.player.data.settings.AppSettingsState
 import com.joudjawadtube.player.ui.components.CompactBottomNav_Antigravity
 import com.joudjawadtube.player.ui.components.PermissionBanner
@@ -101,6 +102,7 @@ fun TabletCatalogScreen(
     onChangePlaylistCategory: (playlistId: String, newCategory: String) -> Unit = { _, _ -> },
     onOpenKidsPlaylist: (String, String) -> Unit = { _, _ -> },
     onSaveKidsPlaylist: (String) -> Unit = {},
+    onAddBuiltInChannel: (KidsChannelItem) -> Unit = {},
     onRequestReadPermission: () -> Unit,
     onRequestAllFilesAccess: () -> Unit,
     onPickSafFolder: () -> Unit,
@@ -323,8 +325,12 @@ fun TabletCatalogScreen(
                     } else if (uiState.selectedSection == SidebarSection.KIDS_PICKS) {
                         KidsPicksScreen_Antigravity(
                             savedPlaylistIds = uiState.snapshot.savedPlaylists.map { it.playlistId }.toSet(),
+                            savedChannelIds = uiState.snapshot.savedChannels.map { it.channelId }.toSet(),
+                            appLanguage = uiState.settings.appLanguage,
                             onOpenPlaylist = onOpenKidsPlaylist,
-                            onSavePlaylistToLibrary = onSaveKidsPlaylist
+                            onSavePlaylistToLibrary = onSaveKidsPlaylist,
+                            onAddChannelToLibrary = onAddBuiltInChannel,
+                            onRemoveChannelFromLibrary = onDeleteChannel
                         )
                     } else if (uiState.selectedSection == SidebarSection.CHANNELS) {
                         ChannelsScreen_Antigravity(

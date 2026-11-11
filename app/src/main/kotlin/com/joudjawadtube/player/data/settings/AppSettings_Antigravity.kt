@@ -76,7 +76,8 @@ data class AppSettingsState(
     val sidebarMode: SidebarMode = SidebarMode.OVERLAY_ON_FOCUS,
     val autoScanOnStartup: Boolean = true,
     val autoScanOnUsbMount: Boolean = true,
-    val hideBootUsbPartitions: Boolean = true
+    val hideBootUsbPartitions: Boolean = true,
+    val removedBuiltInChannelIds: Set<String> = emptySet()
 )
 
 class AppSettingsRepository(context: Context) {
@@ -132,7 +133,8 @@ class AppSettingsRepository(context: Context) {
                 .getOrDefault(SidebarMode.OVERLAY_ON_FOCUS),
             autoScanOnStartup = prefs.getBoolean("auto_scan_startup", true),
             autoScanOnUsbMount = prefs.getBoolean("auto_scan_usb_mount", true),
-            hideBootUsbPartitions = prefs.getBoolean("hide_boot_usb_partitions", true)
+            hideBootUsbPartitions = prefs.getBoolean("hide_boot_usb_partitions", true),
+            removedBuiltInChannelIds = prefs.getStringSet("removed_builtin_channel_ids", emptySet())?.toSet() ?: emptySet()
         )
     }
 
@@ -161,7 +163,18 @@ class AppSettingsRepository(context: Context) {
             .putBoolean("auto_scan_startup", updated.autoScanOnStartup)
             .putBoolean("auto_scan_usb_mount", updated.autoScanOnUsbMount)
             .putBoolean("hide_boot_usb_partitions", updated.hideBootUsbPartitions)
+            .putStringSet("removed_builtin_channel_ids", updated.removedBuiltInChannelIds.toSet())
             .apply()
+    }
+
+    fun markBuiltInChannelRemoved(channelId: String) {
+        if (channelId.isBlank()) return
+        update { it.copy(removedBuiltInChannelIds = it.removedBuiltInChannelIds + channelId) }
+    }
+
+    fun restoreBuiltInChannel(channelId: String) {
+        if (channelId.isBlank()) return
+        update { it.copy(removedBuiltInChannelIds = it.removedBuiltInChannelIds - channelId) }
     }
 
     fun resetToDefaults() {

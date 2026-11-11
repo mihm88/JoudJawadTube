@@ -11,10 +11,13 @@ import com.joudjawadtube.player.data.local.VideoEntity
 import com.joudjawadtube.player.data.local.VideoItem
 import com.joudjawadtube.player.data.repository.CatalogSnapshot
 import com.joudjawadtube.player.data.repository.CategoryRow
+import com.joudjawadtube.player.data.repository.KidsCatalogRepository_Antigravity
+import com.joudjawadtube.player.data.repository.KidsChannelItem
 import com.joudjawadtube.player.data.repository.VideoRepository
 import com.joudjawadtube.player.data.scanner.LocalVideoScanner
 import com.joudjawadtube.player.data.scanner.MountedVolumeInfo
 import com.joudjawadtube.player.data.scanner.UsbMountReceiver
+import com.joudjawadtube.player.data.settings.AppLanguage
 import com.joudjawadtube.player.data.settings.AppSettingsRepository
 import com.joudjawadtube.player.data.settings.AppSettingsState
 import com.joudjawadtube.player.data.settings.UiModePreference
@@ -32,7 +35,10 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.flowOn
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
@@ -355,10 +361,51 @@ class CatalogViewModel(application: Application) : AndroidViewModel(application)
         viewModelScope.launch {
             val currentSettings = settingsRepository.settingsFlow.value
             repository.refreshVolumesOnly(currentSettings.hideBootUsbPartitions)
+            // Seed the 21 bilingual built-in channels (respecting any user removals) first
+            launch {
+                repository.seedAndSyncBuiltInChannels(
+                    removedChannelIds = currentSettings.removedBuiltInChannelIds,
+                    appLanguage = currentSettings.appLanguage
+                )
+            }
             val existingCount = database.videoDao().getAllVideosOnce().size
             if (currentSettings.autoScanOnStartup || existingCount == 0) {
                 repository.refreshStorageAndScan(currentSettings.hideBootUsbPartitions)
             }
+        }
+
+        // Re-localize untouched built-in channels if user toggles EN <-> AR in settings
+        viewModelScope.launch {
+            settingsRepository.settingsFlow
+                .map { it.appLanguage }
+                .distinctUntilChanged()
+                .drop(1)
+                .collectLatest { newLang ->
+                    val removed = settingsRepository.settingsFlow.value.removedBuiltInChannelIds
+                    repository.seedAndSyncBuiltInChannels(
+                        removedChannelIds = removed,
+                        appLanguage = newLang
+                    )
+                }
+        }
+
+        // Background pre-warm top 3 visible YouTube streams so clicking any card starts instantaneously
+        viewModelScope.launch(Dispatchers.IO) {
+            uiState
+                .map { state ->
+                    state.filteredVideos
+                        .filter { it.isYoutube && it.youtubeVideoId.isNotBlank() }
+                        .take(3)
+                        .map { it.youtubeVideoId }
+                }
+                .distinctUntilChanged()
+                .collectLatest { topIds ->
+                    if (topIds.isEmpty()) return@collectLatest
+                    delay(1_200L)
+                    topIds.forEach { vidId ->
+                        YouTubeService.preResolveStream(vidId)
+                    }
+                }
         }
 
         viewModelScope.launch {
@@ -500,6 +547,12 @@ class CatalogViewModel(application: Application) : AndroidViewModel(application)
     fun resetSettingsToDefaults() {
         _dialogState.value = _dialogState.value.copy(isTvModeOverride = null)
         settingsRepository.resetToDefaults()
+        viewModelScope.launch {
+            repository.seedAndSyncBuiltInChannels(
+                removedChannelIds = emptySet(),
+                appLanguage = AppLanguage.FOLLOW_SYSTEM
+            )
+        }
     }
 
     // YouTube Link Dialog & Import
@@ -529,6 +582,10 @@ class CatalogViewModel(application: Application) : AndroidViewModel(application)
             )
             val result = repository.importYouTubeUrl(rawInput)
             result.onSuccess { imported ->
+                val chFolder = imported.firstVideo.entity.folderPath
+                if (chFolder.startsWith("youtube_channel_")) {
+                    settingsRepository.restoreBuiltInChannel(chFolder.removePrefix("youtube_channel_"))
+                }
                 _dialogState.value = _dialogState.value.copy(
                     isImportingYouTube = false,
                     showAddYouTubeDialog = false,
@@ -663,7 +720,28 @@ class CatalogViewModel(application: Application) : AndroidViewModel(application)
 
     fun deleteYouTubeChannel(channelId: String) {
         viewModelScope.launch {
+            val isBuiltIn = KidsCatalogRepository_Antigravity
+                .loadKidsChannels(getApplication(), settingsRepository.settingsFlow.value.appLanguage)
+                .any { it.channelId == channelId }
+            if (isBuiltIn) {
+                settingsRepository.markBuiltInChannelRemoved(channelId)
+            }
             repository.deleteYouTubeChannel(channelId)
+        }
+    }
+
+    fun addBuiltInChannelToLibrary(channel: KidsChannelItem) {
+        viewModelScope.launch {
+            settingsRepository.restoreBuiltInChannel(channel.channelId)
+            _dialogState.value = _dialogState.value.copy(
+                isImportingYouTube = true,
+                youtubeStatusMessage = "Adding ${channel.channelName}..."
+            )
+            repository.addBuiltInChannelToLibrary(channel)
+            _dialogState.value = _dialogState.value.copy(
+                isImportingYouTube = false,
+                youtubeStatusMessage = "${channel.channelName} added to Library"
+            )
         }
     }
 
@@ -695,6 +773,11 @@ class CatalogViewModel(application: Application) : AndroidViewModel(application)
 
     fun clearYouTubeLibrary() {
         viewModelScope.launch {
+            val builtInIds = KidsCatalogRepository_Antigravity
+                .loadKidsChannels(getApplication(), settingsRepository.settingsFlow.value.appLanguage)
+                .map { it.channelId }
+                .toSet()
+            settingsRepository.update { it.copy(removedBuiltInChannelIds = it.removedBuiltInChannelIds + builtInIds) }
             repository.clearAllYouTubeContent()
         }
     }

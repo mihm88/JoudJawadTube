@@ -37,9 +37,9 @@ class YouTubeChunkedHttpDataSource_Antigravity(
     }
 
     companion object {
-        // Fast initial chunks for sub-300ms Time-To-First-Frame
-        private const val INITIAL_VIDEO_CHUNK_BYTES = 512 * 1024L
-        private const val INITIAL_AUDIO_CHUNK_BYTES = 256 * 1024L
+        // Ultra-fast initial chunks for sub-300ms Time-To-First-Frame
+        private const val INITIAL_VIDEO_CHUNK_BYTES = 384 * 1024L
+        private const val INITIAL_AUDIO_CHUNK_BYTES = 128 * 1024L
         // Larger subsequent chunks (2.5 MB) to minimize HTTP round-trips during steady playback
         private const val SUBSEQUENT_VIDEO_CHUNK_BYTES = 2_560 * 1024L
         private const val SUBSEQUENT_AUDIO_CHUNK_BYTES = 1_024 * 1024L
