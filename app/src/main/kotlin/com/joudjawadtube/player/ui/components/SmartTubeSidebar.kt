@@ -1,6 +1,7 @@
 package com.joudjawadtube.player.ui.components
 
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -48,6 +49,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -153,20 +156,12 @@ fun SmartTubeSidebar(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = if (effectiveExpanded) Arrangement.Start else Arrangement.Center
                 ) {
-                    Box(
-                        modifier = Modifier
-                            .size(36.dp)
-                            .clip(RoundedCornerShape(10.dp))
-                            .background(SmartTubeRed),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.PlayArrow,
-                            contentDescription = "Joud&Jawad Tube",
-                            tint = Color.White,
-                            modifier = Modifier.size(22.dp)
-                        )
-                    }
+                    Image(
+                        painter = painterResource(id = R.drawable.app_logo_transparent_antigravity),
+                        contentDescription = "Joud&Jawad Tube",
+                        contentScale = ContentScale.Fit,
+                        modifier = Modifier.size(42.dp)
+                    )
                     if (effectiveExpanded) {
                         Spacer(modifier = Modifier.width(12.dp))
                         Column {
