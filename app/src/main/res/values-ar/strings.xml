@@ -102,6 +102,15 @@
     <string name="player_hw_accel">تسريع عتادي HEVC</string>
     <string name="player_now_playing">قيد التشغيل الآن</string>
     <string name="player_rotate">تدوير</string>
+    <string name="player_options">خيارات</string>
+    <string name="player_options_title">خيارات المشغّل</string>
+    <string name="player_option_quality">الجودة</string>
+    <string name="player_option_subtitles">الترجمة</string>
+    <string name="player_option_audio">المسار الصوتي</string>
+    <string name="player_option_speed">السرعة</string>
+    <string name="player_option_aspect">ملاءمة الشاشة</string>
+    <string name="player_option_repeat">التكرار</string>
+    <string name="player_back">رجوع</string>
 
     <!-- Settings: Appearance & Language -->
     <string name="settings_section_appearance">المظهر واللغة</string>

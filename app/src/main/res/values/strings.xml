@@ -102,6 +102,15 @@
     <string name="player_hw_accel">HEVC HW</string>
     <string name="player_now_playing">Now Playing</string>
     <string name="player_rotate">Rotate</string>
+    <string name="player_options">Options</string>
+    <string name="player_options_title">Player Options</string>
+    <string name="player_option_quality">Quality</string>
+    <string name="player_option_subtitles">Sub / Caption</string>
+    <string name="player_option_audio">Audio</string>
+    <string name="player_option_speed">Speed</string>
+    <string name="player_option_aspect">Screen Fit Ratio</string>
+    <string name="player_option_repeat">Repeat</string>
+    <string name="player_back">Back</string>
 
     <!-- Settings: Appearance & Language -->
     <string name="settings_section_appearance">Appearance &amp; Language</string>

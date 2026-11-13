@@ -22,12 +22,17 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.filled.AspectRatio
 import androidx.compose.material.icons.filled.Audiotrack
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.ClosedCaption
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Hd
+import androidx.compose.material.icons.filled.Repeat
 import androidx.compose.material.icons.filled.Speed
+import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -51,7 +56,9 @@ import androidx.media3.common.Player
 import androidx.media3.common.TrackSelectionOverride
 import androidx.media3.common.Tracks
 import androidx.media3.common.util.UnstableApi
+import androidx.media3.ui.AspectRatioFrameLayout
 import com.joudjawadtube.player.R
+import com.joudjawadtube.player.data.settings.RepeatMode
 import com.joudjawadtube.player.ui.theme.SmartTubeCardBg
 import com.joudjawadtube.player.ui.theme.SmartTubeCardFocusedBg
 import com.joudjawadtube.player.ui.theme.SmartTubeFocusBorder
@@ -62,10 +69,13 @@ import com.joudjawadtube.player.ui.theme.SmartTubeTextSecondary
 import java.util.Locale
 
 enum class PlayerDialogTab {
+    MENU,
+    QUALITY,
     SUBTITLES,
     AUDIO,
     SPEED,
-    QUALITY
+    ASPECT_RATIO,
+    REPEAT
 }
 
 data class TrackOptionUi(
@@ -81,15 +91,20 @@ data class TrackOptionUi(
 @Composable
 fun TrackSelectorDialog(
     player: Player,
-    initialTab: PlayerDialogTab,
+    initialTab: PlayerDialogTab = PlayerDialogTab.MENU,
     currentSpeed: Float,
     currentQuality: String = "Auto",
+    actualDisplayedQuality: String? = null,
     availableQualities: List<String> = listOf("Auto"),
+    currentResizeMode: Int = AspectRatioFrameLayout.RESIZE_MODE_FIT,
+    currentRepeatMode: RepeatMode = RepeatMode.OFF,
     onSelectSpeed: (Float) -> Unit,
     onSelectQuality: (String) -> Unit = {},
+    onSelectResizeMode: (Int) -> Unit = {},
+    onSelectRepeatMode: (RepeatMode) -> Unit = {},
     onDismiss: () -> Unit
 ) {
-    var activeTab by remember { mutableStateOf(initialTab) }
+    var activeTab by remember(initialTab) { mutableStateOf(initialTab) }
     var refreshRevision by remember { mutableStateOf(0) }
 
     val tracks = remember(player.currentTracks, refreshRevision) { player.currentTracks }
@@ -107,6 +122,36 @@ fun TrackSelectorDialog(
 
     val speedOptions = listOf(0.5f, 0.75f, 1.0f, 1.25f, 1.5f, 2.0f)
 
+    val activeSubtitleSummary = subtitleOptions.firstOrNull { it.isSelected }?.title
+        ?: stringResource(R.string.player_subtitles_off)
+    val activeAudioSummary = audioOptions.firstOrNull { it.isSelected }?.title
+        ?: if (audioOptions.isEmpty()) "Default" else "${audioOptions.size}"
+    val qualitySummary = if (currentQuality == "Auto" && !actualDisplayedQuality.isNullOrBlank()) {
+        "Auto ($actualDisplayedQuality)"
+    } else {
+        currentQuality
+    }
+    val aspectSummary = when (currentResizeMode) {
+        AspectRatioFrameLayout.RESIZE_MODE_ZOOM -> stringResource(R.string.player_aspect_zoom)
+        AspectRatioFrameLayout.RESIZE_MODE_FILL -> stringResource(R.string.player_aspect_stretch)
+        else -> stringResource(R.string.player_aspect_fit)
+    }
+    val repeatSummary = when (currentRepeatMode) {
+        RepeatMode.REPEAT_ONE -> stringResource(R.string.player_repeat_one)
+        RepeatMode.REPEAT_ALL -> stringResource(R.string.player_repeat_all)
+        RepeatMode.OFF -> stringResource(R.string.player_repeat_off)
+    }
+
+    val headerTitle = when (activeTab) {
+        PlayerDialogTab.MENU -> stringResource(R.string.player_options_title)
+        PlayerDialogTab.QUALITY -> stringResource(R.string.player_option_quality)
+        PlayerDialogTab.SUBTITLES -> stringResource(R.string.player_option_subtitles)
+        PlayerDialogTab.AUDIO -> stringResource(R.string.player_option_audio)
+        PlayerDialogTab.SPEED -> stringResource(R.string.player_option_speed)
+        PlayerDialogTab.ASPECT_RATIO -> stringResource(R.string.player_option_aspect)
+        PlayerDialogTab.REPEAT -> stringResource(R.string.player_option_repeat)
+    }
+
     Dialog(onDismissRequest = onDismiss) {
         Column(
             modifier = Modifier
@@ -117,41 +162,56 @@ fun TrackSelectorDialog(
                 .border(1.5.dp, Color.White.copy(alpha = 0.14f), RoundedCornerShape(16.dp))
                 .padding(20.dp)
         ) {
-            // Header + Tab Selector
+            // Header + Back / Close
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
                 Row(
-                    modifier = Modifier
-                        .weight(1f)
-                        .horizontalScroll(rememberScrollState()),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    modifier = Modifier.weight(1f),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
-                    DialogTabChip(
-                        icon = Icons.Default.ClosedCaption,
-                        label = "${stringResource(R.string.player_subtitles, "").substringBefore(':').trim()} (${(subtitleOptions.size - 1).coerceAtLeast(0)})",
-                        isSelected = activeTab == PlayerDialogTab.SUBTITLES,
-                        onClick = { activeTab = PlayerDialogTab.SUBTITLES }
-                    )
-                    DialogTabChip(
-                        icon = Icons.Default.Audiotrack,
-                        label = "${stringResource(R.string.player_audio, "").substringBefore(':').trim()} (${audioOptions.size})",
-                        isSelected = activeTab == PlayerDialogTab.AUDIO,
-                        onClick = { activeTab = PlayerDialogTab.AUDIO }
-                    )
-                    DialogTabChip(
-                        icon = Icons.Default.Speed,
-                        label = "${currentSpeed}x",
-                        isSelected = activeTab == PlayerDialogTab.SPEED,
-                        onClick = { activeTab = PlayerDialogTab.SPEED }
-                    )
-                    DialogTabChip(
-                        icon = Icons.Default.Hd,
-                        label = "$currentQuality",
-                        isSelected = activeTab == PlayerDialogTab.QUALITY,
-                        onClick = { activeTab = PlayerDialogTab.QUALITY }
+                    if (activeTab != PlayerDialogTab.MENU) {
+                        var backFocused by remember { mutableStateOf(false) }
+                        Box(
+                            modifier = Modifier
+                                .size(34.dp)
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(if (backFocused) SmartTubeCardFocusedBg else SmartTubeCardBg)
+                                .border(
+                                    width = if (backFocused) 2.dp else 1.dp,
+                                    color = if (backFocused) SmartTubeFocusBorder else Color.White.copy(alpha = 0.1f),
+                                    shape = RoundedCornerShape(8.dp)
+                                )
+                                .onFocusChanged { backFocused = it.isFocused }
+                                .clickable { activeTab = PlayerDialogTab.MENU },
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                                contentDescription = stringResource(R.string.player_back),
+                                tint = SmartTubeTextPrimary,
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
+                    } else {
+                        Icon(
+                            imageVector = Icons.Default.Tune,
+                            contentDescription = null,
+                            tint = SmartTubeRed,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+
+                    Text(
+                        text = headerTitle,
+                        color = SmartTubeTextPrimary,
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Bold,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
                     )
                 }
 
@@ -182,6 +242,64 @@ fun TrackSelectorDialog(
             Spacer(modifier = Modifier.height(16.dp))
 
             when (activeTab) {
+                PlayerDialogTab.MENU -> {
+                    LazyColumn(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(max = 360.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        item {
+                            MenuCategoryRow(
+                                icon = Icons.Default.Hd,
+                                title = stringResource(R.string.player_option_quality),
+                                currentValue = qualitySummary,
+                                onClick = { activeTab = PlayerDialogTab.QUALITY }
+                            )
+                        }
+                        item {
+                            MenuCategoryRow(
+                                icon = Icons.Default.ClosedCaption,
+                                title = stringResource(R.string.player_option_subtitles),
+                                currentValue = activeSubtitleSummary,
+                                onClick = { activeTab = PlayerDialogTab.SUBTITLES }
+                            )
+                        }
+                        item {
+                            MenuCategoryRow(
+                                icon = Icons.Default.Audiotrack,
+                                title = stringResource(R.string.player_option_audio),
+                                currentValue = activeAudioSummary,
+                                onClick = { activeTab = PlayerDialogTab.AUDIO }
+                            )
+                        }
+                        item {
+                            MenuCategoryRow(
+                                icon = Icons.Default.Speed,
+                                title = stringResource(R.string.player_option_speed),
+                                currentValue = "${currentSpeed}x",
+                                onClick = { activeTab = PlayerDialogTab.SPEED }
+                            )
+                        }
+                        item {
+                            MenuCategoryRow(
+                                icon = Icons.Default.AspectRatio,
+                                title = stringResource(R.string.player_option_aspect),
+                                currentValue = aspectSummary,
+                                onClick = { activeTab = PlayerDialogTab.ASPECT_RATIO }
+                            )
+                        }
+                        item {
+                            MenuCategoryRow(
+                                icon = Icons.Default.Repeat,
+                                title = stringResource(R.string.player_option_repeat),
+                                currentValue = repeatSummary,
+                                onClick = { activeTab = PlayerDialogTab.REPEAT }
+                            )
+                        }
+                    }
+                }
+
                 PlayerDialogTab.SUBTITLES -> {
                     LazyColumn(
                         modifier = Modifier
@@ -323,7 +441,127 @@ fun TrackSelectorDialog(
                         }
                     }
                 }
+
+                PlayerDialogTab.ASPECT_RATIO -> {
+                    val aspectOptions = listOf(
+                        Triple(AspectRatioFrameLayout.RESIZE_MODE_FIT, stringResource(R.string.player_aspect_fit), "Original video proportions without cropping"),
+                        Triple(AspectRatioFrameLayout.RESIZE_MODE_ZOOM, stringResource(R.string.player_aspect_zoom), "Fill screen while preserving aspect ratio"),
+                        Triple(AspectRatioFrameLayout.RESIZE_MODE_FILL, stringResource(R.string.player_aspect_stretch), "Stretch video to fill entire screen")
+                    )
+                    LazyColumn(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(max = 320.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        items(aspectOptions) { (mode, title, subtitle) ->
+                            DialogOptionRow(
+                                title = title,
+                                subtitle = subtitle,
+                                isSelected = currentResizeMode == mode,
+                                onClick = {
+                                    onSelectResizeMode(mode)
+                                    onDismiss()
+                                }
+                            )
+                        }
+                    }
+                }
+
+                PlayerDialogTab.REPEAT -> {
+                    val repeatOptions = listOf(
+                        Triple(RepeatMode.OFF, stringResource(R.string.player_repeat_off), "Stop or auto-play next when video ends"),
+                        Triple(RepeatMode.REPEAT_ONE, stringResource(R.string.player_repeat_one), "Loop the current video continuously"),
+                        Triple(RepeatMode.REPEAT_ALL, stringResource(R.string.player_repeat_all), "Advance and loop through the playlist")
+                    )
+                    LazyColumn(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(max = 320.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        items(repeatOptions) { (mode, title, subtitle) ->
+                            DialogOptionRow(
+                                title = title,
+                                subtitle = subtitle,
+                                isSelected = currentRepeatMode == mode,
+                                onClick = {
+                                    onSelectRepeatMode(mode)
+                                    onDismiss()
+                                }
+                            )
+                        }
+                    }
+                }
             }
+        }
+    }
+}
+
+@Composable
+private fun MenuCategoryRow(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    title: String,
+    currentValue: String,
+    onClick: () -> Unit
+) {
+    var isFocused by remember { mutableStateOf(false) }
+    val bgColor = if (isFocused) SmartTubeCardFocusedBg else SmartTubeCardBg
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(10.dp))
+            .background(bgColor)
+            .border(
+                width = if (isFocused) 2.dp else 1.dp,
+                color = if (isFocused) SmartTubeFocusBorder else Color.White.copy(alpha = 0.08f),
+                shape = RoundedCornerShape(10.dp)
+            )
+            .onFocusChanged { isFocused = it.isFocused }
+            .clickable { onClick() }
+            .padding(horizontal = 14.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceBetween
+    ) {
+        Row(
+            modifier = Modifier.weight(1f),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = if (isFocused) SmartTubeRed else SmartTubeTextPrimary,
+                modifier = Modifier.size(18.dp)
+            )
+            Text(
+                text = title,
+                color = SmartTubeTextPrimary,
+                fontSize = 14.sp,
+                fontWeight = if (isFocused) FontWeight.Bold else FontWeight.SemiBold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            Text(
+                text = currentValue,
+                color = SmartTubeTextSecondary,
+                fontSize = 12.sp,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            Icon(
+                imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                contentDescription = null,
+                tint = SmartTubeTextSecondary,
+                modifier = Modifier.size(18.dp)
+            )
         }
     }
 }

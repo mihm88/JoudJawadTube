@@ -42,6 +42,7 @@ import androidx.compose.material.icons.filled.ScreenRotation
 import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material.icons.filled.SkipPrevious
 import androidx.compose.material.icons.filled.Speed
+import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material.icons.filled.Usb
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Slider
@@ -101,8 +102,6 @@ fun SmartTubePlayerHud(
     durationMs: Long,
     seekIntervalSec: Int = 10,
     videoStreamBadge: String?,
-    playbackSpeed: Float,
-    resizeModeLabel: String,
     hasPrevious: Boolean,
     hasNext: Boolean,
     onPlayPauseToggle: () -> Unit,
@@ -110,15 +109,8 @@ fun SmartTubePlayerHud(
     onSeekRelative: (Long) -> Unit,
     onPreviousVideo: () -> Unit,
     onNextVideo: () -> Unit,
-    onOpenSubtitles: () -> Unit,
-    onOpenAudioTracks: () -> Unit,
-    onOpenSpeedDialog: () -> Unit,
-    onCycleResizeMode: () -> Unit,
     onToggleFavorite: () -> Unit,
-    currentQuality: String = "Auto",
-    repeatMode: RepeatMode = RepeatMode.OFF,
-    onOpenQualityDialog: () -> Unit = {},
-    onCycleRepeatMode: () -> Unit = {},
+    onOpenPlayerOptions: () -> Unit = {},
     onToggleOrientation: (() -> Unit)? = null,
     onBack: () -> Unit,
     onUserInteraction: () -> Unit
@@ -225,13 +217,19 @@ fun SmartTubePlayerHud(
                     }
                 }
 
-                // Stream Technical Metadata Badges
+                // Single Actual Stream Resolution Badge + Touch Orientation Toggle
+                val actualResolutionBadge = videoStreamBadge?.takeIf { it.isNotBlank() }
+                    ?: video.resolutionBadge?.takeIf { it.isNotBlank() }
+
                 Row(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    video.resolutionBadge?.let { badge ->
-                        val is4K = badge == "4K" || badge == "2K"
+                    actualResolutionBadge?.let { badge ->
+                        val is4K = badge.startsWith("4K", ignoreCase = true) ||
+                            badge.startsWith("2K", ignoreCase = true) ||
+                            badge.contains("2160") ||
+                            badge.contains("1440")
                         Box(
                             modifier = Modifier
                                 .clip(RoundedCornerShape(6.dp))
@@ -251,26 +249,6 @@ fun SmartTubePlayerHud(
                         }
                     }
 
-                    if (!videoStreamBadge.isNullOrBlank()) {
-                        Box(
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(6.dp))
-                                .background(SmartTubeCardBg)
-                                .padding(horizontal = 8.dp, vertical = 4.dp),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text(
-                                text = videoStreamBadge,
-                                color = SmartTubeTextSecondary,
-                                fontSize = 11.sp,
-                                lineHeight = 14.sp,
-                                fontWeight = FontWeight.SemiBold,
-                                maxLines = 1,
-                                softWrap = false
-                            )
-                        }
-                    }
-
                     if (layoutInfo.isTouchDevice && onToggleOrientation != null) {
                         HudControlPill(
                             icon = Icons.Default.ScreenRotation,
@@ -279,13 +257,6 @@ fun SmartTubePlayerHud(
                             onUserInteraction = onUserInteraction
                         )
                     }
-
-                    HudControlPill(
-                        icon = Icons.Default.Hd,
-                        label = currentQuality,
-                        onClick = onOpenQualityDialog,
-                        onUserInteraction = onUserInteraction
-                    )
                 }
             }
 
@@ -310,7 +281,6 @@ fun SmartTubePlayerHud(
 
                 // Bottom Control Pill Bar
                 if (layoutInfo.isCompact) {
-                    // Mobile / narrow layout: two compact rows or horizontally scrollable
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -320,7 +290,7 @@ fun SmartTubePlayerHud(
                     ) {
                         HudControlPill(
                             icon = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
-                            label = if (isPlaying) "Pause" else "Play",
+                            label = if (isPlaying) stringResource(R.string.player_pause) else stringResource(R.string.player_play),
                             isPrimary = true,
                             onClick = onPlayPauseToggle,
                             onUserInteraction = onUserInteraction,
@@ -336,12 +306,6 @@ fun SmartTubePlayerHud(
                             icon = Icons.Default.Forward10,
                             label = "+${seekIntervalSec}s",
                             onClick = { onSeekRelative(seekStepMs) },
-                            onUserInteraction = onUserInteraction
-                        )
-                        HudControlPill(
-                            icon = Icons.Default.Hd,
-                            label = stringResource(R.string.player_quality, currentQuality),
-                            onClick = onOpenQualityDialog,
                             onUserInteraction = onUserInteraction
                         )
                         if (hasPrevious) {
@@ -361,57 +325,27 @@ fun SmartTubePlayerHud(
                             )
                         }
                         HudControlPill(
-                            icon = Icons.Default.ClosedCaption,
-                            label = stringResource(R.string.player_subtitles, ""),
-                            onClick = onOpenSubtitles,
-                            onUserInteraction = onUserInteraction
-                        )
-                        HudControlPill(
-                            icon = Icons.Default.Audiotrack,
-                            label = stringResource(R.string.player_audio, ""),
-                            onClick = onOpenAudioTracks,
-                            onUserInteraction = onUserInteraction
-                        )
-                        HudControlPill(
-                            icon = Icons.Default.Speed,
-                            label = "${playbackSpeed}x",
-                            onClick = onOpenSpeedDialog,
-                            onUserInteraction = onUserInteraction
-                        )
-                        HudControlPill(
-                            icon = Icons.Default.AspectRatio,
-                            label = resizeModeLabel,
-                            onClick = onCycleResizeMode,
-                            onUserInteraction = onUserInteraction
-                        )
-                        HudControlPill(
                             icon = if (video.isFavorite) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
                             label = if (video.isFavorite) stringResource(R.string.player_favorite_saved) else stringResource(R.string.player_favorite),
                             iconTint = if (video.isFavorite) SmartTubeRed else Color.White,
                             onClick = onToggleFavorite,
                             onUserInteraction = onUserInteraction
                         )
-                        val (repIconNarrow, repLabelNarrow, repActiveNarrow) = when (repeatMode) {
-                            RepeatMode.OFF -> Triple(Icons.Default.Repeat, stringResource(R.string.player_repeat_off), false)
-                            RepeatMode.REPEAT_ONE -> Triple(Icons.Default.RepeatOne, stringResource(R.string.player_repeat_one), true)
-                            RepeatMode.REPEAT_ALL -> Triple(Icons.Default.Repeat, stringResource(R.string.player_repeat_all), true)
-                        }
                         HudControlPill(
-                            icon = repIconNarrow,
-                            label = repLabelNarrow,
-                            iconTint = if (repActiveNarrow) SmartTubeRed else Color.White,
-                            onClick = onCycleRepeatMode,
+                            icon = Icons.Default.Tune,
+                            label = stringResource(R.string.player_options),
+                            onClick = onOpenPlayerOptions,
                             onUserInteraction = onUserInteraction
                         )
                     }
                 } else {
-                    // Standard TV & Tablet wide layout with horizontal scroll safety
+                    // Standard TV & Tablet wide layout
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
                             .horizontalScroll(rememberScrollState()),
                         verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(16.dp)
+                        horizontalArrangement = Arrangement.SpaceBetween
                     ) {
                         // Left cluster: Transport controls
                         Row(
@@ -460,46 +394,13 @@ fun SmartTubePlayerHud(
                             }
                         }
 
-                        // Right cluster: Secondary settings with Quality prominent & first
+                        Spacer(modifier = Modifier.width(12.dp))
+
+                        // Right cluster: Favorite + Unified Options Menu (Quality, Subs, Audio, Speed, Ratio, Repeat)
                         Row(
                             horizontalArrangement = Arrangement.spacedBy(8.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            HudControlPill(
-                                icon = Icons.Default.Hd,
-                                label = stringResource(R.string.player_quality, currentQuality),
-                                onClick = onOpenQualityDialog,
-                                onUserInteraction = onUserInteraction
-                            )
-
-                            HudControlPill(
-                                icon = Icons.Default.ClosedCaption,
-                                label = stringResource(R.string.player_subtitles, ""),
-                                onClick = onOpenSubtitles,
-                                onUserInteraction = onUserInteraction
-                            )
-
-                            HudControlPill(
-                                icon = Icons.Default.Audiotrack,
-                                label = stringResource(R.string.player_audio, ""),
-                                onClick = onOpenAudioTracks,
-                                onUserInteraction = onUserInteraction
-                            )
-
-                            HudControlPill(
-                                icon = Icons.Default.Speed,
-                                label = "${playbackSpeed}x",
-                                onClick = onOpenSpeedDialog,
-                                onUserInteraction = onUserInteraction
-                            )
-
-                            HudControlPill(
-                                icon = Icons.Default.AspectRatio,
-                                label = resizeModeLabel,
-                                onClick = onCycleResizeMode,
-                                onUserInteraction = onUserInteraction
-                            )
-
                             HudControlPill(
                                 icon = if (video.isFavorite) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
                                 label = if (video.isFavorite) stringResource(R.string.player_favorite_saved) else stringResource(R.string.player_favorite),
@@ -508,16 +409,10 @@ fun SmartTubePlayerHud(
                                 onUserInteraction = onUserInteraction
                             )
 
-                            val (repeatIcon, repeatLabel, repeatActive) = when (repeatMode) {
-                                RepeatMode.OFF -> Triple(Icons.Default.Repeat, stringResource(R.string.player_repeat_off), false)
-                                RepeatMode.REPEAT_ONE -> Triple(Icons.Default.RepeatOne, stringResource(R.string.player_repeat_one), true)
-                                RepeatMode.REPEAT_ALL -> Triple(Icons.Default.Repeat, stringResource(R.string.player_repeat_all), true)
-                            }
                             HudControlPill(
-                                icon = repeatIcon,
-                                label = repeatLabel,
-                                iconTint = if (repeatActive) SmartTubeRed else Color.White,
-                                onClick = onCycleRepeatMode,
+                                icon = Icons.Default.Tune,
+                                label = stringResource(R.string.player_options),
+                                onClick = onOpenPlayerOptions,
                                 onUserInteraction = onUserInteraction
                             )
                         }

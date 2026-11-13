@@ -873,8 +873,6 @@ fun PlaybackScreen(
             durationMs = durationMs,
             seekIntervalSec = settings.seekIntervalSec,
             videoStreamBadge = videoStreamBadge,
-            playbackSpeed = playbackSpeed,
-            resizeModeLabel = resizeModeLabel,
             hasPrevious = session.hasPrevious,
             hasNext = session.hasNext,
             onPlayPauseToggle = performTogglePlayPause,
@@ -892,27 +890,8 @@ fun PlaybackScreen(
             onSeekRelative = performRelativeSeek,
             onPreviousVideo = onPreviousVideo,
             onNextVideo = onNextVideo,
-            onOpenSubtitles = { activeDialogTab = PlayerDialogTab.SUBTITLES },
-            onOpenAudioTracks = { activeDialogTab = PlayerDialogTab.AUDIO },
-            onOpenSpeedDialog = { activeDialogTab = PlayerDialogTab.SPEED },
-            onCycleResizeMode = {
-                resizeMode = when (resizeMode) {
-                    AspectRatioFrameLayout.RESIZE_MODE_FIT -> AspectRatioFrameLayout.RESIZE_MODE_ZOOM
-                    AspectRatioFrameLayout.RESIZE_MODE_ZOOM -> AspectRatioFrameLayout.RESIZE_MODE_FILL
-                    else -> AspectRatioFrameLayout.RESIZE_MODE_FIT
-                }
-            },
             onToggleFavorite = onToggleFavorite,
-            currentQuality = effectiveCurrentQuality,
-            repeatMode = currentRepeatMode,
-            onOpenQualityDialog = { activeDialogTab = PlayerDialogTab.QUALITY },
-            onCycleRepeatMode = {
-                currentRepeatMode = when (currentRepeatMode) {
-                    RepeatMode.OFF -> RepeatMode.REPEAT_ONE
-                    RepeatMode.REPEAT_ONE -> RepeatMode.REPEAT_ALL
-                    RepeatMode.REPEAT_ALL -> RepeatMode.OFF
-                }
-            },
+            onOpenPlayerOptions = { activeDialogTab = PlayerDialogTab.MENU },
             onToggleOrientation = {
                 val activity = hostActivity ?: return@SmartTubePlayerHud
                 val currentlyLandscape = configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
@@ -939,7 +918,10 @@ fun PlaybackScreen(
                 initialTab = tab,
                 currentSpeed = playbackSpeed,
                 currentQuality = effectiveCurrentQuality,
+                actualDisplayedQuality = videoStreamBadge,
                 availableQualities = availableQualities,
+                currentResizeMode = resizeMode,
+                currentRepeatMode = currentRepeatMode,
                 onSelectSpeed = { newSpeed ->
                     playbackSpeed = newSpeed
                     exoPlayer.setPlaybackSpeed(newSpeed)
@@ -949,6 +931,8 @@ fun PlaybackScreen(
                     )
                 },
                 onSelectQuality = applyQualitySelection,
+                onSelectResizeMode = { newMode -> resizeMode = newMode },
+                onSelectRepeatMode = { newRepeat -> currentRepeatMode = newRepeat },
                 onDismiss = {
                     activeDialogTab = null
                     interactionSignal.tryEmit(Unit)
