@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -109,7 +110,8 @@ fun TrackSelectorDialog(
     Dialog(onDismissRequest = onDismiss) {
         Column(
             modifier = Modifier
-                .width(560.dp)
+                .fillMaxWidth(0.95f)
+                .widthIn(max = 560.dp)
                 .clip(RoundedCornerShape(16.dp))
                 .background(SmartTubeSidebarBg)
                 .border(1.5.dp, Color.White.copy(alpha = 0.14f), RoundedCornerShape(16.dp))

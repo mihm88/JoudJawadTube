@@ -1,6 +1,11 @@
 package com.joudjawadtube.player.ui.playback
 
 import android.annotation.SuppressLint
+import android.app.Activity
+import android.content.Context
+import android.content.ContextWrapper
+import android.content.pm.ActivityInfo
+import android.content.res.Configuration
 import android.net.Uri
 import android.view.ViewGroup
 import android.webkit.WebChromeClient
@@ -45,6 +50,7 @@ import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -102,6 +108,8 @@ fun PlaybackScreen(
     onBack: () -> Unit
 ) {
     val context = LocalContext.current
+    val configuration = LocalConfiguration.current
+    val hostActivity = remember(context) { context.findActivity() }
     val video = session.currentVideo
     val seekDeltaMs = (settings.seekIntervalSec.coerceAtLeast(5)) * 1000L
 
@@ -518,9 +526,10 @@ fun PlaybackScreen(
         }
     }
 
-    // Release player when leaving PlaybackScreen completely
+    // Release player and restore orientation when leaving PlaybackScreen completely
     DisposableEffect(Unit) {
         onDispose {
+            hostActivity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
             webViewRef?.destroy()
             exoPlayer.release()
         }
@@ -904,6 +913,15 @@ fun PlaybackScreen(
                     RepeatMode.REPEAT_ALL -> RepeatMode.OFF
                 }
             },
+            onToggleOrientation = {
+                val activity = hostActivity ?: return@SmartTubePlayerHud
+                val currentlyLandscape = configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
+                activity.requestedOrientation = if (currentlyLandscape) {
+                    ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+                } else {
+                    ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+                }
+            },
             onBack = {
                 if (!useWebViewYouTubeFallback) {
                     onSaveProgress(video.videoKey, exoPlayer.currentPosition, durationMs)
@@ -978,4 +996,10 @@ private fun buildYouTubeEmbedHtml(videoId: String): String {
         </body>
         </html>
     """.trimIndent()
+}
+
+private tailrec fun Context.findActivity(): Activity? = when (this) {
+    is Activity -> this
+    is ContextWrapper -> baseContext.findActivity()
+    else -> null
 }

@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
@@ -61,6 +62,7 @@ import androidx.compose.ui.window.Dialog
 import com.joudjawadtube.player.data.local.SavedChannelEntity
 import com.joudjawadtube.player.data.local.SavedPlaylistEntity
 import com.joudjawadtube.player.data.local.VideoItem
+import com.joudjawadtube.player.ui.components.LocalWindowLayoutInfo
 import com.joudjawadtube.player.ui.components.VideoCard
 import com.joudjawadtube.player.ui.theme.SmartTubeCardBg
 import com.joudjawadtube.player.ui.theme.SmartTubeCardFocusedBg
@@ -100,20 +102,17 @@ fun ChannelsScreen_Antigravity(
 ) {
     var channelToEditCategory by remember { mutableStateOf<SavedChannelEntity?>(null) }
     var channelToDelete by remember { mutableStateOf<SavedChannelEntity?>(null) }
+    val layoutInfo = LocalWindowLayoutInfo.current
+    val isPhone = layoutInfo.isPhone
+    val isCompact = layoutInfo.isCompact
 
     Column(
         modifier = modifier
             .fillMaxSize()
-            .padding(horizontal = 24.dp)
+            .padding(horizontal = if (isPhone) 4.dp else 24.dp)
     ) {
-        // Channels Header
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(top = 16.dp, bottom = 12.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween
-        ) {
+        @Composable
+        fun ChannelsHeaderTitle() {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(10.dp)
@@ -136,7 +135,7 @@ fun ChannelsScreen_Antigravity(
                     Text(
                         text = "Saved Channels",
                         color = SmartTubeTextPrimary,
-                        fontSize = 20.sp,
+                        fontSize = if (isPhone) 18.sp else 20.sp,
                         fontWeight = FontWeight.Bold
                     )
                     Text(
@@ -146,12 +145,39 @@ fun ChannelsScreen_Antigravity(
                     )
                 }
             }
+        }
 
-            InteractiveActionButton(
-                icon = Icons.Default.AddLink,
-                text = "+ Add Channel",
-                onClick = onAddChannelClick
-            )
+        // Channels Header
+        if (isCompact) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 8.dp, bottom = 10.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                ChannelsHeaderTitle()
+                InteractiveActionButton(
+                    icon = Icons.Default.AddLink,
+                    text = "+ Add Channel",
+                    onClick = onAddChannelClick
+                )
+            }
+        } else {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = if (isPhone) 8.dp else 16.dp, bottom = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                ChannelsHeaderTitle()
+
+                InteractiveActionButton(
+                    icon = Icons.Default.AddLink,
+                    text = "+ Add Channel",
+                    onClick = onAddChannelClick
+                )
+            }
         }
 
         if (channels.isEmpty()) {
@@ -268,22 +294,22 @@ private fun ChannelCardSection(
             .border(1.dp, Color.White.copy(alpha = 0.08f), RoundedCornerShape(12.dp))
             .padding(14.dp)
     ) {
-        // Channel Bar
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween
-        ) {
+        val layoutInfo = LocalWindowLayoutInfo.current
+        val isCompact = layoutInfo.isCompact
+        val cardWidth = if (layoutInfo.isPhone) 172.dp else 200.dp
+
+        @Composable
+        fun ChannelMetaRow(metaModifier: Modifier = Modifier) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
-                modifier = Modifier.weight(1f)
+                modifier = metaModifier
             ) {
                 // Channel Initial Avatar
                 val initialLetter = channel.title.take(1).uppercase()
                 Box(
                     modifier = Modifier
-                        .size(44.dp)
+                        .size(if (isCompact) 38.dp else 44.dp)
                         .clip(CircleShape)
                         .background(SmartTubeRed),
                     contentAlignment = Alignment.Center
@@ -291,12 +317,12 @@ private fun ChannelCardSection(
                     Text(
                         text = initialLetter.ifBlank { "C" },
                         color = Color.White,
-                        fontSize = 18.sp,
+                        fontSize = if (isCompact) 16.sp else 18.sp,
                         fontWeight = FontWeight.Bold
                     )
                 }
 
-                Column {
+                Column(modifier = Modifier.weight(1f)) {
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -307,7 +333,8 @@ private fun ChannelCardSection(
                             fontSize = 16.sp,
                             fontWeight = FontWeight.Bold,
                             maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f, fill = false)
                         )
 
                         // Category Pill with Edit trigger
@@ -324,7 +351,8 @@ private fun ChannelCardSection(
                                 text = channel.category,
                                 color = SmartTubeGold4K,
                                 fontSize = 11.sp,
-                                fontWeight = FontWeight.SemiBold
+                                fontWeight = FontWeight.SemiBold,
+                                maxLines = 1
                             )
                             Icon(
                                 imageVector = Icons.Default.Edit,
@@ -338,12 +366,16 @@ private fun ChannelCardSection(
                     Text(
                         text = "${if (channel.handle.isNotBlank()) "${channel.handle} • " else ""}${videos.size} videos available",
                         color = SmartTubeTextSecondary,
-                        fontSize = 12.sp
+                        fontSize = 12.sp,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
                     )
                 }
             }
+        }
 
-            // Actions: Play All + Delete
+        @Composable
+        fun ChannelActionsRow() {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 if (videos.isNotEmpty()) {
                     InteractiveActionButton(
@@ -362,6 +394,26 @@ private fun ChannelCardSection(
             }
         }
 
+        // Channel Bar
+        if (isCompact) {
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                ChannelMetaRow(metaModifier = Modifier.fillMaxWidth())
+                ChannelActionsRow()
+            }
+        } else {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                ChannelMetaRow(metaModifier = Modifier.weight(1f))
+                ChannelActionsRow()
+            }
+        }
+
         // Horizontal Videos Carousel
         if (videos.isNotEmpty()) {
             Spacer(modifier = Modifier.height(10.dp))
@@ -376,7 +428,7 @@ private fun ChannelCardSection(
                         onClick = { onVideoClick(item) },
                         onOpenOptions = { onOpenVideoOptions(item) },
                         onToggleFavorite = { onToggleFavorite(item) },
-                        modifier = Modifier.width(200.dp)
+                        modifier = Modifier.width(cardWidth)
                     )
                 }
             }
@@ -413,19 +465,17 @@ fun PlaylistsScreen_Antigravity(
         }
     }
 
+    val layoutInfo = LocalWindowLayoutInfo.current
+    val isPhone = layoutInfo.isPhone
+    val isCompact = layoutInfo.isCompact
+
     Column(
         modifier = modifier
             .fillMaxSize()
-            .padding(horizontal = 24.dp)
+            .padding(horizontal = if (isPhone) 4.dp else 24.dp)
     ) {
-        // Top Header
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(top = 16.dp, bottom = 10.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween
-        ) {
+        @Composable
+        fun PlaylistsHeaderTitle() {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(10.dp)
@@ -448,7 +498,7 @@ fun PlaylistsScreen_Antigravity(
                     Text(
                         text = "Saved Playlists",
                         color = SmartTubeTextPrimary,
-                        fontSize = 20.sp,
+                        fontSize = if (isPhone) 18.sp else 20.sp,
                         fontWeight = FontWeight.Bold
                     )
                     Text(
@@ -458,18 +508,46 @@ fun PlaylistsScreen_Antigravity(
                     )
                 }
             }
+        }
 
-            InteractiveActionButton(
-                icon = Icons.Default.AddLink,
-                text = "+ Add Playlist",
-                onClick = onAddPlaylistClick
-            )
+        // Top Header
+        if (isCompact) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 8.dp, bottom = 10.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                PlaylistsHeaderTitle()
+                InteractiveActionButton(
+                    icon = Icons.Default.AddLink,
+                    text = "+ Add Playlist",
+                    onClick = onAddPlaylistClick
+                )
+            }
+        } else {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = if (isPhone) 8.dp else 16.dp, bottom = 10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                PlaylistsHeaderTitle()
+
+                InteractiveActionButton(
+                    icon = Icons.Default.AddLink,
+                    text = "+ Add Playlist",
+                    onClick = onAddPlaylistClick
+                )
+            }
         }
 
         // Filter Chips (All / Manual / Channel Uploads)
         Row(
             modifier = Modifier
                 .fillMaxWidth()
+                .horizontalScroll(rememberScrollState())
                 .padding(bottom = 12.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
@@ -593,134 +671,158 @@ private fun PlaylistCardSection(
             .border(1.dp, Color.White.copy(alpha = 0.08f), RoundedCornerShape(12.dp))
             .padding(14.dp)
     ) {
-        // Header
+        val layoutInfo = LocalWindowLayoutInfo.current
+    val isCompact = layoutInfo.isCompact
+    val cardWidth = if (layoutInfo.isPhone) 172.dp else 200.dp
+
+    @Composable
+    fun PlaylistMetaRow(metaModifier: Modifier = Modifier) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            modifier = metaModifier
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(36.dp)
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(SmartTubeUsbCyan.copy(alpha = 0.15f)),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = Icons.Default.PlaylistPlay,
+                    contentDescription = null,
+                    tint = SmartTubeUsbCyan,
+                    modifier = Modifier.size(20.dp)
+                )
+            }
+
+            Column(modifier = Modifier.weight(1f)) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Text(
+                        text = playlist.title,
+                        color = SmartTubeTextPrimary,
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.Bold,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f, fill = false)
+                    )
+
+                    // Badge: Manual vs Auto Channel
+                    val sourceBadgeText = if (playlist.isAutoCreatedFromChannel) "Channel" else "Manual"
+                    val sourceBadgeColor = if (playlist.isAutoCreatedFromChannel) SmartTubeRed else SmartTubeUsbCyan
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(4.dp))
+                            .background(sourceBadgeColor.copy(alpha = 0.16f))
+                            .padding(horizontal = 6.dp, vertical = 2.dp)
+                    ) {
+                        Text(
+                            text = sourceBadgeText,
+                            color = sourceBadgeColor,
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold,
+                            maxLines = 1
+                        )
+                    }
+
+                    // Category Pill with Edit trigger
+                    Row(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(4.dp))
+                            .background(SmartTubeGold4K.copy(alpha = 0.16f))
+                            .clickable { onEditCategory() }
+                            .padding(horizontal = 6.dp, vertical = 2.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(3.dp)
+                    ) {
+                        Text(
+                            text = playlist.category,
+                            color = SmartTubeGold4K,
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            maxLines = 1
+                        )
+                        Icon(
+                            imageVector = Icons.Default.Edit,
+                            contentDescription = "Edit category",
+                            tint = SmartTubeGold4K,
+                            modifier = Modifier.size(9.dp)
+                        )
+                    }
+                }
+
+                Text(
+                    text = "${videos.size} videos in playlist",
+                    color = SmartTubeTextSecondary,
+                    fontSize = 12.sp
+                )
+            }
+        }
+    }
+
+    @Composable
+    fun PlaylistActionsRow() {
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            if (videos.isNotEmpty()) {
+                InteractiveActionButton(
+                    icon = Icons.Default.PlayArrow,
+                    text = "Play All",
+                    onClick = onPlayAll,
+                    isPrimary = true
+                )
+            }
+            InteractiveActionButton(
+                icon = Icons.Default.Delete,
+                text = "Delete",
+                onClick = onDelete,
+                tint = SmartTubeTextSecondary
+            )
+        }
+    }
+
+    if (isCompact) {
+        Column(
+            modifier = Modifier.fillMaxWidth(),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            PlaylistMetaRow(metaModifier = Modifier.fillMaxWidth())
+            PlaylistActionsRow()
+        }
+    } else {
         Row(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(10.dp),
-                modifier = Modifier.weight(1f)
-            ) {
-                Box(
-                    modifier = Modifier
-                        .size(36.dp)
-                        .clip(RoundedCornerShape(8.dp))
-                        .background(SmartTubeUsbCyan.copy(alpha = 0.15f)),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.PlaylistPlay,
-                        contentDescription = null,
-                        tint = SmartTubeUsbCyan,
-                        modifier = Modifier.size(20.dp)
-                    )
-                }
+            PlaylistMetaRow(metaModifier = Modifier.weight(1f))
+            PlaylistActionsRow()
+        }
+    }
 
-                Column {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        Text(
-                            text = playlist.title,
-                            color = SmartTubeTextPrimary,
-                            fontSize = 15.sp,
-                            fontWeight = FontWeight.Bold,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-
-                        // Badge: Manual vs Auto Channel
-                        val sourceBadgeText = if (playlist.isAutoCreatedFromChannel) "Channel" else "Manual"
-                        val sourceBadgeColor = if (playlist.isAutoCreatedFromChannel) SmartTubeRed else SmartTubeUsbCyan
-                        Box(
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(4.dp))
-                                .background(sourceBadgeColor.copy(alpha = 0.16f))
-                                .padding(horizontal = 6.dp, vertical = 2.dp)
-                        ) {
-                            Text(
-                                text = sourceBadgeText,
-                                color = sourceBadgeColor,
-                                fontSize = 10.sp,
-                                fontWeight = FontWeight.Bold
-                            )
-                        }
-
-                        // Category Pill with Edit trigger
-                        Row(
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(4.dp))
-                                .background(SmartTubeGold4K.copy(alpha = 0.16f))
-                                .clickable { onEditCategory() }
-                                .padding(horizontal = 6.dp, vertical = 2.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(3.dp)
-                        ) {
-                            Text(
-                                text = playlist.category,
-                                color = SmartTubeGold4K,
-                                fontSize = 10.sp,
-                                fontWeight = FontWeight.SemiBold
-                            )
-                            Icon(
-                                imageVector = Icons.Default.Edit,
-                                contentDescription = "Edit category",
-                                tint = SmartTubeGold4K,
-                                modifier = Modifier.size(9.dp)
-                            )
-                        }
-                    }
-
-                    Text(
-                        text = "${videos.size} videos in playlist",
-                        color = SmartTubeTextSecondary,
-                        fontSize = 12.sp
-                    )
-                }
-            }
-
-            // Actions: Play All + Delete
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                if (videos.isNotEmpty()) {
-                    InteractiveActionButton(
-                        icon = Icons.Default.PlayArrow,
-                        text = "Play All",
-                        onClick = onPlayAll,
-                        isPrimary = true
-                    )
-                }
-                InteractiveActionButton(
-                    icon = Icons.Default.Delete,
-                    text = "Delete",
-                    onClick = onDelete,
-                    tint = SmartTubeTextSecondary
+    // Horizontal Videos Carousel
+    if (videos.isNotEmpty()) {
+        Spacer(modifier = Modifier.height(10.dp))
+        LazyRow(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            contentPadding = PaddingValues(horizontal = 2.dp)
+        ) {
+            items(videos, key = { it.id }) { item ->
+                VideoCard(
+                    video = item,
+                    onClick = { onVideoClick(item) },
+                    onOpenOptions = { onOpenVideoOptions(item) },
+                    onToggleFavorite = { onToggleFavorite(item) },
+                    modifier = Modifier.width(cardWidth)
                 )
             }
         }
-
-        // Horizontal Videos Carousel
-        if (videos.isNotEmpty()) {
-            Spacer(modifier = Modifier.height(10.dp))
-            LazyRow(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(10.dp),
-                contentPadding = PaddingValues(horizontal = 2.dp)
-            ) {
-                items(videos, key = { it.id }) { item ->
-                    VideoCard(
-                        video = item,
-                        onClick = { onVideoClick(item) },
-                        onOpenOptions = { onOpenVideoOptions(item) },
-                        onToggleFavorite = { onToggleFavorite(item) },
-                        modifier = Modifier.width(200.dp)
-                    )
-                }
-            }
-        }
+    }
     }
 }
 
@@ -750,11 +852,12 @@ fun CategoriesScreen_Antigravity(
     }
 
     var selectedCategory by remember { mutableStateOf("All") }
+    val isPhone = LocalWindowLayoutInfo.current.isPhone
 
     Column(
         modifier = modifier
             .fillMaxSize()
-            .padding(horizontal = 24.dp)
+            .padding(horizontal = if (isPhone) 4.dp else 24.dp)
     ) {
         // Top Header
         Row(
@@ -1067,7 +1170,8 @@ fun ChangeCategoryDialog_Antigravity(
     Dialog(onDismissRequest = onDismiss) {
         Column(
             modifier = Modifier
-                .width(440.dp)
+                .fillMaxWidth(0.94f)
+                .widthIn(max = 440.dp)
                 .clip(RoundedCornerShape(16.dp))
                 .background(SmartTubeSidebarBg)
                 .border(1.5.dp, Color.White.copy(alpha = 0.12f), RoundedCornerShape(16.dp))
@@ -1223,7 +1327,8 @@ private fun DeleteConfirmDialog(
     Dialog(onDismissRequest = onDismiss) {
         Column(
             modifier = Modifier
-                .width(400.dp)
+                .fillMaxWidth(0.92f)
+                .widthIn(max = 400.dp)
                 .clip(RoundedCornerShape(16.dp))
                 .background(SmartTubeSidebarBg)
                 .border(1.5.dp, SmartTubeRed.copy(alpha = 0.3f), RoundedCornerShape(16.dp))
@@ -1364,11 +1469,12 @@ fun InAppSearchResultsView_Antigravity(
     modifier: Modifier = Modifier
 ) {
     val totalMatches = matchingChannels.size + matchingPlaylists.size + matchingVideos.size
+    val layoutInfo = LocalWindowLayoutInfo.current
 
     Column(
         modifier = modifier
             .fillMaxSize()
-            .padding(horizontal = 24.dp)
+            .padding(horizontal = if (layoutInfo.isPhone) 4.dp else 24.dp)
     ) {
         Row(
             modifier = Modifier
@@ -1495,7 +1601,12 @@ fun InAppSearchResultsView_Antigravity(
                             modifier = Modifier.padding(bottom = 8.dp)
                         )
                     }
-                    items(matchingVideos.chunked(3)) { chunk ->
+                    val gridColumns = when {
+                        layoutInfo.isCompact -> 1
+                        layoutInfo.isMedium -> 2
+                        else -> 3
+                    }
+                    items(matchingVideos.chunked(gridColumns)) { chunk ->
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.spacedBy(12.dp)
@@ -1506,10 +1617,10 @@ fun InAppSearchResultsView_Antigravity(
                                     onClick = { onVideoClick(video, matchingVideos) },
                                     onOpenOptions = { onOpenVideoOptions(video) },
                                     onToggleFavorite = { onToggleFavorite(video) },
-                                    modifier = Modifier.width(220.dp)
+                                    modifier = Modifier.weight(1f)
                                 )
                             }
-                            repeat(3 - chunk.size) {
+                            repeat(gridColumns - chunk.size) {
                                 Spacer(modifier = Modifier.weight(1f))
                             }
                         }

@@ -34,9 +34,10 @@ enum class ResumeMode(val label: String) {
 }
 
 enum class UiModePreference(val label: String) {
-    AUTO("Auto Detect (TV / Tablet)"),
+    AUTO("Auto Detect (TV / Tablet / Phone)"),
     FORCE_TV("Android TV 10-Foot UI"),
-    FORCE_TABLET("Tablet Touch UI")
+    FORCE_TABLET("Tablet Touch UI"),
+    FORCE_PHONE("Phone Touch UI")
 }
 
 enum class UiFontScale(val label: String, val scaleFactor: Float) {

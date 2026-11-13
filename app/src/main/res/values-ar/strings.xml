@@ -101,6 +101,7 @@
     <string name="player_speed">السرعة: %.2fx</string>
     <string name="player_hw_accel">تسريع عتادي HEVC</string>
     <string name="player_now_playing">قيد التشغيل الآن</string>
+    <string name="player_rotate">تدوير</string>
 
     <!-- Settings: Appearance & Language -->
     <string name="settings_section_appearance">المظهر واللغة</string>
@@ -131,9 +132,10 @@
     <!-- Settings: UI & Layout -->
     <string name="settings_section_ui">الواجهة وتصميم العرض</string>
     <string name="settings_ui_mode">نمط واجهة الشاشة</string>
-    <string name="settings_ui_mode_auto">اكتشاف تلقائي (TV / تابلت)</string>
+    <string name="settings_ui_mode_auto">اكتشاف تلقائي (TV / تابلت / هاتف)</string>
     <string name="settings_ui_mode_tv">واجهة أندرويد TV للشاشات الكبيرة</string>
     <string name="settings_ui_mode_tablet">واجهة تابلت للمس</string>
+    <string name="settings_ui_mode_phone">واجهة الهاتف للمس</string>
     <string name="settings_font_scale">حجم الخط</string>
     <string name="settings_font_scale_compact">مضغوط (92%)</string>
     <string name="settings_font_scale_normal">طبيعي (100%)</string>

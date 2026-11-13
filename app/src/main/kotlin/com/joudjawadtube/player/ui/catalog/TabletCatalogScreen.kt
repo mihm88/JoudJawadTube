@@ -35,6 +35,7 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AddLink
 import androidx.compose.material.icons.filled.Clear
+import androidx.compose.material.icons.filled.CreateNewFolder
 import androidx.compose.material.icons.filled.GridView
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
@@ -69,6 +70,7 @@ import com.joudjawadtube.player.data.local.VideoItem
 import com.joudjawadtube.player.data.repository.KidsChannelItem
 import com.joudjawadtube.player.data.settings.AppSettingsState
 import com.joudjawadtube.player.ui.components.CompactBottomNav_Antigravity
+import com.joudjawadtube.player.ui.components.LocalWindowLayoutInfo
 import com.joudjawadtube.player.ui.components.PermissionBanner
 import com.joudjawadtube.player.ui.components.SidebarSection
 import com.joudjawadtube.player.ui.components.SmartTubeSidebar
@@ -125,7 +127,9 @@ fun TabletCatalogScreen(
             .fillMaxSize()
             .background(SmartTubeBackground)
     ) {
+        val layoutInfo = LocalWindowLayoutInfo.current
         val isCompactWidth = maxWidth < 600.dp
+        val isPhone = layoutInfo.isPhone
         val isWideTablet = maxWidth >= 960.dp
         var searchFocused by remember { mutableStateOf(false) }
         val searchFocusRequester = remember { FocusRequester() }
@@ -153,24 +157,24 @@ fun TabletCatalogScreen(
                     modifier = Modifier
                         .weight(1f)
                         .fillMaxSize()
-                        .padding(horizontal = if (isCompactWidth) 12.dp else 20.dp, vertical = 14.dp)
+                        .padding(
+                            horizontal = when {
+                                isCompactWidth -> 12.dp
+                                isPhone -> 14.dp
+                                else -> 20.dp
+                            },
+                            vertical = if (isPhone) 10.dp else 14.dp
+                        )
                 ) {
                     val categoryList = remember(uiState.snapshot.savedChannels, uiState.snapshot.savedPlaylists) {
                         val found = (uiState.snapshot.savedChannels.map { it.category } + uiState.snapshot.savedPlaylists.map { it.category }).filter { it.isNotBlank() }.toSet()
                         listOf("All") + (STANDARD_CATEGORIES_ANTIGRAVITY + found).distinct()
                     }
 
-                    // Top Bar
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        // Focus-Safe Search Input
+                    @Composable
+                    fun SearchInputField(modifier: Modifier = Modifier) {
                         Row(
-                            modifier = Modifier
-                                .weight(if (isCompactWidth) 1f else 0.45f)
-                                .height(40.dp),
+                            modifier = modifier.height(if (isCompactWidth) 38.dp else 40.dp),
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(6.dp)
                         ) {
@@ -200,7 +204,7 @@ fun TabletCatalogScreen(
                                                 color = if (searchFocused) SmartTubeRed else Color.White.copy(alpha = 0.08f),
                                                 shape = RoundedCornerShape(20.dp)
                                             )
-                                            .padding(horizontal = 14.dp),
+                                            .padding(horizontal = 12.dp),
                                         verticalAlignment = Alignment.CenterVertically
                                     ) {
                                         Icon(
@@ -237,14 +241,12 @@ fun TabletCatalogScreen(
                                 )
                             }
                         }
+                    }
 
-                        Spacer(modifier = Modifier.width(10.dp))
-
-                        // Category Navigation Pills (Replaces old top-bar buttons!)
+                    @Composable
+                    fun CategoryChipsRow(modifier: Modifier = Modifier, includeGridToggle: Boolean = true) {
                         Row(
-                            modifier = Modifier
-                                .weight(if (isCompactWidth) 0.5f else 0.55f)
-                                .horizontalScroll(rememberScrollState()),
+                            modifier = modifier.horizontalScroll(rememberScrollState()),
                             horizontalArrangement = Arrangement.spacedBy(8.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
@@ -266,11 +268,89 @@ fun TabletCatalogScreen(
                                 )
                             }
 
-                            HeaderInteractivePill(
-                                icon = if (uiState.tabletUseGridMode) Icons.Default.ViewAgenda else Icons.Default.GridView,
-                                text = if (uiState.tabletUseGridMode) "Rows" else "Grid",
-                                onClick = onToggleTabletGridMode
-                            )
+                            if (includeGridToggle) {
+                                HeaderInteractivePill(
+                                    icon = if (uiState.tabletUseGridMode) Icons.Default.ViewAgenda else Icons.Default.GridView,
+                                    text = if (uiState.tabletUseGridMode) "Rows" else "Grid",
+                                    onClick = onToggleTabletGridMode
+                                )
+                            }
+                        }
+                    }
+
+                    // Top Bar: stacked 2-row compact layout on portrait phones, single-row on landscape/tablet
+                    if (isCompactWidth) {
+                        Column(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                SearchInputField(modifier = Modifier.weight(1f))
+
+                                Box(
+                                    modifier = Modifier
+                                        .size(38.dp)
+                                        .clip(RoundedCornerShape(19.dp))
+                                        .background(SmartTubeCardBg)
+                                        .border(1.dp, Color.White.copy(alpha = 0.08f), RoundedCornerShape(19.dp))
+                                        .clickable { onOpenAddYouTubeDialog() },
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.AddLink,
+                                        contentDescription = "Add YouTube",
+                                        tint = SmartTubeRed,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                }
+
+                                Box(
+                                    modifier = Modifier
+                                        .size(38.dp)
+                                        .clip(RoundedCornerShape(19.dp))
+                                        .background(SmartTubeCardBg)
+                                        .border(1.dp, Color.White.copy(alpha = 0.08f), RoundedCornerShape(19.dp))
+                                        .clickable { onPickSafFolder() },
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.CreateNewFolder,
+                                        contentDescription = stringResource(R.string.action_add_folder),
+                                        tint = SmartTubeUsbCyan,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                }
+                            }
+
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                HeaderInteractivePill(
+                                    icon = if (uiState.tabletUseGridMode) Icons.Default.ViewAgenda else Icons.Default.GridView,
+                                    text = if (uiState.tabletUseGridMode) "Rows" else "Grid",
+                                    onClick = onToggleTabletGridMode
+                                )
+                                CategoryChipsRow(
+                                    modifier = Modifier.weight(1f),
+                                    includeGridToggle = false
+                                )
+                            }
+                        }
+                    } else {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            SearchInputField(modifier = Modifier.weight(0.45f))
+                            Spacer(modifier = Modifier.width(10.dp))
+                            CategoryChipsRow(modifier = Modifier.weight(0.55f), includeGridToggle = true)
                         }
                     }
 
@@ -409,10 +489,16 @@ fun TabletCatalogScreen(
                         } else if (uiState.tabletUseGridMode) {
                             LazyVerticalGrid(
                                 state = lazyGridState,
-                                columns = GridCells.Adaptive(minSize = if (isCompactWidth) 160.dp else 244.dp),
+                                columns = GridCells.Adaptive(
+                                    minSize = when {
+                                        isCompactWidth -> 156.dp
+                                        isPhone -> 184.dp
+                                        else -> 244.dp
+                                    }
+                                ),
                                 modifier = Modifier.fillMaxSize(),
-                                horizontalArrangement = Arrangement.spacedBy(14.dp),
-                                verticalArrangement = Arrangement.spacedBy(16.dp),
+                                horizontalArrangement = Arrangement.spacedBy(if (isCompactWidth) 10.dp else 14.dp),
+                                verticalArrangement = Arrangement.spacedBy(if (isCompactWidth) 12.dp else 16.dp),
                                 contentPadding = PaddingValues(bottom = 32.dp)
                             ) {
                                 items(
@@ -463,6 +549,9 @@ fun TabletCatalogScreen(
             if (isCompactWidth) {
                 CompactBottomNav_Antigravity(
                     selectedSection = uiState.selectedSection,
+                    channelsCount = uiState.snapshot.savedChannels.size,
+                    playlistsCount = uiState.snapshot.savedPlaylists.size,
+                    usbDriveCount = uiState.usbDriveCount,
                     onSelectSection = onSelectSection
                 )
             }

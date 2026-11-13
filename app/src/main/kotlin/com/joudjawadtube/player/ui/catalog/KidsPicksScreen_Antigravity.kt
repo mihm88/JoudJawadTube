@@ -3,6 +3,7 @@ package com.joudjawadtube.player.ui.catalog
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -18,6 +19,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -49,6 +51,7 @@ import com.joudjawadtube.player.data.repository.KidsCatalogRepository_Antigravit
 import com.joudjawadtube.player.data.repository.KidsChannelItem
 import com.joudjawadtube.player.data.repository.KidsPlaylistItem
 import com.joudjawadtube.player.data.settings.AppLanguage
+import com.joudjawadtube.player.ui.components.LocalWindowLayoutInfo
 import com.joudjawadtube.player.ui.theme.SmartTubeCardBg
 import com.joudjawadtube.player.ui.theme.SmartTubeCardFocusedBg
 import com.joudjawadtube.player.ui.theme.SmartTubeFocusBorder
@@ -85,26 +88,24 @@ fun KidsPicksScreen_Antigravity(
         }
     }
 
+    val layoutInfo = LocalWindowLayoutInfo.current
+    val isCompact = layoutInfo.isCompact
+    val isPhone = layoutInfo.isPhone
+
     Column(
         modifier = modifier
             .fillMaxSize()
-            .padding(horizontal = 24.dp)
+            .padding(horizontal = if (isPhone) 4.dp else 24.dp)
     ) {
-        // Top Header
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(top = 16.dp, bottom = 12.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween
-        ) {
+        @Composable
+        fun HeaderTitleBlock() {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 Box(
                     modifier = Modifier
-                        .size(36.dp)
+                        .size(if (isPhone) 32.dp else 36.dp)
                         .clip(CircleShape)
                         .background(SmartTubeGold4K.copy(alpha = 0.2f)),
                     contentAlignment = Alignment.Center
@@ -113,15 +114,17 @@ fun KidsPicksScreen_Antigravity(
                         imageVector = Icons.Default.Star,
                         contentDescription = "Kids Picks",
                         tint = SmartTubeGold4K,
-                        modifier = Modifier.size(20.dp)
+                        modifier = Modifier.size(if (isPhone) 18.dp else 20.dp)
                     )
                 }
                 Column {
                     Text(
                         text = if (isArabicUi) "قنوات الأطفال المدمجة" else "Kids Picks (Built-In Channels)",
                         color = SmartTubeTextPrimary,
-                        fontSize = 18.sp,
-                        fontWeight = FontWeight.ExtraBold
+                        fontSize = if (isPhone) 16.sp else 18.sp,
+                        fontWeight = FontWeight.ExtraBold,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
                     )
                     Text(
                         text = if (isArabicUi) {
@@ -130,13 +133,20 @@ fun KidsPicksScreen_Antigravity(
                             "${channels.size} Built-in Educational Channels (Arabic & English)"
                         },
                         color = SmartTubeTextSecondary,
-                        fontSize = 12.sp
+                        fontSize = 12.sp,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis
                     )
                 }
             }
+        }
 
-            // Language Filter Chips
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        @Composable
+        fun LangFilterChipsRow(rowModifier: Modifier = Modifier) {
+            Row(
+                modifier = rowModifier.horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
                 LangFilterChip(
                     label = if (isArabicUi) "الكل (${channels.size})" else "All (${channels.size})",
                     isSelected = selectedLangFilter == "all",
@@ -152,6 +162,30 @@ fun KidsPicksScreen_Antigravity(
                     isSelected = selectedLangFilter == "en",
                     onClick = { selectedLangFilter = "en" }
                 )
+            }
+        }
+
+        // Top Header
+        if (isCompact) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 8.dp, bottom = 10.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                HeaderTitleBlock()
+                LangFilterChipsRow(rowModifier = Modifier.fillMaxWidth())
+            }
+        } else {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = if (isPhone) 8.dp else 16.dp, bottom = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                HeaderTitleBlock()
+                LangFilterChipsRow()
             }
         }
 
@@ -190,15 +224,12 @@ private fun KidsChannelRowSection(
     onAddChannelToLibrary: () -> Unit,
     onRemoveChannelFromLibrary: () -> Unit
 ) {
+    val isCompact = LocalWindowLayoutInfo.current.isCompact
+
     Column(modifier = Modifier.fillMaxWidth()) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(bottom = 8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween
-        ) {
-            Column(modifier = Modifier.weight(1f).padding(end = 12.dp)) {
+        @Composable
+        fun ChannelMetaBlock(metaModifier: Modifier = Modifier) {
+            Column(modifier = metaModifier) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -207,7 +238,10 @@ private fun KidsChannelRowSection(
                         text = channel.channelName,
                         color = SmartTubeTextPrimary,
                         fontSize = 15.sp,
-                        fontWeight = FontWeight.Bold
+                        fontWeight = FontWeight.Bold,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f, fill = false)
                     )
                     Box(
                         modifier = Modifier
@@ -223,7 +257,7 @@ private fun KidsChannelRowSection(
                         )
                     }
                     val displayCat = channel.localizedCategory.ifBlank { channel.category }
-                    if (displayCat.isNotBlank()) {
+                    if (displayCat.isNotBlank() && !isCompact) {
                         Text(
                             text = if (channel.ageRange.isNotBlank()) "$displayCat • ${channel.ageRange}" else displayCat,
                             color = SmartTubeTextSecondary,
@@ -245,7 +279,10 @@ private fun KidsChannelRowSection(
                     )
                 }
             }
+        }
 
+        @Composable
+        fun LibraryToggleButton() {
             if (isChannelSaved) {
                 Button(
                     onClick = onRemoveChannelFromLibrary,
@@ -295,6 +332,29 @@ private fun KidsChannelRowSection(
             }
         }
 
+        if (isCompact) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                ChannelMetaBlock(metaModifier = Modifier.fillMaxWidth())
+                LibraryToggleButton()
+            }
+        } else {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                ChannelMetaBlock(metaModifier = Modifier.weight(1f).padding(end = 12.dp))
+                LibraryToggleButton()
+            }
+        }
+
         LazyRow(
             horizontalArrangement = Arrangement.spacedBy(14.dp),
             contentPadding = PaddingValues(horizontal = 2.dp, vertical = 4.dp)
@@ -327,10 +387,11 @@ private fun KidsPlaylistCard(
     onSave: () -> Unit
 ) {
     var isFocused by remember { mutableStateOf(false) }
+    val cardWidth = if (LocalWindowLayoutInfo.current.isPhone) 185.dp else 230.dp
 
     Column(
         modifier = Modifier
-            .width(230.dp)
+            .width(cardWidth)
             .clip(RoundedCornerShape(12.dp))
             .background(if (isFocused) SmartTubeCardFocusedBg else SmartTubeCardBg)
             .border(

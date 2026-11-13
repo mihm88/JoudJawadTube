@@ -6,6 +6,7 @@ import com.joudjawadtube.player.data.updater.UpdateState_Antigravity
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -19,6 +20,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AddLink
@@ -81,6 +83,8 @@ import com.joudjawadtube.player.data.settings.UiModePreference
 import com.joudjawadtube.player.data.thumbnail.ThumbnailManager
 import com.joudjawadtube.player.ui.components.ActionPillButton
 import com.joudjawadtube.player.ui.components.ConfirmDestructiveDialog_Antigravity
+import com.joudjawadtube.player.ui.components.DeviceFormFactor
+import com.joudjawadtube.player.ui.components.LocalWindowLayoutInfo
 import com.joudjawadtube.player.ui.theme.SmartTubeCardBg
 import com.joudjawadtube.player.ui.theme.SmartTubeCardFocusedBg
 import com.joudjawadtube.player.ui.theme.SmartTubeFocusBorder
@@ -126,6 +130,13 @@ fun SettingsScreen(
     onDismissUpdateStatus: () -> Unit = {}
 ) {
     val context = LocalContext.current
+    val layoutInfo = LocalWindowLayoutInfo.current
+    val isCompact = layoutInfo.isCompact
+    val detectedModeLabel = when (layoutInfo.detectedFormFactor) {
+        DeviceFormFactor.TV -> "Android TV"
+        DeviceFormFactor.TABLET -> "Tablet"
+        DeviceFormFactor.PHONE -> "Phone"
+    }
     var pendingDestructiveAction by remember { mutableStateOf<DestructiveAction?>(null) }
     var cacheSizeBytes by remember(isGeneratingThumbnails, thumbnailStatusMessage) {
         mutableLongStateOf(ThumbnailManager.getCacheSizeBytes(context))
@@ -144,17 +155,17 @@ fun SettingsScreen(
     ) {
         // Header Banner
         item(key = "settings_header") {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(14.dp))
-                    .background(SmartTubeCardBg)
-                    .border(1.dp, Color.White.copy(alpha = 0.08f), RoundedCornerShape(14.dp))
-                    .padding(18.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
+            val bannerModifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(14.dp))
+                .background(SmartTubeCardBg)
+                .border(1.dp, Color.White.copy(alpha = 0.08f), RoundedCornerShape(14.dp))
+                .padding(if (isCompact) 14.dp else 18.dp)
+
+            @Composable
+            fun HeaderTitleGroup(rowModifier: Modifier = Modifier) {
                 Row(
+                    modifier = rowModifier,
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
@@ -176,7 +187,7 @@ fun SettingsScreen(
                         Text(
                             text = "Settings & Full Control",
                             color = SmartTubeTextPrimary,
-                            fontSize = 19.sp,
+                            fontSize = if (isCompact) 17.sp else 19.sp,
                             lineHeight = 23.sp,
                             fontWeight = FontWeight.ExtraBold
                         )
@@ -188,8 +199,14 @@ fun SettingsScreen(
                         )
                     }
                 }
+            }
 
-                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            @Composable
+            fun HeaderActionsRow(rowModifier: Modifier = Modifier) {
+                Row(
+                    modifier = rowModifier,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
                     ActionPillButton(
                         icon = Icons.Default.AddLink,
                         text = "+ YouTube Link",
@@ -202,6 +219,30 @@ fun SettingsScreen(
                         isPrimary = false,
                         onClick = onRescanStorage
                     )
+                }
+            }
+
+            if (isCompact) {
+                Column(
+                    modifier = bannerModifier,
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    HeaderTitleGroup(rowModifier = Modifier.fillMaxWidth())
+                    HeaderActionsRow(
+                        rowModifier = Modifier
+                            .fillMaxWidth()
+                            .horizontalScroll(rememberScrollState())
+                    )
+                }
+            } else {
+                Row(
+                    modifier = bannerModifier,
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    HeaderTitleGroup(rowModifier = Modifier.weight(1f))
+                    Spacer(modifier = Modifier.width(12.dp))
+                    HeaderActionsRow()
                 }
             }
         }
@@ -391,12 +432,12 @@ fun SettingsScreen(
         item(key = "settings_ui") {
             SettingsCategoryCard(
                 title = "3. Interface, Layout & Font Fitting",
-                subtitle = "Customize TV vs Tablet layout, sidebar behavior, and button/font scale"
+                subtitle = "Customize TV, Tablet & Phone layout, sidebar behavior, and button/font scale"
             ) {
                 SettingsCycleOptionRow(
                     icon = Icons.Default.Tv,
                     title = "Interface Layout Mode",
-                    subtitle = "Switch between Android TV 10-foot rows and Tablet touch grid",
+                    subtitle = "Auto-detected device: $detectedModeLabel (TV / Tablet / Phone)",
                     valueLabel = settings.uiModePreference.label,
                     onClick = {
                         val modes = UiModePreference.entries
@@ -943,14 +984,15 @@ private fun SettingsCycleOptionRow(
             )
             Spacer(modifier = Modifier.width(12.dp))
             Column(modifier = Modifier.weight(1f)) {
+                val isCompact = LocalWindowLayoutInfo.current.isCompact
                 Text(
                     text = title,
                     color = SmartTubeTextPrimary,
                     fontSize = 14.sp,
                     lineHeight = 18.sp,
                     fontWeight = if (isFocused) FontWeight.Bold else FontWeight.SemiBold,
-                    maxLines = 1,
-                    softWrap = false,
+                    maxLines = if (isCompact) 2 else 1,
+                    softWrap = isCompact,
                     overflow = TextOverflow.Ellipsis
                 )
                 Text(

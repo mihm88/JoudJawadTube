@@ -18,10 +18,13 @@ import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.appcompat.app.AppCompatActivity
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.grid.LazyGridState
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.collectAsState
@@ -44,6 +47,7 @@ import com.joudjawadtube.player.ui.catalog.CatalogViewModel
 import com.joudjawadtube.player.ui.catalog.TabletCatalogScreen
 import com.joudjawadtube.player.ui.catalog.TvCatalogScreen
 import com.joudjawadtube.player.ui.components.AddYouTubeLinkDialog
+import com.joudjawadtube.player.ui.components.LocalWindowLayoutInfo
 import com.joudjawadtube.player.ui.components.ProvideWindowLayoutInfo
 import com.joudjawadtube.player.ui.components.SidebarSection
 import com.joudjawadtube.player.ui.components.TvFolderPickerDialog
@@ -76,7 +80,10 @@ class MainActivity : AppCompatActivity() {
 
             CompositionLocalProvider(LocalDensity provides scaledDensity) {
                 JoudJawadTubeTheme(themeMode = uiState.settings.themeMode) {
-                    ProvideWindowLayoutInfo {
+                    ProvideWindowLayoutInfo(
+                        isTelevisionHardware = defaultIsTv,
+                        uiModePreference = uiState.settings.uiModePreference
+                    ) {
                         val context = LocalContext.current
                     val lifecycleOwner = LocalLifecycleOwner.current
 
@@ -166,15 +173,21 @@ class MainActivity : AppCompatActivity() {
                     val tabletHomeListState = rememberSaveable(saver = LazyListState.Saver) { LazyListState() }
                     val tabletGridState = rememberSaveable(saver = LazyGridState.Saver) { LazyGridState() }
 
-                    // Automatically detect device type without manual top-bar toggle buttons
-                    val isTv = remember { defaultIsTv }
-                    val useTvLayout = when (uiState.settings.uiModePreference) {
-                        UiModePreference.FORCE_TV -> true
-                        UiModePreference.FORCE_TABLET -> false
-                        UiModePreference.AUTO -> isTv
-                    }
+                    val layoutInfo = LocalWindowLayoutInfo.current
+                    val useTvLayout = layoutInfo.isTv
 
-                    Box(modifier = Modifier.fillMaxSize()) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .background(MaterialTheme.colorScheme.background)
+                            .then(
+                                if (activePlaybackSession == null && layoutInfo.isTouchDevice) {
+                                    Modifier.systemBarsPadding()
+                                } else {
+                                    Modifier
+                                }
+                            )
+                    ) {
                         if (activePlaybackSession == null) {
                             if (useTvLayout) {
                                 TvCatalogScreen(

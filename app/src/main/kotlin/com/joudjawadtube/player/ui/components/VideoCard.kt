@@ -83,6 +83,8 @@ fun VideoCard(
     modifier: Modifier = Modifier
 ) {
     var isFocused by remember { mutableStateOf(false) }
+    val layoutInfo = LocalWindowLayoutInfo.current
+    val isTouchDevice = layoutInfo.isTouchDevice
     val scale by animateFloatAsState(
         targetValue = if (isFocused) 1.04f else 1.0f,
         label = "cardScale"
@@ -307,7 +309,7 @@ fun VideoCard(
                 horizontalArrangement = Arrangement.spacedBy(4.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                if (video.isFavorite || isFocused) {
+                if (video.isFavorite || isFocused || isTouchDevice) {
                     Box(
                         modifier = Modifier
                             .clip(RoundedCornerShape(6.dp))
@@ -325,7 +327,7 @@ fun VideoCard(
                     }
                 }
 
-                if (isFocused && onOpenOptions != null) {
+                if ((isFocused || isTouchDevice) && onOpenOptions != null) {
                     Box(
                         modifier = Modifier
                             .clip(RoundedCornerShape(6.dp))
@@ -425,8 +427,8 @@ fun VideoCard(
                 fontSize = 13.sp,
                 lineHeight = 18.sp,
                 fontWeight = if (isFocused) FontWeight.Bold else FontWeight.SemiBold,
-                maxLines = 1,
-                softWrap = false,
+                maxLines = if (layoutInfo.isPhone) 2 else 1,
+                softWrap = layoutInfo.isPhone,
                 overflow = TextOverflow.Ellipsis,
                 modifier = if (isFocused) Modifier.basicMarquee() else Modifier
             )

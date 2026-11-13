@@ -2,7 +2,7 @@
 
 <div align="center">
 
-[![Android TV](https://img.shields.io/badge/Platform-Android%20TV%20%7C%20Google%20TV%20%7C%20Tablet-brightgreen.svg?logo=android&logoColor=white)](#)
+[![Android TV](https://img.shields.io/badge/Platform-Android%20TV%20%7C%20Google%20TV%20%7C%20Tablet%20%7C%20Phone-brightgreen.svg?logo=android&logoColor=white)](#)
 [![Min SDK](https://img.shields.io/badge/Min%20SDK-23%20(Android%206.0+)-blue.svg)](#)
 [![Target SDK](https://img.shields.io/badge/Target%20SDK-36%20(Android%2016)-orange.svg)](#)
 [![Media3 ExoPlayer](https://img.shields.io/badge/Player-AndroidX%20Media3%201.4.1-red.svg?logo=youtube&logoColor=white)](#)
@@ -12,7 +12,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![GitHub Release](https://img.shields.io/github/v/release/mihm88/JoudJawadTube?include_prereleases&color=success)](https://github.com/mihm88/JoudJawadTube/releases)
 
-**A high-performance, child-safe, YouTube-style local and external video player designed from the ground up for Android TV, Google TV, and Android Tablets.**
+**A high-performance, child-safe, YouTube-style local and external video player designed from the ground up for Android TV, Google TV, Android Tablets, and Smartphones.**
 
 [Download APK](#-direct-apk-download--releases-تحميل-مباشر) • [Features](#-key-features) • [Screenshots](#-screenshots) • [Architecture](#-architecture--tech-stack) • [Remote Navigation](#-tv-remote--navigation-guide) • [Auto-Updater](#-in-app-auto-updater--cicd) • [Building](#-getting-started--building)
 
@@ -24,15 +24,15 @@
 
 <div align="center">
 
-[![Download Latest APK](https://img.shields.io/badge/📥_Download_Latest_APK-JoudJawadTube--v1.1.9.apk-2ea44f?style=for-the-badge&logo=android&logoColor=white)](https://github.com/mihm88/JoudJawadTube/releases/download/v1.1.9/JoudJawadTube-v1.1.9.apk)
+[![Download Latest APK](https://img.shields.io/badge/📥_Download_Latest_APK-JoudJawadTube--v1.2.0.apk-2ea44f?style=for-the-badge&logo=android&logoColor=white)](https://github.com/mihm88/JoudJawadTube/releases/download/v1.2.0/JoudJawadTube-v1.2.0.apk)
 [![All GitHub Releases](https://img.shields.io/badge/📦_GitHub_Releases-All_Versions-0969da?style=for-the-badge&logo=github&logoColor=white)](https://github.com/mihm88/JoudJawadTube/releases)
 
 </div>
 
 | Channel / الرابط | Direct Link / الرابط المباشر | Description / الوصف |
 | :--- | :--- | :--- |
-| **🚀 Direct APK (GitHub Release v1.1.9)** | [**`JoudJawadTube-v1.1.9.apk`**](https://github.com/mihm88/JoudJawadTube/releases/download/v1.1.9/JoudJawadTube-v1.1.9.apk) | Direct one-click download from GitHub Releases (Production-signed `v1+v2+v3`) |
-| **⚡ Direct APK (Repo Root Mirror)** | [**`raw/master/JoudJawadTube-v1.1.9.apk`**](https://github.com/mihm88/JoudJawadTube/raw/master/JoudJawadTube-v1.1.9.apk) | Direct download from the repository root branch |
+| **🚀 Direct APK (GitHub Release v1.2.0)** | [**`JoudJawadTube-v1.2.0.apk`**](https://github.com/mihm88/JoudJawadTube/releases/download/v1.2.0/JoudJawadTube-v1.2.0.apk) | Direct one-click download from GitHub Releases (Production-signed `v1+v2+v3`) |
+| **⚡ Direct APK (Repo Root Mirror)** | [**`raw/master/JoudJawadTube-v1.2.0.apk`**](https://github.com/mihm88/JoudJawadTube/raw/master/JoudJawadTube-v1.2.0.apk) | Direct download from the repository root branch |
 | **🏷️ Latest Release Page** | [**`github.com/mihm88/JoudJawadTube/releases/latest`**](https://github.com/mihm88/JoudJawadTube/releases/latest) | Always redirects to the newest published release |
 | **📦 All Releases Page** | [**`github.com/mihm88/JoudJawadTube/releases`**](https://github.com/mihm88/JoudJawadTube/releases) | Full release history, changelogs, and SHA-256 verification |
 
@@ -247,9 +247,9 @@ cd JoudJawadTube
 ```
 The optimized signed release APK will be generated at:
 ```
-app/build/outputs/apk/release/JoudJawadTube-v1.1.9.apk
+app/build/outputs/apk/release/JoudJawadTube-v1.2.0.apk
 ```
-(A pre-compiled copy is also kept ready at the repository root: `JoudJawadTube-v1.1.9.apk`)
+(A pre-compiled copy is also kept ready at the repository root: `JoudJawadTube-v1.2.0.apk`)
 
 ### Run Unit Tests
 ```bash
@@ -265,7 +265,7 @@ app/build/outputs/apk/release/JoudJawadTube-v1.1.9.apk
 2. Connect to your TV's IP address:
 ```bash
 adb connect 192.168.1.xxx:5555
-adb install -r JoudJawadTube-v1.1.9.apk
+adb install -r JoudJawadTube-v1.2.0.apk
 ```
 
 ---
@@ -277,5 +277,5 @@ This project is licensed under the **MIT License** - see the [LICENSE](LICENSE) 
 ---
 
 <div align="center">
-  <sub>Developed with ❤️ for safe, beautiful family entertainment on Android TV and Tablets.</sub>
+  <sub>Developed with ❤️ for safe, beautiful family entertainment on Android TV, Tablets, and Phones.</sub>
 </div>

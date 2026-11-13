@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -37,6 +38,7 @@ import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Repeat
 import androidx.compose.material.icons.filled.RepeatOne
 import androidx.compose.material.icons.filled.Replay10
+import androidx.compose.material.icons.filled.ScreenRotation
 import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material.icons.filled.SkipPrevious
 import androidx.compose.material.icons.filled.Speed
@@ -117,12 +119,15 @@ fun SmartTubePlayerHud(
     repeatMode: RepeatMode = RepeatMode.OFF,
     onOpenQualityDialog: () -> Unit = {},
     onCycleRepeatMode: () -> Unit = {},
+    onToggleOrientation: (() -> Unit)? = null,
     onBack: () -> Unit,
     onUserInteraction: () -> Unit
 ) {
     val playPauseFocusRequester = remember { FocusRequester() }
     val seekStepMs = (seekIntervalSec.coerceAtLeast(5)) * 1000L
     val layoutInfo = LocalWindowLayoutInfo.current
+    val horizontalPad = if (layoutInfo.isCompact) 12.dp else 24.dp
+    val verticalPad = if (layoutInfo.isPhone) 12.dp else 20.dp
 
     LaunchedEffect(visible) {
         if (visible) {
@@ -139,23 +144,24 @@ fun SmartTubePlayerHud(
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                .background(
-                    Brush.verticalGradient(
-                        colors = listOf(
-                            Color.Black.copy(alpha = 0.84f),
-                            Color.Transparent,
-                            Color.Transparent,
-                            Color.Black.copy(alpha = 0.92f)
+                    .background(
+                        Brush.verticalGradient(
+                            colors = listOf(
+                                Color.Black.copy(alpha = 0.84f),
+                                Color.Transparent,
+                                Color.Transparent,
+                                Color.Black.copy(alpha = 0.92f)
+                            )
                         )
                     )
-                )
-        ) {
+                    .systemBarsPadding()
+            ) {
             // Top OSD Header
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
                     .align(Alignment.TopCenter)
-                    .padding(horizontal = 24.dp, vertical = 20.dp),
+                    .padding(horizontal = horizontalPad, vertical = verticalPad),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
@@ -265,6 +271,15 @@ fun SmartTubePlayerHud(
                         }
                     }
 
+                    if (layoutInfo.isTouchDevice && onToggleOrientation != null) {
+                        HudControlPill(
+                            icon = Icons.Default.ScreenRotation,
+                            label = stringResource(R.string.player_rotate),
+                            onClick = onToggleOrientation,
+                            onUserInteraction = onUserInteraction
+                        )
+                    }
+
                     HudControlPill(
                         icon = Icons.Default.Hd,
                         label = currentQuality,
@@ -279,7 +294,7 @@ fun SmartTubePlayerHud(
                 modifier = Modifier
                     .fillMaxWidth()
                     .align(Alignment.BottomCenter)
-                    .padding(horizontal = 24.dp, vertical = 20.dp)
+                    .padding(horizontal = horizontalPad, vertical = verticalPad)
             ) {
                 // Isolated Timeline Bar (recomposes at 500ms without recomposing outer HUD)
                 PlayerTimelineBar(

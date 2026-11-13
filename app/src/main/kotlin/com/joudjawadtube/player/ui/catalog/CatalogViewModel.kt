@@ -526,7 +526,8 @@ class CatalogViewModel(application: Application) : AndroidViewModel(application)
         val currentSettings = settingsRepository.settingsFlow.value
         val currentEffective = when (currentSettings.uiModePreference) {
             UiModePreference.FORCE_TV -> true
-            UiModePreference.FORCE_TABLET -> false
+            UiModePreference.FORCE_TABLET,
+            UiModePreference.FORCE_PHONE -> false
             UiModePreference.AUTO -> _dialogState.value.isTvModeOverride ?: defaultIsTv
         }
         val nextIsTv = !currentEffective

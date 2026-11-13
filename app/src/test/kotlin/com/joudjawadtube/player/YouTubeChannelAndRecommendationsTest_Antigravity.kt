@@ -5,7 +5,9 @@ import com.joudjawadtube.player.data.youtube.ParsedYouTubeInput
 import com.joudjawadtube.player.data.youtube.QualitySelectorHelper_Antigravity
 import com.joudjawadtube.player.data.youtube.ResolvedYouTubeStream
 import com.joudjawadtube.player.data.youtube.YouTubeQualityVariant
+import com.joudjawadtube.player.data.settings.UiModePreference
 import com.joudjawadtube.player.data.youtube.YouTubeService
+import com.joudjawadtube.player.ui.components.DeviceFormFactor
 import com.joudjawadtube.player.ui.components.WindowWidthClass
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -210,6 +212,72 @@ class YouTubeChannelAndRecommendationsTest_Antigravity {
             hlsManifestUrl = "https://manifest.googlevideo.com/api/manifest/hls_variant/expire/1799999000/ei/abc/file/index.m3u8"
         )
         assertTrue(expiredHlsPathStream.isExpired(safetyMarginSec = 120L, nowEpochSec = nowEpochSec))
+    }
+
+    @Test
+    fun deviceFormFactor_autoDetectsTvTabletAndPhoneCorrectly() {
+        // Android TV always classifies as TV regardless of swDp
+        assertEquals(
+            DeviceFormFactor.TV,
+            DeviceFormFactor.detect(
+                isTelevisionHardware = true,
+                smallestScreenWidthDp = 540,
+                screenWidthDp = 960
+            )
+        )
+
+        // Phone portrait (360dp x 780dp, sw360dp) -> PHONE
+        assertEquals(
+            DeviceFormFactor.PHONE,
+            DeviceFormFactor.detect(
+                isTelevisionHardware = false,
+                smallestScreenWidthDp = 360,
+                screenWidthDp = 360
+            )
+        )
+
+        // Phone landscape (780dp x 360dp, sw360dp) -> still PHONE!
+        assertEquals(
+            DeviceFormFactor.PHONE,
+            DeviceFormFactor.detect(
+                isTelevisionHardware = false,
+                smallestScreenWidthDp = 360,
+                screenWidthDp = 780
+            )
+        )
+
+        // Tablet portrait (600dp x 960dp, sw600dp) -> TABLET
+        assertEquals(
+            DeviceFormFactor.TABLET,
+            DeviceFormFactor.detect(
+                isTelevisionHardware = false,
+                smallestScreenWidthDp = 600,
+                screenWidthDp = 600
+            )
+        )
+
+        // Manual UI overrides take precedence
+        assertEquals(
+            DeviceFormFactor.PHONE,
+            DeviceFormFactor.resolveEffectiveFormFactor(
+                preference = UiModePreference.FORCE_PHONE,
+                detected = DeviceFormFactor.TABLET
+            )
+        )
+        assertEquals(
+            DeviceFormFactor.TV,
+            DeviceFormFactor.resolveEffectiveFormFactor(
+                preference = UiModePreference.FORCE_TV,
+                detected = DeviceFormFactor.PHONE
+            )
+        )
+        assertEquals(
+            DeviceFormFactor.PHONE,
+            DeviceFormFactor.resolveEffectiveFormFactor(
+                preference = UiModePreference.AUTO,
+                detected = DeviceFormFactor.PHONE
+            )
+        )
     }
 }
 

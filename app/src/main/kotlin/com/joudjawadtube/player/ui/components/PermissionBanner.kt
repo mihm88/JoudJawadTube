@@ -3,6 +3,7 @@ package com.joudjawadtube.player.ui.components
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -12,6 +13,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.FolderOpen
@@ -52,40 +54,18 @@ fun PermissionBanner(
 ) {
     if (hasReadVideoPermission && hasAllFilesAccess) return
 
-    Row(
-        modifier = modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(12.dp))
-            .background(SmartTubeCardBg)
-            .border(1.dp, SmartTubeRed.copy(alpha = 0.5f), RoundedCornerShape(12.dp))
-            .padding(14.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.SpaceBetween
-    ) {
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = "Enable Local & USB Drive Video Access",
-                color = SmartTubeTextPrimary,
-                fontSize = 15.sp,
-                lineHeight = 20.sp,
-                fontWeight = FontWeight.Bold,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-            Spacer(modifier = Modifier.height(3.dp))
-            Text(
-                text = "Grant media and USB storage access so Joud&Jawad Tube can automatically scan videos and sidecar subtitles (.srt/.vtt/.ass).",
-                color = SmartTubeTextSecondary,
-                fontSize = 12.sp,
-                lineHeight = 16.sp,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis
-            )
-        }
+    val layoutInfo = LocalWindowLayoutInfo.current
+    val bannerModifier = modifier
+        .fillMaxWidth()
+        .clip(RoundedCornerShape(12.dp))
+        .background(SmartTubeCardBg)
+        .border(1.dp, SmartTubeRed.copy(alpha = 0.5f), RoundedCornerShape(12.dp))
+        .padding(if (layoutInfo.isCompact) 12.dp else 14.dp)
 
-        Spacer(modifier = Modifier.width(14.dp))
-
+    @Composable
+    fun BannerButtons(rowModifier: Modifier = Modifier) {
         Row(
+            modifier = rowModifier,
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
@@ -111,6 +91,69 @@ fun PermissionBanner(
                 isPrimary = false,
                 onClick = onPickSafFolder
             )
+        }
+    }
+
+    if (layoutInfo.isCompact) {
+        Column(
+            modifier = bannerModifier,
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Column(modifier = Modifier.fillMaxWidth()) {
+                Text(
+                    text = "Enable Local & USB Drive Video Access",
+                    color = SmartTubeTextPrimary,
+                    fontSize = 14.sp,
+                    lineHeight = 19.sp,
+                    fontWeight = FontWeight.Bold,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Spacer(modifier = Modifier.height(3.dp))
+                Text(
+                    text = "Grant media and USB storage access so Joud&Jawad Tube can automatically scan videos and sidecar subtitles (.srt/.vtt/.ass).",
+                    color = SmartTubeTextSecondary,
+                    fontSize = 12.sp,
+                    lineHeight = 16.sp,
+                    maxLines = 3,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+            BannerButtons(
+                rowModifier = Modifier
+                    .fillMaxWidth()
+                    .horizontalScroll(rememberScrollState())
+            )
+        }
+    } else {
+        Row(
+            modifier = bannerModifier,
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = "Enable Local & USB Drive Video Access",
+                    color = SmartTubeTextPrimary,
+                    fontSize = 15.sp,
+                    lineHeight = 20.sp,
+                    fontWeight = FontWeight.Bold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Spacer(modifier = Modifier.height(3.dp))
+                Text(
+                    text = "Grant media and USB storage access so Joud&Jawad Tube can automatically scan videos and sidecar subtitles (.srt/.vtt/.ass).",
+                    color = SmartTubeTextSecondary,
+                    fontSize = 12.sp,
+                    lineHeight = 16.sp,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+
+            Spacer(modifier = Modifier.width(14.dp))
+            BannerButtons()
         }
     }
 }

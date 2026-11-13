@@ -75,6 +75,7 @@ import com.joudjawadtube.player.data.repository.CategoryRow
 import com.joudjawadtube.player.data.repository.KidsChannelItem
 import com.joudjawadtube.player.data.settings.AppSettingsState
 import com.joudjawadtube.player.ui.components.ActionPillButton
+import com.joudjawadtube.player.ui.components.LocalWindowLayoutInfo
 import com.joudjawadtube.player.ui.components.PermissionBanner
 import com.joudjawadtube.player.ui.components.SidebarSection
 import com.joudjawadtube.player.ui.components.SmartTubeSidebar
@@ -745,7 +746,7 @@ fun TvCategoryRowSection(
                     onOpenOptions = { onOpenVideoOptions(video) },
                     settings = settings,
                     thumbnailRevision = thumbnailRevision,
-                    modifier = Modifier.width(260.dp)
+                    modifier = Modifier.width(if (LocalWindowLayoutInfo.current.isPhone) 200.dp else 260.dp)
                 )
             }
         }

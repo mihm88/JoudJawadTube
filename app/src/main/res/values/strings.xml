@@ -101,6 +101,7 @@
     <string name="player_speed">Speed: %.2fx</string>
     <string name="player_hw_accel">HEVC HW</string>
     <string name="player_now_playing">Now Playing</string>
+    <string name="player_rotate">Rotate</string>
 
     <!-- Settings: Appearance & Language -->
     <string name="settings_section_appearance">Appearance &amp; Language</string>
@@ -131,9 +132,10 @@
     <!-- Settings: UI & Layout -->
     <string name="settings_section_ui">UI &amp; Layout</string>
     <string name="settings_ui_mode">Display Interface Mode</string>
-    <string name="settings_ui_mode_auto">Auto Detect (TV / Tablet)</string>
+    <string name="settings_ui_mode_auto">Auto Detect (TV / Tablet / Phone)</string>
     <string name="settings_ui_mode_tv">Android TV 10-Foot UI</string>
     <string name="settings_ui_mode_tablet">Tablet Touch UI</string>
+    <string name="settings_ui_mode_phone">Phone Touch UI</string>
     <string name="settings_font_scale">Font Scale</string>
     <string name="settings_font_scale_compact">Compact (92%)</string>
     <string name="settings_font_scale_normal">Normal (100%)</string>
