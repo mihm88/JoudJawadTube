@@ -55,19 +55,19 @@
 ### 1. Android TV 10-Foot Leanback Interface
 Featuring an Obsidian dark theme, glowing D-pad focus indicators, category pills, and an organized sidebar.
 <p align="center">
-  <img src="docs/screenshots/tv_leanback_home_Antigravity.svg" alt="Android TV Leanback Home Screen" width="100%">
+  <img src="docs/screenshots/tv_leanback_home_Antigravity.png" alt="Android TV Leanback Home Screen" width="100%">
 </p>
 
-### 2. 4K Player HUD with Resolution & Repeat Selector
-ExoPlayer Media3 player HUD with resolution switcher (4K, 2K, 1080p, 720p, Auto), repeat modes (One/All), audio track switching, and sidecar subtitles.
+### 2. Player HUD with Resolution Badge & Playback Controls
+ExoPlayer Media3 player HUD with live resolution badge, seekbar, skip ±10s, previous/next track, favorites, and player options (resolution switcher, repeat modes, audio tracks, and subtitles).
 <p align="center">
-  <img src="docs/screenshots/player_hud_4k_Antigravity.svg" alt="4K Player HUD Controls" width="100%">
+  <img src="docs/screenshots/player_hud_4k_Antigravity.png" alt="Player HUD Controls" width="100%">
 </p>
 
-### 3. Responsive Tablet Adaptive Grid
-Auto-detected tablet layout displaying adaptive 3-column video cards, scoped in-app search, category chips, and a bottom navigation bar.
+### 3. Expanded Sidebar & Playlists View
+Full D-pad sidebar navigation (Home, Kids Picks, Channels, Playlists, Categories, History, USB Storage, Folders, 4K/UHD) alongside organized playlists with channel badges, category tags, and Play All controls.
 <p align="center">
-  <img src="docs/screenshots/tablet_adaptive_grid_Antigravity.svg" alt="Tablet Adaptive Grid Screen" width="100%">
+  <img src="docs/screenshots/tv_sidebar_playlists_Antigravity.png" alt="Expanded Sidebar and Playlists View" width="100%">
 </p>
 
 ---
