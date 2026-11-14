@@ -2,6 +2,8 @@
 
 <div align="center">
 
+<img src="docs/screenshots/app_logo_Antigravity.png" alt="Joud&Jawad Tube Logo" width="160">
+
 [![Android TV](https://img.shields.io/badge/Platform-Android%20TV%20%7C%20Google%20TV%20%7C%20Tablet%20%7C%20Phone-brightgreen.svg?logo=android&logoColor=white)](#)
 [![Min SDK](https://img.shields.io/badge/Min%20SDK-23%20(Android%206.0+)-blue.svg)](#)
 [![Target SDK](https://img.shields.io/badge/Target%20SDK-36%20(Android%2016)-orange.svg)](#)
@@ -68,6 +70,12 @@ ExoPlayer Media3 player HUD with live resolution badge, seekbar, skip ±10s, pre
 Full D-pad sidebar navigation (Home, Kids Picks, Channels, Playlists, Categories, History, USB Storage, Folders, 4K/UHD) alongside organized playlists with channel badges, category tags, and Play All controls.
 <p align="center">
   <img src="docs/screenshots/tv_sidebar_playlists_Antigravity.png" alt="Expanded Sidebar and Playlists View" width="100%">
+</p>
+
+### 4. Expanded Sidebar & USB Storage Focus
+Quick D-pad access to USB OTG drives, local folders, and 21 built-in kids channels with Aqua focus highlights.
+<p align="center">
+  <img src="docs/screenshots/tv_sidebar_usb_Antigravity.png" alt="Expanded Sidebar and USB Storage Focus" width="100%">
 </p>
 
 ---
