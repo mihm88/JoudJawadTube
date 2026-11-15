@@ -1,5 +1,6 @@
 package com.joudjawadtube.player.ui.components
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -30,6 +31,7 @@ import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.Hd
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.PlaylistPlay
 import androidx.compose.material.icons.filled.Refresh
@@ -51,6 +53,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -103,16 +107,22 @@ fun SmartTubeSidebar(
     onRescanStorage: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    var sidebarHasFocus by remember { mutableStateOf(false) }
+    var menuOpen by remember { mutableStateOf(false) }
+    val menuButtonFocusRequester = remember { FocusRequester() }
 
     val alwaysExpanded = isExpanded || sidebarMode == SidebarMode.ALWAYS_EXPANDED
     val effectiveExpanded = when (sidebarMode) {
         SidebarMode.ALWAYS_EXPANDED -> true
         SidebarMode.ALWAYS_COLLAPSED -> false
-        SidebarMode.OVERLAY_ON_FOCUS -> alwaysExpanded || sidebarHasFocus
+        SidebarMode.OVERLAY_ON_FOCUS -> alwaysExpanded || menuOpen
     }
 
-    // Reserve a constant layout width so expanding on focus NEVER re-layouts the video grid!
+    BackHandler(enabled = menuOpen && !alwaysExpanded) {
+        menuOpen = false
+        runCatching { menuButtonFocusRequester.requestFocus() }
+    }
+
+    // Reserve a constant layout width so expanding never re-layouts the video grid
     val reservedSlotWidth = if (alwaysExpanded) 232.dp else 76.dp
     val drawerVisualWidth = if (effectiveExpanded) 232.dp else 76.dp
     val isFloatingOverlay = effectiveExpanded && !alwaysExpanded
@@ -138,7 +148,7 @@ fun SmartTubeSidebar(
                     }
                 )
                 .background(SmartTubeSidebarBg)
-                .onFocusChanged { sidebarHasFocus = it.hasFocus }
+                .onFocusChanged { if (!it.hasFocus) menuOpen = false }
                 .padding(vertical = 10.dp, horizontal = 10.dp),
             verticalArrangement = Arrangement.SpaceBetween
         ) {
@@ -148,6 +158,17 @@ fun SmartTubeSidebar(
                     .verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(2.dp)
             ) {
+                if (!alwaysExpanded && sidebarMode == SidebarMode.OVERLAY_ON_FOCUS) {
+                    SidebarNavItem(
+                        icon = Icons.Default.Menu,
+                        label = stringResource(R.string.nav_menu),
+                        isSelected = menuOpen,
+                        isExpanded = effectiveExpanded,
+                        onClick = { menuOpen = !menuOpen },
+                        modifier = Modifier.focusRequester(menuButtonFocusRequester)
+                    )
+                    Spacer(modifier = Modifier.height(2.dp))
+                }
                 // Joud&Jawad Tube Brand Header
                 Row(
                     modifier = Modifier
@@ -211,7 +232,10 @@ fun SmartTubeSidebar(
                         isExpanded = effectiveExpanded,
                         badgeText = badgeText,
                         badgeColor = badgeColor,
-                        onClick = { onSelectSection(section) }
+                        onClick = {
+                            menuOpen = false
+                            onSelectSection(section)
+                        }
                     )
                 }
             }
@@ -225,7 +249,10 @@ fun SmartTubeSidebar(
                     label = "+ YouTube Link",
                     isSelected = false,
                     isExpanded = effectiveExpanded,
-                    onClick = onAddYouTubeLink
+                    onClick = {
+                        menuOpen = false
+                        onAddYouTubeLink()
+                    }
                 )
 
                 SidebarNavItem(
@@ -233,7 +260,10 @@ fun SmartTubeSidebar(
                     label = "Add Folder",
                     isSelected = false,
                     isExpanded = effectiveExpanded,
-                    onClick = onAddSafFolder
+                    onClick = {
+                        menuOpen = false
+                        onAddSafFolder()
+                    }
                 )
 
                 SidebarNavItem(
@@ -241,7 +271,10 @@ fun SmartTubeSidebar(
                     label = if (isScanning) "Scanning..." else "Rescan USB",
                     isSelected = false,
                     isExpanded = effectiveExpanded,
-                    onClick = onRescanStorage
+                    onClick = {
+                        menuOpen = false
+                        onRescanStorage()
+                    }
                 )
             }
         }
@@ -256,7 +289,8 @@ private fun SidebarNavItem(
     isExpanded: Boolean,
     badgeText: String? = null,
     badgeColor: Color = SmartTubeRed,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
 ) {
     var isFocused by remember { mutableStateOf(false) }
     val bgColor by animateColorAsState(
@@ -273,7 +307,7 @@ private fun SidebarNavItem(
     }
 
     Box(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
             .height(36.dp)
             .clip(RoundedCornerShape(10.dp))

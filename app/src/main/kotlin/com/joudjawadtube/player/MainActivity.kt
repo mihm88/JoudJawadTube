@@ -42,6 +42,8 @@ import androidx.core.content.ContextCompat
 import androidx.documentfile.provider.DocumentFile
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
+import com.joudjawadtube.player.data.local.VideoItem
+import com.joudjawadtube.player.data.repository.RelatedVideosResolver_Antigravity
 import com.joudjawadtube.player.data.settings.UiModePreference
 import com.joudjawadtube.player.ui.catalog.CatalogViewModel
 import com.joudjawadtube.player.ui.catalog.TabletCatalogScreen
@@ -49,6 +51,8 @@ import com.joudjawadtube.player.ui.catalog.TvCatalogScreen
 import com.joudjawadtube.player.ui.components.AddYouTubeLinkDialog
 import com.joudjawadtube.player.ui.components.LocalWindowLayoutInfo
 import com.joudjawadtube.player.ui.components.ProvideWindowLayoutInfo
+import com.joudjawadtube.player.ui.components.QuickChannelsPlaylistsDialog_Antigravity
+import com.joudjawadtube.player.ui.components.QuickCollectionTarget_Antigravity
 import com.joudjawadtube.player.ui.components.SidebarSection
 import com.joudjawadtube.player.ui.components.TvFolderPickerDialog
 import com.joudjawadtube.player.ui.components.VideoOptionsDialog
@@ -285,6 +289,7 @@ class MainActivity : AppCompatActivity() {
                                     val wrap = uiState.settings.repeatMode == com.joudjawadtube.player.data.settings.RepeatMode.REPEAT_ALL
                                     viewModel.playNextInSession(wrapAround = wrap)
                                 },
+                                onPlayRelated = { selected, queue -> viewModel.playFromRelated(selected, queue) },
                                 onToggleFavorite = { viewModel.toggleFavorite(currentSession.currentVideo) },
                                 onBack = { viewModel.closePlayer() }
                             )
@@ -335,11 +340,36 @@ class MainActivity : AppCompatActivity() {
                             )
                         }
 
+                        var videoCardSourceTarget by remember { mutableStateOf<QuickCollectionTarget_Antigravity?>(null) }
+
                         // Video Options & Thumbnail Control Dialog
                         uiState.selectedVideoForOptions?.let { selectedVideo ->
+                            val resolvedSource = remember(
+                                selectedVideo,
+                                uiState.snapshot.allVideos,
+                                uiState.snapshot.savedPlaylists,
+                                uiState.snapshot.savedChannels
+                            ) {
+                                RelatedVideosResolver_Antigravity.resolveSourceCollection(
+                                    current = selectedVideo,
+                                    allVideos = uiState.snapshot.allVideos,
+                                    savedPlaylists = uiState.snapshot.savedPlaylists,
+                                    savedChannels = uiState.snapshot.savedChannels
+                                )
+                            }
                             VideoOptionsDialog(
                                 video = selectedVideo,
                                 onPlay = { viewModel.openVideo(selectedVideo, uiState.filteredVideos) },
+                                sourceLabel = resolvedSource?.first,
+                                onOpenSourceCollection = resolvedSource?.let { (label, list) ->
+                                    {
+                                        videoCardSourceTarget = QuickCollectionTarget_Antigravity(
+                                            title = label,
+                                            subtitle = "${list.size} videos",
+                                            videos = list
+                                        )
+                                    }
+                                },
                                 onToggleFavorite = { viewModel.toggleFavorite(selectedVideo) },
                                 onFetchYouTubeThumbnail = {
                                     viewModel.forceYouTubeThumbnailForVideo(selectedVideo)
@@ -353,6 +383,18 @@ class MainActivity : AppCompatActivity() {
                                     null
                                 },
                                 onDismiss = { viewModel.closeVideoOptions() }
+                            )
+                        }
+
+                        videoCardSourceTarget?.let { target ->
+                            QuickChannelsPlaylistsDialog_Antigravity(
+                                savedChannels = uiState.snapshot.savedChannels,
+                                savedPlaylists = uiState.snapshot.savedPlaylists,
+                                allVideos = uiState.snapshot.allVideos,
+                                initialTarget = target,
+                                onPlayVideo = { video, playlist -> viewModel.openVideo(video, playlist) },
+                                onAddYouTubeClick = { viewModel.openAddYouTubeDialog() },
+                                onDismiss = { videoCardSourceTarget = null }
                             )
                         }
                     }

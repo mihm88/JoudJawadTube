@@ -13,6 +13,8 @@ import com.joudjawadtube.player.data.repository.CatalogSnapshot
 import com.joudjawadtube.player.data.repository.CategoryRow
 import com.joudjawadtube.player.data.repository.KidsCatalogRepository_Antigravity
 import com.joudjawadtube.player.data.repository.KidsChannelItem
+import com.joudjawadtube.player.data.repository.RelatedVideos
+import com.joudjawadtube.player.data.repository.RelatedVideosResolver_Antigravity
 import com.joudjawadtube.player.data.repository.VideoRepository
 import com.joudjawadtube.player.data.scanner.LocalVideoScanner
 import com.joudjawadtube.player.data.scanner.MountedVolumeInfo
@@ -44,7 +46,8 @@ import kotlinx.coroutines.launch
 
 data class PlaybackSession(
     val currentVideo: VideoItem,
-    val playlist: List<VideoItem> = listOf(currentVideo)
+    val playlist: List<VideoItem> = listOf(currentVideo),
+    val related: RelatedVideos? = null
 ) {
     val currentIndex: Int
         get() = playlist.indexOfFirst { it.id == currentVideo.id }.coerceAtLeast(0)
@@ -759,10 +762,7 @@ class CatalogViewModel(application: Application) : AndroidViewModel(application)
             )
             res.onSuccess { imported ->
                 if (playImmediately) {
-                    _activePlaybackSession.value = PlaybackSession(
-                        currentVideo = imported.firstVideo,
-                        playlist = imported.playlist
-                    )
+                    openVideo(imported.firstVideo, imported.playlist)
                 }
             }.onFailure { err ->
                 _dialogState.value = _dialogState.value.copy(
@@ -827,6 +827,32 @@ class CatalogViewModel(application: Application) : AndroidViewModel(application)
                 }
             }
         }
+
+        viewModelScope.launch(Dispatchers.Default) {
+            val snap = uiState.value.snapshot
+            val resolvedRelated = RelatedVideosResolver_Antigravity.resolve(
+                current = video,
+                allVideos = snap.allVideos,
+                savedPlaylists = snap.savedPlaylists,
+                savedChannels = snap.savedChannels
+            )
+            if (resolvedRelated != null) {
+                val current = _activePlaybackSession.value
+                if (current != null && current.currentVideo.id == video.id) {
+                    _activePlaybackSession.value = current.copy(related = resolvedRelated)
+                }
+            }
+        }
+    }
+
+    fun playFromRelated(video: VideoItem, customQueue: List<VideoItem> = emptyList()) {
+        val related = _activePlaybackSession.value?.related
+        val queue = when {
+            customQueue.isNotEmpty() -> customQueue
+            related != null -> related.videos
+            else -> listOf(video)
+        }
+        openVideo(video, queue)
     }
 
     fun playPreviousInSession() {

@@ -47,7 +47,7 @@ enum class UiFontScale(val label: String, val scaleFactor: Float) {
 }
 
 enum class SidebarMode(val label: String) {
-    OVERLAY_ON_FOCUS("Overlay on Focus (Zero Lag)"),
+    OVERLAY_ON_FOCUS("Collapsed (Open via Menu)"),
     ALWAYS_COLLAPSED("Always Collapsed (Icons)"),
     ALWAYS_EXPANDED("Always Expanded")
 }

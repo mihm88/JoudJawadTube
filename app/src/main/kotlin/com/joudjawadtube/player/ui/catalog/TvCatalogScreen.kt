@@ -56,12 +56,14 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -77,6 +79,9 @@ import com.joudjawadtube.player.data.settings.AppSettingsState
 import com.joudjawadtube.player.ui.components.ActionPillButton
 import com.joudjawadtube.player.ui.components.LocalWindowLayoutInfo
 import com.joudjawadtube.player.ui.components.PermissionBanner
+import com.joudjawadtube.player.ui.components.QuickChannelsPlaylistsDialog_Antigravity
+import com.joudjawadtube.player.ui.components.QuickCollectionTarget_Antigravity
+import com.joudjawadtube.player.ui.components.SearchIconBar_Antigravity
 import com.joudjawadtube.player.ui.components.SidebarSection
 import com.joudjawadtube.player.ui.components.SmartTubeSidebar
 import com.joudjawadtube.player.ui.components.VideoCard
@@ -159,6 +164,8 @@ fun TvCatalogScreen(
                 val found = (uiState.snapshot.savedChannels.map { it.category } + uiState.snapshot.savedPlaylists.map { it.category }).filter { it.isNotBlank() }.toSet()
                 listOf("All") + (STANDARD_CATEGORIES_ANTIGRAVITY + found).distinct()
             }
+            var showQuickChannelsPlaylistsDialog by remember { mutableStateOf(false) }
+            var quickCollectionTarget by remember { mutableStateOf<QuickCollectionTarget_Antigravity?>(null) }
 
             TvTopHeaderBar(
                 searchQuery = uiState.searchQuery,
@@ -166,6 +173,10 @@ fun TvCatalogScreen(
                 categories = categoryList,
                 selectedCategory = uiState.selectedTopCategory,
                 onSelectCategory = onSelectTopCategory,
+                onOpenQuickChannelsPlaylists = {
+                    quickCollectionTarget = null
+                    showQuickChannelsPlaylistsDialog = true
+                },
                 isScanning = uiState.isScanning
             )
 
@@ -321,12 +332,41 @@ fun TvCatalogScreen(
                                 onVideoClick = { video -> onVideoClick(video, row.videos) },
                                 onToggleFavorite = onToggleFavorite,
                                 onOpenVideoOptions = onOpenVideoOptions,
-                                onPlaylistClick = { onSelectSection(SidebarSection.PLAYLISTS) },
-                                onChannelClick = { onSelectSection(SidebarSection.CHANNELS) }
+                                onPlaylistClick = {
+                                    quickCollectionTarget = QuickCollectionTarget_Antigravity(
+                                        title = row.title,
+                                        subtitle = row.subtitle,
+                                        videos = row.videos
+                                    )
+                                    showQuickChannelsPlaylistsDialog = true
+                                },
+                                onChannelClick = {
+                                    quickCollectionTarget = QuickCollectionTarget_Antigravity(
+                                        title = row.title,
+                                        subtitle = row.subtitle,
+                                        videos = row.videos
+                                    )
+                                    showQuickChannelsPlaylistsDialog = true
+                                }
                             )
                         }
                     }
                 }
+            }
+
+            if (showQuickChannelsPlaylistsDialog) {
+                QuickChannelsPlaylistsDialog_Antigravity(
+                    savedChannels = uiState.snapshot.savedChannels,
+                    savedPlaylists = uiState.snapshot.savedPlaylists,
+                    allVideos = uiState.snapshot.allVideos,
+                    initialTarget = quickCollectionTarget,
+                    onPlayVideo = onVideoClick,
+                    onAddYouTubeClick = onOpenAddYouTubeDialog,
+                    onDismiss = {
+                        showQuickChannelsPlaylistsDialog = false
+                        quickCollectionTarget = null
+                    }
+                )
             }
         }
     }
@@ -339,89 +379,34 @@ private fun TvTopHeaderBar(
     categories: List<String>,
     selectedCategory: String,
     onSelectCategory: (String) -> Unit,
+    onOpenQuickChannelsPlaylists: () -> Unit,
     isScanning: Boolean
 ) {
-    var searchFocused by remember { mutableStateOf(false) }
-    val searchFieldFocusRequester = remember { FocusRequester() }
+    val focusManager = LocalFocusManager.current
 
     Row(
         modifier = Modifier.fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceBetween
     ) {
-        // Left: Clean Focus-Safe Search Input Field
-        Row(
-            modifier = Modifier.width(300.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(6.dp)
-        ) {
-            BasicTextField(
-                value = searchQuery,
-                onValueChange = onSearchQueryChange,
-                singleLine = true,
-                textStyle = TextStyle(
-                    color = SmartTubeTextPrimary,
-                    fontSize = 13.sp,
-                    fontWeight = FontWeight.Medium
-                ),
-                cursorBrush = SolidColor(SmartTubeRed),
-                modifier = Modifier
-                    .weight(1f)
-                    .height(38.dp)
-                    .focusRequester(searchFieldFocusRequester)
-                    .onFocusChanged { searchFocused = it.isFocused || it.hasFocus },
-                decorationBox = { innerTextField ->
-                    Row(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .clip(RoundedCornerShape(19.dp))
-                            .background(if (searchFocused) SmartTubeCardFocusedBg else SmartTubeCardBg)
-                            .border(
-                                width = if (searchFocused) 2.dp else 1.dp,
-                                color = if (searchFocused) SmartTubeFocusBorder else Color.White.copy(alpha = 0.08f),
-                                shape = RoundedCornerShape(19.dp)
-                            )
-                            .padding(horizontal = 13.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Search,
-                            contentDescription = "Search",
-                            tint = if (searchFocused) SmartTubeRed else SmartTubeTextSecondary,
-                            modifier = Modifier.size(18.dp)
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Box(
-                            modifier = Modifier.weight(1f),
-                            contentAlignment = Alignment.CenterStart
-                        ) {
-                            if (searchQuery.isEmpty()) {
-                                Text(
-                                    text = stringResource(R.string.search_placeholder),
-                                    color = SmartTubeTextSecondary,
-                                    fontSize = 13.sp,
-                                    lineHeight = 16.sp,
-                                    maxLines = 1,
-                                    softWrap = false,
-                                    overflow = TextOverflow.Ellipsis
-                                )
-                            }
-                            innerTextField()
-                        }
-                    }
-                }
-            )
+        // Left: Collapsed Search Icon + Quick Channels & Playlists Picker Button
+        SearchIconBar_Antigravity(
+            query = searchQuery,
+            onQueryChange = onSearchQueryChange,
+            onSubmit = { focusManager.moveFocus(FocusDirection.Down) },
+            height = 38.dp,
+            expandedWidth = 300.dp
+        )
 
-            if (searchQuery.isNotEmpty()) {
-                HeaderInteractivePill(
-                    icon = Icons.Default.Clear,
-                    text = stringResource(R.string.search_clear),
-                    onClick = { onSearchQueryChange("") }
-                )
-            }
-        }
+        Spacer(modifier = Modifier.width(8.dp))
 
-        Spacer(modifier = Modifier.width(14.dp))
+        HeaderInteractivePill(
+            icon = Icons.Default.VideoLibrary,
+            text = stringResource(R.string.quick_channels_playlists_btn),
+            onClick = onOpenQuickChannelsPlaylists
+        )
+
+        Spacer(modifier = Modifier.width(12.dp))
 
         // Center / Right: Category Navigation Bar (Replaces old top bar buttons)
         Row(

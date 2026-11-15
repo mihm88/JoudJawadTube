@@ -37,6 +37,7 @@ import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.OndemandVideo
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Usb
+import androidx.compose.material.icons.filled.VideoLibrary
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -61,7 +62,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.window.Dialog
+import com.joudjawadtube.player.R
 import com.joudjawadtube.player.data.local.VideoItem
 import com.joudjawadtube.player.data.scanner.LocalVideoScanner
 import com.joudjawadtube.player.data.scanner.StorageVolumeHelper
@@ -528,6 +531,8 @@ private fun FolderBrowserRow(
 fun VideoOptionsDialog(
     video: VideoItem,
     onPlay: () -> Unit,
+    sourceLabel: String? = null,
+    onOpenSourceCollection: (() -> Unit)? = null,
     onToggleFavorite: () -> Unit,
     onFetchYouTubeThumbnail: () -> Unit,
     onExtractFrameAtFraction: (Float) -> Unit,
@@ -586,6 +591,18 @@ fun VideoOptionsDialog(
                     onPlay()
                 }
             )
+
+            if (onOpenSourceCollection != null && !sourceLabel.isNullOrBlank()) {
+                OptionActionRow(
+                    icon = Icons.Default.VideoLibrary,
+                    title = stringResource(R.string.video_option_open_source),
+                    subtitle = stringResource(R.string.video_option_open_source_sub, sourceLabel),
+                    onClick = {
+                        onDismiss()
+                        onOpenSourceCollection()
+                    }
+                )
+            }
 
             OptionActionRow(
                 icon = if (video.isFavorite) Icons.Default.Favorite else Icons.Default.FavoriteBorder,

@@ -77,6 +77,8 @@ import androidx.media3.exoplayer.trackselection.DefaultTrackSelector
 import androidx.media3.exoplayer.upstream.DefaultLoadErrorHandlingPolicy
 import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.PlayerView
+import com.joudjawadtube.player.data.local.VideoItem
+import com.joudjawadtube.player.data.repository.RelatedTabMode
 import com.joudjawadtube.player.data.settings.AppSettingsState
 import com.joudjawadtube.player.data.settings.RepeatMode
 import com.joudjawadtube.player.data.settings.ResumeMode
@@ -104,6 +106,7 @@ fun PlaybackScreen(
     onSaveProgress: (videoKey: String, positionMs: Long, durationMs: Long) -> Unit,
     onPreviousVideo: () -> Unit,
     onNextVideo: () -> Unit,
+    onPlayRelated: (VideoItem, List<VideoItem>) -> Unit = { _, _ -> },
     onToggleFavorite: () -> Unit,
     onBack: () -> Unit
 ) {
@@ -142,6 +145,8 @@ fun PlaybackScreen(
     val latestCurrentQuality by rememberUpdatedState(currentQuality)
 
     var hudVisible by remember { mutableStateOf(true) }
+    var relatedRowVisible by remember(video.id) { mutableStateOf(false) }
+    var initialRelatedTabMode by remember(video.id) { mutableStateOf(RelatedTabMode.CATEGORY) }
     val interactionSignal = remember { MutableSharedFlow<Unit>(extraBufferCapacity = 1) }
     var activeDialogTab by remember { mutableStateOf<PlayerDialogTab?>(null) }
 
@@ -549,9 +554,9 @@ fun PlaybackScreen(
     }
 
     // Auto-hide OSD HUD after 4.5 seconds of inactivity while video is playing
-    // Uses interactionSignal so moving focus between pills does NOT trigger recomposition
-    LaunchedEffect(hudVisible, isPlaying, activeDialogTab) {
-        if (hudVisible && isPlaying && activeDialogTab == null) {
+    // Pauses while the related category row is open so users can browse cards comfortably
+    LaunchedEffect(hudVisible, isPlaying, activeDialogTab, relatedRowVisible) {
+        if (hudVisible && isPlaying && activeDialogTab == null && !relatedRowVisible) {
             while (isActive) {
                 val touched = withTimeoutOrNull(4_500L) {
                     interactionSignal.first()
@@ -684,7 +689,11 @@ fun PlaybackScreen(
                 if (event.type == KeyEventType.KeyDown && activeDialogTab == null) {
                     when (event.key) {
                         Key.Back, Key.Escape -> {
-                            if (hudVisible) {
+                            if (relatedRowVisible) {
+                                relatedRowVisible = false
+                                interactionSignal.tryEmit(Unit)
+                                true
+                            } else if (hudVisible) {
                                 hudVisible = false
                                 true
                             } else {
@@ -763,7 +772,12 @@ fun PlaybackScreen(
                 interactionSource = remember { MutableInteractionSource() },
                 indication = null
             ) {
-                hudVisible = !hudVisible
+                if (hudVisible) {
+                    relatedRowVisible = false
+                    hudVisible = false
+                } else {
+                    hudVisible = true
+                }
                 interactionSignal.tryEmit(Unit)
             }
     ) {
@@ -875,6 +889,25 @@ fun PlaybackScreen(
             videoStreamBadge = videoStreamBadge,
             hasPrevious = session.hasPrevious,
             hasNext = session.hasNext,
+            relatedVideos = session.related,
+            relatedRowVisible = relatedRowVisible,
+            initialRelatedTabMode = initialRelatedTabMode,
+            onShowRelatedRow = { tabMode ->
+                initialRelatedTabMode = tabMode
+                relatedRowVisible = true
+                interactionSignal.tryEmit(Unit)
+            },
+            onHideRelatedRow = {
+                relatedRowVisible = false
+                interactionSignal.tryEmit(Unit)
+            },
+            onSelectRelatedVideo = { selected, queue ->
+                relatedRowVisible = false
+                if (!useWebViewYouTubeFallback) {
+                    onSaveProgress(video.videoKey, exoPlayer.currentPosition, durationMs)
+                }
+                onPlayRelated(selected, queue)
+            },
             onPlayPauseToggle = performTogglePlayPause,
             onSeekTo = { position ->
                 if (useWebViewYouTubeFallback) {

@@ -32,6 +32,7 @@ import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.Forward10
 import androidx.compose.material.icons.filled.Hd
+import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.OndemandVideo
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
@@ -44,6 +45,7 @@ import androidx.compose.material.icons.filled.SkipPrevious
 import androidx.compose.material.icons.filled.Speed
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material.icons.filled.Usb
+import androidx.compose.material.icons.filled.VideoLibrary
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
@@ -64,6 +66,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Brush
@@ -80,6 +83,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.joudjawadtube.player.data.local.FormatUtils
 import com.joudjawadtube.player.data.local.VideoItem
+import com.joudjawadtube.player.data.repository.RelatedTabMode
+import com.joudjawadtube.player.data.repository.RelatedVideos
 import com.joudjawadtube.player.data.settings.RepeatMode
 import com.joudjawadtube.player.ui.components.LocalWindowLayoutInfo
 import com.joudjawadtube.player.ui.theme.SmartTubeCardBg
@@ -104,6 +109,12 @@ fun SmartTubePlayerHud(
     videoStreamBadge: String?,
     hasPrevious: Boolean,
     hasNext: Boolean,
+    relatedVideos: RelatedVideos? = null,
+    relatedRowVisible: Boolean = false,
+    initialRelatedTabMode: RelatedTabMode = RelatedTabMode.CATEGORY,
+    onShowRelatedRow: (RelatedTabMode) -> Unit = {},
+    onHideRelatedRow: () -> Unit = {},
+    onSelectRelatedVideo: (VideoItem, List<VideoItem>) -> Unit = { _, _ -> },
     onPlayPauseToggle: () -> Unit,
     onSeekTo: (Long) -> Unit,
     onSeekRelative: (Long) -> Unit,
@@ -120,9 +131,11 @@ fun SmartTubePlayerHud(
     val layoutInfo = LocalWindowLayoutInfo.current
     val horizontalPad = if (layoutInfo.isCompact) 12.dp else 24.dp
     val verticalPad = if (layoutInfo.isPhone) 12.dp else 20.dp
+    val appLayoutDirection = LocalLayoutDirection.current
+    val hasRelated = relatedVideos != null && relatedVideos.videos.size > 1
 
-    LaunchedEffect(visible) {
-        if (visible) {
+    LaunchedEffect(visible, relatedRowVisible) {
+        if (visible && !relatedRowVisible) {
             runCatching { playPauseFocusRequester.requestFocus() }
         }
     }
@@ -260,34 +273,50 @@ fun SmartTubePlayerHud(
                 }
             }
 
-            // Bottom OSD Controls & Seekbar
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .align(Alignment.BottomCenter)
-                    .padding(horizontal = horizontalPad, vertical = verticalPad)
-            ) {
-                // Isolated Timeline Bar (recomposes at 500ms without recomposing outer HUD)
-                PlayerTimelineBar(
-                    positionProvider = positionProvider,
-                    durationMs = durationMs,
-                    seekStepMs = seekStepMs,
-                    onSeekTo = onSeekTo,
-                    onSeekRelative = onSeekRelative,
-                    onUserInteraction = onUserInteraction
-                )
+            // Bottom OSD Controls & Seekbar (hidden when the related category row slides up)
+            if (!relatedRowVisible) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .align(Alignment.BottomCenter)
+                        .padding(horizontal = horizontalPad, vertical = verticalPad)
+                ) {
+                    // Isolated Timeline Bar (recomposes at 500ms without recomposing outer HUD)
+                    PlayerTimelineBar(
+                        positionProvider = positionProvider,
+                        durationMs = durationMs,
+                        seekStepMs = seekStepMs,
+                        onSeekTo = onSeekTo,
+                        onSeekRelative = onSeekRelative,
+                        onUserInteraction = onUserInteraction
+                    )
 
-                Spacer(modifier = Modifier.height(10.dp))
+                    Spacer(modifier = Modifier.height(10.dp))
 
-                // Bottom Control Pill Bar
-                if (layoutInfo.isCompact) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .horizontalScroll(rememberScrollState()),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
+                    val downToRelatedModifier = Modifier.onPreviewKeyEvent { event ->
+                        if (hasRelated && event.type == KeyEventType.KeyDown && event.key == Key.DirectionDown) {
+                            onUserInteraction()
+                            onShowRelatedRow(RelatedTabMode.CATEGORY)
+                            true
+                        } else {
+                            false
+                        }
+                    }
+
+                    val hasSourceChannelOrPlaylist = relatedVideos != null &&
+                        relatedVideos.sourceVideos.size > 1 &&
+                        relatedVideos.sourceTitle.isNotBlank()
+
+                    // Bottom Control Pill Bar
+                    if (layoutInfo.isCompact) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .then(downToRelatedModifier)
+                                .horizontalScroll(rememberScrollState()),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
                         HudControlPill(
                             icon = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
                             label = if (isPlaying) stringResource(R.string.player_pause) else stringResource(R.string.player_play),
@@ -324,6 +353,15 @@ fun SmartTubePlayerHud(
                                 onUserInteraction = onUserInteraction
                             )
                         }
+                        if (hasSourceChannelOrPlaylist && relatedVideos != null) {
+                            HudControlPill(
+                                icon = Icons.Default.VideoLibrary,
+                                label = relatedVideos.sourceTitle.take(18).ifBlank { stringResource(R.string.player_channel_videos_btn) },
+                                iconTint = SmartTubeRed,
+                                onClick = { onShowRelatedRow(RelatedTabMode.SOURCE) },
+                                onUserInteraction = onUserInteraction
+                            )
+                        }
                         HudControlPill(
                             icon = if (video.isFavorite) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
                             label = if (video.isFavorite) stringResource(R.string.player_favorite_saved) else stringResource(R.string.player_favorite),
@@ -343,6 +381,7 @@ fun SmartTubePlayerHud(
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
+                            .then(downToRelatedModifier)
                             .horizontalScroll(rememberScrollState()),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.SpaceBetween
@@ -396,11 +435,21 @@ fun SmartTubePlayerHud(
 
                         Spacer(modifier = Modifier.width(12.dp))
 
-                        // Right cluster: Favorite + Unified Options Menu (Quality, Subs, Audio, Speed, Ratio, Repeat)
+                        // Right cluster: Channel/Playlist + Favorite + Unified Options Menu
                         Row(
                             horizontalArrangement = Arrangement.spacedBy(8.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
+                            if (hasSourceChannelOrPlaylist && relatedVideos != null) {
+                                HudControlPill(
+                                    icon = Icons.Default.VideoLibrary,
+                                    label = relatedVideos.sourceTitle.take(22).ifBlank { stringResource(R.string.player_channel_videos_btn) },
+                                    iconTint = SmartTubeRed,
+                                    onClick = { onShowRelatedRow(RelatedTabMode.SOURCE) },
+                                    onUserInteraction = onUserInteraction
+                                )
+                            }
+
                             HudControlPill(
                                 icon = if (video.isFavorite) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
                                 label = if (video.isFavorite) stringResource(R.string.player_favorite_saved) else stringResource(R.string.player_favorite),
@@ -418,7 +467,72 @@ fun SmartTubePlayerHud(
                         }
                     }
                 }
+
+                if (hasRelated && relatedVideos != null) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    CompositionLocalProvider(LocalLayoutDirection provides appLayoutDirection) {
+                        val hintTitle = if (relatedVideos.isCategory) {
+                            when (relatedVideos.title.lowercase(java.util.Locale.ROOT)) {
+                                "all" -> stringResource(R.string.category_all)
+                                "islamic kids" -> stringResource(R.string.category_islamic_kids)
+                                "english learning" -> stringResource(R.string.category_english_learning)
+                                "stories & rhymes" -> stringResource(R.string.category_stories_rhymes)
+                                "cartoons & fun" -> stringResource(R.string.category_cartoons_fun)
+                                "stem", "stem & education" -> stringResource(R.string.category_stem_science)
+                                else -> relatedVideos.title
+                            }
+                        } else {
+                            relatedVideos.title
+                        }
+                        Row(
+                            modifier = Modifier
+                                .align(Alignment.CenterHorizontally)
+                                .focusProperties { canFocus = false }
+                                .clip(CircleShape)
+                                .background(Color.Black.copy(alpha = 0.55f))
+                                .border(1.dp, Color.White.copy(alpha = 0.14f), CircleShape)
+                                .clickable(
+                                    interactionSource = remember { MutableInteractionSource() },
+                                    indication = null
+                                ) {
+                                    onUserInteraction()
+                                    onShowRelatedRow(RelatedTabMode.CATEGORY)
+                                }
+                                .padding(horizontal = 12.dp, vertical = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.KeyboardArrowUp,
+                                contentDescription = null,
+                                tint = SmartTubeRed,
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Text(
+                                text = stringResource(R.string.player_more_in, hintTitle),
+                                color = SmartTubeTextSecondary,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+                    }
+                }
             }
+            }
+
+            RelatedVideosRow_Antigravity(
+                visible = relatedRowVisible && hasRelated,
+                related = relatedVideos,
+                currentVideo = video,
+                initialTabMode = initialRelatedTabMode,
+                layoutDirection = appLayoutDirection,
+                onSelectVideo = onSelectRelatedVideo,
+                onDismiss = onHideRelatedRow,
+                onUserInteraction = onUserInteraction,
+                modifier = Modifier.align(Alignment.BottomCenter)
+            )
         }
     }
 }

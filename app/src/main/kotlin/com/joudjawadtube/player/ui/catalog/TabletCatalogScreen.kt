@@ -41,6 +41,7 @@ import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Tv
 import androidx.compose.material.icons.filled.Usb
+import androidx.compose.material.icons.filled.VideoLibrary
 import androidx.compose.material.icons.filled.ViewAgenda
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -58,7 +59,9 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.TextStyle
@@ -72,6 +75,9 @@ import com.joudjawadtube.player.data.settings.AppSettingsState
 import com.joudjawadtube.player.ui.components.CompactBottomNav_Antigravity
 import com.joudjawadtube.player.ui.components.LocalWindowLayoutInfo
 import com.joudjawadtube.player.ui.components.PermissionBanner
+import com.joudjawadtube.player.ui.components.QuickChannelsPlaylistsDialog_Antigravity
+import com.joudjawadtube.player.ui.components.QuickCollectionTarget_Antigravity
+import com.joudjawadtube.player.ui.components.SearchIconBar_Antigravity
 import com.joudjawadtube.player.ui.components.SidebarSection
 import com.joudjawadtube.player.ui.components.SmartTubeSidebar
 import com.joudjawadtube.player.ui.components.VideoCard
@@ -131,9 +137,7 @@ fun TabletCatalogScreen(
         val isCompactWidth = maxWidth < 600.dp
         val isPhone = layoutInfo.isPhone
         val isWideTablet = maxWidth >= 960.dp
-        var searchFocused by remember { mutableStateOf(false) }
-        val searchFocusRequester = remember { FocusRequester() }
-        val keyboardController = LocalSoftwareKeyboardController.current
+        val focusManager = LocalFocusManager.current
 
         Column(modifier = Modifier.fillMaxSize()) {
             Row(modifier = Modifier.weight(1f).fillMaxWidth()) {
@@ -144,7 +148,7 @@ fun TabletCatalogScreen(
                         channelsCount = uiState.snapshot.savedChannels.size,
                         playlistsCount = uiState.snapshot.savedPlaylists.size,
                         isScanning = uiState.isScanning,
-                        isExpanded = isWideTablet,
+                        isExpanded = false,
                         sidebarMode = uiState.settings.sidebarMode,
                         onSelectSection = onSelectSection,
                         onAddYouTubeLink = onOpenAddYouTubeDialog,
@@ -172,75 +176,15 @@ fun TabletCatalogScreen(
                     }
 
                     @Composable
-                    fun SearchInputField(modifier: Modifier = Modifier) {
-                        Row(
-                            modifier = modifier.height(if (isCompactWidth) 38.dp else 40.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(6.dp)
-                        ) {
-                            BasicTextField(
-                                value = uiState.searchQuery,
-                                onValueChange = onSearchQueryChange,
-                                singleLine = true,
-                                textStyle = TextStyle(
-                                    color = SmartTubeTextPrimary,
-                                    fontSize = 13.sp,
-                                    fontWeight = FontWeight.Medium
-                                ),
-                                cursorBrush = SolidColor(SmartTubeRed),
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .fillMaxHeight()
-                                    .focusRequester(searchFocusRequester)
-                                    .onFocusChanged { searchFocused = it.isFocused },
-                                decorationBox = { innerTextField ->
-                                    Row(
-                                        modifier = Modifier
-                                            .fillMaxSize()
-                                            .clip(RoundedCornerShape(20.dp))
-                                            .background(if (searchFocused) SmartTubeCardFocusedBg else SmartTubeCardBg)
-                                            .border(
-                                                width = if (searchFocused) 1.8.dp else 1.dp,
-                                                color = if (searchFocused) SmartTubeRed else Color.White.copy(alpha = 0.08f),
-                                                shape = RoundedCornerShape(20.dp)
-                                            )
-                                            .padding(horizontal = 12.dp),
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
-                                        Icon(
-                                            imageVector = Icons.Default.Search,
-                                            contentDescription = "Search",
-                                            tint = if (searchFocused) SmartTubeRed else SmartTubeTextSecondary,
-                                            modifier = Modifier.size(18.dp)
-                                        )
-                                        Spacer(modifier = Modifier.width(8.dp))
-                                        Box(
-                                            modifier = Modifier.weight(1f),
-                                            contentAlignment = Alignment.CenterStart
-                                        ) {
-                                            if (uiState.searchQuery.isEmpty()) {
-                                                Text(
-                                                    text = stringResource(R.string.search_placeholder),
-                                                    color = SmartTubeTextSecondary,
-                                                    fontSize = 13.sp,
-                                                    maxLines = 1,
-                                                    overflow = TextOverflow.Ellipsis
-                                                )
-                                            }
-                                            innerTextField()
-                                        }
-                                    }
-                                }
-                            )
-
-                            if (uiState.searchQuery.isNotEmpty()) {
-                                HeaderInteractivePill(
-                                    icon = Icons.Default.Clear,
-                                    text = stringResource(R.string.search_clear),
-                                    onClick = { onSearchQueryChange("") }
-                                )
-                            }
-                        }
+                    fun SearchInputField(modifier: Modifier = Modifier, expandedWidth: androidx.compose.ui.unit.Dp = 280.dp) {
+                        SearchIconBar_Antigravity(
+                            query = uiState.searchQuery,
+                            onQueryChange = onSearchQueryChange,
+                            onSubmit = { focusManager.moveFocus(FocusDirection.Down) },
+                            height = if (isCompactWidth) 38.dp else 40.dp,
+                            expandedWidth = expandedWidth,
+                            modifier = modifier
+                        )
                     }
 
                     @Composable
@@ -278,6 +222,9 @@ fun TabletCatalogScreen(
                         }
                     }
 
+                    var showQuickChannelsPlaylistsDialog by remember { mutableStateOf(false) }
+                    var quickCollectionTarget by remember { mutableStateOf<QuickCollectionTarget_Antigravity?>(null) }
+
                     // Top Bar: stacked 2-row compact layout on portrait phones, single-row on landscape/tablet
                     if (isCompactWidth) {
                         Column(
@@ -289,7 +236,23 @@ fun TabletCatalogScreen(
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.spacedBy(6.dp)
                             ) {
-                                SearchInputField(modifier = Modifier.weight(1f))
+                                Box(
+                                    modifier = Modifier.weight(1f),
+                                    contentAlignment = Alignment.CenterStart
+                                ) {
+                                    SearchInputField(
+                                        expandedWidth = androidx.compose.ui.unit.Dp.Unspecified
+                                    )
+                                }
+
+                                HeaderInteractivePill(
+                                    icon = Icons.Default.VideoLibrary,
+                                    text = stringResource(R.string.quick_channels_playlists_btn),
+                                    onClick = {
+                                        quickCollectionTarget = null
+                                        showQuickChannelsPlaylistsDialog = true
+                                    }
+                                )
 
                                 Box(
                                     modifier = Modifier
@@ -346,11 +309,18 @@ fun TabletCatalogScreen(
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.SpaceBetween
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
                         ) {
-                            SearchInputField(modifier = Modifier.weight(0.45f))
-                            Spacer(modifier = Modifier.width(10.dp))
-                            CategoryChipsRow(modifier = Modifier.weight(0.55f), includeGridToggle = true)
+                            SearchInputField(expandedWidth = 280.dp)
+                            HeaderInteractivePill(
+                                icon = Icons.Default.VideoLibrary,
+                                text = stringResource(R.string.quick_channels_playlists_btn),
+                                onClick = {
+                                    quickCollectionTarget = null
+                                    showQuickChannelsPlaylistsDialog = true
+                                }
+                            )
+                            CategoryChipsRow(modifier = Modifier.weight(1f), includeGridToggle = true)
                         }
                     }
 
@@ -535,12 +505,41 @@ fun TabletCatalogScreen(
                                         onVideoClick = { video -> onVideoClick(video, row.videos) },
                                         onToggleFavorite = onToggleFavorite,
                                         onOpenVideoOptions = onOpenVideoOptions,
-                                        onPlaylistClick = { onSelectSection(SidebarSection.PLAYLISTS) },
-                                        onChannelClick = { onSelectSection(SidebarSection.CHANNELS) }
+                                        onPlaylistClick = {
+                                            quickCollectionTarget = QuickCollectionTarget_Antigravity(
+                                                title = row.title,
+                                                subtitle = row.subtitle,
+                                                videos = row.videos
+                                            )
+                                            showQuickChannelsPlaylistsDialog = true
+                                        },
+                                        onChannelClick = {
+                                            quickCollectionTarget = QuickCollectionTarget_Antigravity(
+                                                title = row.title,
+                                                subtitle = row.subtitle,
+                                                videos = row.videos
+                                            )
+                                            showQuickChannelsPlaylistsDialog = true
+                                        }
                                     )
                                 }
                             }
                         }
+                    }
+
+                    if (showQuickChannelsPlaylistsDialog) {
+                        QuickChannelsPlaylistsDialog_Antigravity(
+                            savedChannels = uiState.snapshot.savedChannels,
+                            savedPlaylists = uiState.snapshot.savedPlaylists,
+                            allVideos = uiState.snapshot.allVideos,
+                            initialTarget = quickCollectionTarget,
+                            onPlayVideo = onVideoClick,
+                            onAddYouTubeClick = onOpenAddYouTubeDialog,
+                            onDismiss = {
+                                showQuickChannelsPlaylistsDialog = false
+                                quickCollectionTarget = null
+                            }
+                        )
                     }
                 }
             }

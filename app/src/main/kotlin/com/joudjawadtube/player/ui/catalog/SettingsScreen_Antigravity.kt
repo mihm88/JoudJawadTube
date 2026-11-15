@@ -20,6 +20,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -52,10 +53,12 @@ import com.joudjawadtube.player.R
 import com.joudjawadtube.player.data.settings.AppLanguage
 import com.joudjawadtube.player.data.settings.ThemeMode
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -85,6 +88,8 @@ import com.joudjawadtube.player.ui.components.ActionPillButton
 import com.joudjawadtube.player.ui.components.ConfirmDestructiveDialog_Antigravity
 import com.joudjawadtube.player.ui.components.DeviceFormFactor
 import com.joudjawadtube.player.ui.components.LocalWindowLayoutInfo
+import com.joudjawadtube.player.ui.components.ManageLibraryAndDataDialog_Antigravity
+import kotlinx.coroutines.launch
 import com.joudjawadtube.player.ui.theme.SmartTubeCardBg
 import com.joudjawadtube.player.ui.theme.SmartTubeCardFocusedBg
 import com.joudjawadtube.player.ui.theme.SmartTubeFocusBorder
@@ -138,6 +143,9 @@ fun SettingsScreen(
         DeviceFormFactor.PHONE -> "Phone"
     }
     var pendingDestructiveAction by remember { mutableStateOf<DestructiveAction?>(null) }
+    var showManageLibraryDataDialog by remember { mutableStateOf(false) }
+    val lazyListState = rememberLazyListState()
+    val coroutineScope = rememberCoroutineScope()
     var cacheSizeBytes by remember(isGeneratingThumbnails, thumbnailStatusMessage) {
         mutableLongStateOf(ThumbnailManager.getCacheSizeBytes(context))
     }
@@ -149,9 +157,10 @@ fun SettingsScreen(
     }
 
     LazyColumn(
+        state = lazyListState,
         modifier = Modifier.fillMaxSize(),
         verticalArrangement = Arrangement.spacedBy(18.dp),
-        contentPadding = PaddingValues(bottom = 44.dp)
+        contentPadding = PaddingValues(bottom = 120.dp)
     ) {
         // Header Banner
         item(key = "settings_header") {
@@ -449,7 +458,7 @@ fun SettingsScreen(
                 SettingsCycleOptionRow(
                     icon = Icons.Default.Settings,
                     title = "Sidebar Navigation Behavior",
-                    subtitle = "Overlay mode expands over content without resizing the video grid (eliminates D-Pad lag)",
+                    subtitle = "Menu starts collapsed as icons and expands over content only when pressing the Menu button",
                     valueLabel = settings.sidebarMode.label,
                     onClick = {
                         val modes = SidebarMode.entries
@@ -543,124 +552,23 @@ fun SettingsScreen(
             }
         }
 
-        // Section 5: YouTube Playlists, History & Data Reset
+        // Section 5: YouTube Playlists, History & Data Reset (Single button opening modal manager)
         item(key = "settings_data") {
             SettingsCategoryCard(
                 title = "5. Saved YouTube Playlists, History & Reset",
-                subtitle = "Manage saved YouTube playlists, watch progress, favorites, and app defaults"
+                subtitle = "Manage saved YouTube channels, playlists, watch progress, favorites, and app defaults"
             ) {
-                if (savedChannels.isNotEmpty()) {
-                    Text(
-                        text = "Saved YouTube Channels (${savedChannels.size})",
-                        color = SmartTubeTextSecondary,
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Bold,
-                        modifier = Modifier.padding(top = 4.dp)
-                    )
-                    savedChannels.forEach { chan ->
-                        SettingsCycleOptionRow(
-                            icon = Icons.Default.AddLink,
-                            title = "Channel: ${chan.title}",
-                            subtitle = "${chan.handle} • Uploads: ${chan.uploadsPlaylistId}",
-                            valueLabel = "Delete Channel",
-                            onClick = {
-                                pendingDestructiveAction = DestructiveAction(
-                                    title = "Delete Channel",
-                                    message = "Are you sure you want to delete channel \"${chan.title}\"? All its uploads and playlists will be removed.",
-                                    confirmLabel = "Delete",
-                                    onConfirm = { onDeleteChannel(chan.channelId) }
-                                )
-                            }
-                        )
-                    }
-                    HorizontalDivider(color = Color.White.copy(alpha = 0.08f))
-                }
-
-                if (savedPlaylists.isNotEmpty()) {
-                    Text(
-                        text = "Saved YouTube Playlists (${savedPlaylists.size})",
-                        color = SmartTubeTextSecondary,
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Bold,
-                        modifier = Modifier.padding(top = 4.dp)
-                    )
-                    savedPlaylists.forEach { pl ->
-                        SettingsCycleOptionRow(
-                            icon = Icons.Default.AddLink,
-                            title = "Playlist: ${pl.title}",
-                            subtitle = "${pl.videoCount} videos • ${pl.sourceUrl}",
-                            valueLabel = "Delete Playlist",
-                            onClick = {
-                                pendingDestructiveAction = DestructiveAction(
-                                    title = "Delete Playlist",
-                                    message = "Are you sure you want to delete playlist \"${pl.title}\"? Its ${pl.videoCount} videos will be removed from your library.",
-                                    confirmLabel = "Delete",
-                                    onConfirm = { onDeletePlaylist(pl.playlistId) }
-                                )
-                            }
-                        )
-                    }
-                    HorizontalDivider(color = Color.White.copy(alpha = 0.08f))
-                }
-
                 SettingsCycleOptionRow(
-                    icon = Icons.Default.History,
-                    title = "Clear Watch History & Playback Progress",
-                    subtitle = "Resets Continue Watching positions for all videos",
-                    valueLabel = "Clear History",
-                    onClick = {
-                        pendingDestructiveAction = DestructiveAction(
-                            title = "Clear Watch History",
-                            message = "Are you sure you want to clear your watch history? Continue Watching progress will be reset for all videos.",
-                            confirmLabel = "Clear History",
-                            onConfirm = onClearWatchHistory
-                        )
-                    }
-                )
-
-                SettingsCycleOptionRow(
-                    icon = Icons.Default.Delete,
-                    title = "Clear All Favorites",
-                    subtitle = "Removes all videos from your Favorites list",
-                    valueLabel = "Clear Favorites",
-                    onClick = {
-                        pendingDestructiveAction = DestructiveAction(
-                            title = "Clear All Favorites",
-                            message = "Are you sure you want to remove all saved favorite videos?",
-                            confirmLabel = "Clear Favorites",
-                            onConfirm = onClearFavorites
-                        )
-                    }
-                )
-
-                SettingsCycleOptionRow(
-                    icon = Icons.Default.Delete,
-                    title = "Remove All Saved YouTube Links & Playlists",
-                    subtitle = "Deletes imported YouTube links while keeping all local & USB videos untouched",
-                    valueLabel = "Clear YouTube",
-                    onClick = {
-                        pendingDestructiveAction = DestructiveAction(
-                            title = "Clear YouTube Library",
-                            message = "Are you sure you want to delete all saved YouTube playlists, channels, and video links? Local and USB files will remain safe.",
-                            confirmLabel = "Clear All",
-                            onConfirm = onClearYouTubeLibrary
-                        )
-                    }
-                )
-
-                SettingsCycleOptionRow(
-                    icon = Icons.Default.Restore,
-                    title = "Reset All Settings to Default",
-                    subtitle = "Restores all player, thumbnail, and layout settings to factory defaults",
-                    valueLabel = "Reset Defaults",
-                    onClick = {
-                        pendingDestructiveAction = DestructiveAction(
-                            title = "Reset All Settings",
-                            message = "Are you sure you want to restore all settings to factory default values?",
-                            confirmLabel = "Reset Defaults",
-                            onConfirm = onResetSettings
-                        )
-                    }
+                    icon = Icons.Default.AddLink,
+                    title = stringResource(R.string.settings_manage_library_data_title),
+                    subtitle = stringResource(
+                        R.string.settings_manage_library_data_sub,
+                        savedChannels.size,
+                        savedPlaylists.size
+                    ),
+                    valueLabel = stringResource(R.string.settings_manage_library_data_btn),
+                    isAccent = true,
+                    onClick = { showManageLibraryDataDialog = true }
                 )
             }
         }
@@ -673,225 +581,225 @@ fun SettingsScreen(
                     pInfo.versionName ?: "1.0.0"
                 }.getOrDefault("1.0.0")
             }
+            var updatesCardHasFocus by remember { mutableStateOf(false) }
 
-            SettingsCategoryCard(
-                title = "6. App Updates & GitHub Sync",
-                subtitle = "Check for newer releases published on GitHub repository (mihm88/JoudJawadTube) and install directly"
-            ) {
-                var isFocusedCheck by remember { mutableStateOf(false) }
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(10.dp))
-                        .background(if (isFocusedCheck) SmartTubeCardFocusedBg else Color(0xFF191919))
-                        .border(
-                            width = if (isFocusedCheck) 2.dp else 1.dp,
-                            color = if (isFocusedCheck) SmartTubeFocusBorder else Color.White.copy(alpha = 0.06f),
-                            shape = RoundedCornerShape(10.dp)
-                        )
-                        .padding(horizontal = 14.dp, vertical = 12.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Row(
-                        modifier = Modifier.weight(1f),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.SystemUpdate,
-                            contentDescription = null,
-                            tint = if (isFocusedCheck) SmartTubeRed else SmartTubeUsbCyan,
-                            modifier = Modifier.size(22.dp)
-                        )
-                        Spacer(modifier = Modifier.width(12.dp))
-                        Column {
-                            Text(
-                                text = "Installed Version: v$versionName",
-                                color = SmartTubeTextPrimary,
-                                fontSize = 14.sp,
-                                fontWeight = FontWeight.SemiBold
-                            )
-                            Text(
-                                text = "Repository: github.com/mihm88/JoudJawadTube",
-                                color = SmartTubeTextSecondary,
-                                fontSize = 11.sp
-                            )
-                        }
-                    }
-
-                    ActionPillButton(
-                        icon = Icons.Default.Refresh,
-                        text = if (updateState is UpdateState_Antigravity.Checking) "Checking..." else "Check for Updates",
-                        isPrimary = false,
-                        onClick = onCheckForUpdates
-                    )
+            LaunchedEffect(updatesCardHasFocus, updateState) {
+                if (updatesCardHasFocus) {
+                    val lastIndex = (lazyListState.layoutInfo.totalItemsCount - 1).coerceAtLeast(0)
+                    runCatching { lazyListState.animateScrollToItem(lastIndex) }
                 }
+            }
 
-                when (updateState) {
-                    is UpdateState_Antigravity.Idle -> { /* Idle */ }
-                    is UpdateState_Antigravity.Checking -> {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clip(RoundedCornerShape(8.dp))
-                                .background(Color(0xFF202020))
-                                .padding(12.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text(
-                                text = "Connecting to GitHub Releases API to check for updates...",
-                                color = SmartTubeTextSecondary,
-                                fontSize = 13.sp
-                            )
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .onFocusChanged { updatesCardHasFocus = it.hasFocus }
+            ) {
+                SettingsCategoryCard(
+                    title = "6. App Updates & GitHub Sync",
+                    subtitle = "Check for newer releases published on GitHub repository (mihm88/JoudJawadTube) and install directly"
+                ) {
+                    SettingsCycleOptionRow(
+                        icon = Icons.Default.SystemUpdate,
+                        title = "Installed Version: v$versionName",
+                        subtitle = "Repository: github.com/mihm88/JoudJawadTube",
+                        valueLabel = if (updateState is UpdateState_Antigravity.Checking) "Checking..." else "Check for Updates",
+                        isAccent = true,
+                        onClick = {
+                            coroutineScope.launch {
+                                val lastIndex = (lazyListState.layoutInfo.totalItemsCount - 1).coerceAtLeast(0)
+                                runCatching { lazyListState.animateScrollToItem(lastIndex) }
+                            }
+                            onCheckForUpdates()
                         }
-                    }
-                    is UpdateState_Antigravity.UpToDate -> {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clip(RoundedCornerShape(8.dp))
-                                .background(Color(0xFF16321F))
-                                .padding(12.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Icon(Icons.Default.CheckCircle, contentDescription = null, tint = Color(0xFF4CAF50), modifier = Modifier.size(20.dp))
-                            Spacer(modifier = Modifier.width(10.dp))
-                            Text(
-                                text = "You are on the latest version (${updateState.currentVersion}). No new updates found.",
-                                color = Color(0xFFE8F5E9),
-                                fontSize = 13.sp,
-                                fontWeight = FontWeight.Medium
-                            )
+                    )
+
+                    when (updateState) {
+                        is UpdateState_Antigravity.Idle -> { /* Idle */ }
+                        is UpdateState_Antigravity.Checking -> {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .background(Color(0xFF202020))
+                                    .padding(12.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = "Connecting to GitHub Releases API to check for updates...",
+                                    color = SmartTubeTextSecondary,
+                                    fontSize = 13.sp
+                                )
+                            }
                         }
-                    }
-                    is UpdateState_Antigravity.UpdateAvailable -> {
-                        val info = updateState.info
-                        Column(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clip(RoundedCornerShape(10.dp))
-                                .background(Color(0xFF261D10))
-                                .border(1.dp, Color(0xFFFF9800).copy(alpha = 0.5f), RoundedCornerShape(10.dp))
-                                .padding(14.dp),
-                            verticalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Icon(Icons.Default.CloudDownload, contentDescription = null, tint = Color(0xFFFF9800), modifier = Modifier.size(22.dp))
+                        is UpdateState_Antigravity.UpToDate -> {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .background(Color(0xFF16321F))
+                                    .padding(12.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(Icons.Default.CheckCircle, contentDescription = null, tint = Color(0xFF4CAF50), modifier = Modifier.size(20.dp))
                                 Spacer(modifier = Modifier.width(10.dp))
-                                Column {
+                                Text(
+                                    text = "You are on the latest version (${updateState.currentVersion}). No new updates found.",
+                                    color = Color(0xFFE8F5E9),
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.Medium
+                                )
+                            }
+                        }
+                        is UpdateState_Antigravity.UpdateAvailable -> {
+                            val info = updateState.info
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(10.dp))
+                                    .background(Color(0xFF261D10))
+                                    .border(1.dp, Color(0xFFFF9800).copy(alpha = 0.5f), RoundedCornerShape(10.dp))
+                                    .padding(14.dp),
+                                verticalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(Icons.Default.CloudDownload, contentDescription = null, tint = Color(0xFFFF9800), modifier = Modifier.size(22.dp))
+                                    Spacer(modifier = Modifier.width(10.dp))
+                                    Column {
+                                        Text(
+                                            text = "New Update Available: ${info.tagName} (${info.releaseTitle})",
+                                            color = Color.White,
+                                            fontSize = 15.sp,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                        val sizeMb = if (info.fileSize > 0) String.format(java.util.Locale.US, " • %.1f MB", info.fileSize / (1024f * 1024f)) else ""
+                                        Text(
+                                            text = "${info.fileName}$sizeMb",
+                                            color = SmartTubeTextSecondary,
+                                            fontSize = 12.sp
+                                        )
+                                    }
+                                }
+                                if (info.releaseNotes.isNotBlank()) {
                                     Text(
-                                        text = "New Update Available: ${info.tagName} (${info.releaseTitle})",
-                                        color = Color.White,
-                                        fontSize = 15.sp,
-                                        fontWeight = FontWeight.Bold
-                                    )
-                                    val sizeMb = if (info.fileSize > 0) String.format(java.util.Locale.US, " • %.1f MB", info.fileSize / (1024f * 1024f)) else ""
-                                    Text(
-                                        text = "${info.fileName}$sizeMb",
+                                        text = info.releaseNotes,
                                         color = SmartTubeTextSecondary,
-                                        fontSize = 12.sp
+                                        fontSize = 12.sp,
+                                        maxLines = 4,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                }
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.End
+                                ) {
+                                    ActionPillButton(
+                                        icon = Icons.Default.CloudDownload,
+                                        text = "Download & Install Update",
+                                        isPrimary = true,
+                                        onClick = { onDownloadAndInstallUpdate(info) }
                                     )
                                 }
                             }
-                            if (info.releaseNotes.isNotBlank()) {
-                                Text(
-                                    text = info.releaseNotes,
-                                    color = SmartTubeTextSecondary,
-                                    fontSize = 12.sp,
-                                    maxLines = 4,
-                                    overflow = TextOverflow.Ellipsis
-                                )
-                            }
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.End
+                        }
+                        is UpdateState_Antigravity.Downloading -> {
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .background(Color(0xFF202020))
+                                    .padding(14.dp),
+                                verticalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
-                                ActionPillButton(
-                                    icon = Icons.Default.CloudDownload,
-                                    text = "Download & Install Update",
-                                    isPrimary = true,
-                                    onClick = { onDownloadAndInstallUpdate(info) }
+                                val downloadedMb = updateState.downloadedBytes / (1024f * 1024f)
+                                val totalMb = updateState.totalBytes / (1024f * 1024f)
+                                Text(
+                                    text = "Downloading update: ${updateState.progressPercent}% (${String.format(java.util.Locale.US, "%.1f", downloadedMb)} MB / ${String.format(java.util.Locale.US, "%.1f", totalMb)} MB)",
+                                    color = SmartTubeTextPrimary,
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                                LinearProgressIndicator(
+                                    progress = { updateState.progressPercent / 100f },
+                                    modifier = Modifier.fillMaxWidth().height(8.dp).clip(RoundedCornerShape(4.dp)),
+                                    color = SmartTubeRed,
+                                    trackColor = Color.DarkGray
                                 )
                             }
                         }
-                    }
-                    is UpdateState_Antigravity.Downloading -> {
-                        Column(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clip(RoundedCornerShape(8.dp))
-                                .background(Color(0xFF202020))
-                                .padding(14.dp),
-                            verticalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            val downloadedMb = updateState.downloadedBytes / (1024f * 1024f)
-                            val totalMb = updateState.totalBytes / (1024f * 1024f)
-                            Text(
-                                text = "Downloading update: ${updateState.progressPercent}% (${String.format(java.util.Locale.US, "%.1f", downloadedMb)} MB / ${String.format(java.util.Locale.US, "%.1f", totalMb)} MB)",
-                                color = SmartTubeTextPrimary,
-                                fontSize = 13.sp,
-                                fontWeight = FontWeight.SemiBold
-                            )
-                            LinearProgressIndicator(
-                                progress = { updateState.progressPercent / 100f },
-                                modifier = Modifier.fillMaxWidth().height(8.dp).clip(RoundedCornerShape(4.dp)),
-                                color = SmartTubeRed,
-                                trackColor = Color.DarkGray
-                            )
+                        is UpdateState_Antigravity.ReadyToInstall -> {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .background(Color(0xFF16321F))
+                                    .padding(12.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Text(
+                                    text = "Download complete! Opening package installer...",
+                                    color = Color(0xFFE8F5E9),
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.Medium
+                                )
+                                ActionPillButton(
+                                    icon = Icons.Default.SystemUpdate,
+                                    text = "Launch Installer",
+                                    isPrimary = true,
+                                    onClick = { onDownloadAndInstallUpdate(updateState.info) }
+                                )
+                            }
                         }
-                    }
-                    is UpdateState_Antigravity.ReadyToInstall -> {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clip(RoundedCornerShape(8.dp))
-                                .background(Color(0xFF16321F))
-                                .padding(12.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.SpaceBetween
-                        ) {
-                            Text(
-                                text = "Download complete! Opening package installer...",
-                                color = Color(0xFFE8F5E9),
-                                fontSize = 13.sp,
-                                fontWeight = FontWeight.Medium
-                            )
-                            ActionPillButton(
-                                icon = Icons.Default.SystemUpdate,
-                                text = "Launch Installer",
-                                isPrimary = true,
-                                onClick = { onDownloadAndInstallUpdate(updateState.info) }
-                            )
-                        }
-                    }
-                    is UpdateState_Antigravity.Error -> {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clip(RoundedCornerShape(8.dp))
-                                .background(Color(0xFF331414))
-                                .border(1.dp, SmartTubeRed.copy(alpha = 0.5f), RoundedCornerShape(8.dp))
-                                .padding(12.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.SpaceBetween
-                        ) {
-                            Text(
-                                text = "Update Error: ${updateState.message}",
-                                color = Color(0xFFFFCDD2),
-                                fontSize = 12.sp,
-                                modifier = Modifier.weight(1f)
-                            )
-                            ActionPillButton(
-                                icon = Icons.Default.Refresh,
-                                text = "Dismiss",
-                                isPrimary = false,
-                                onClick = onDismissUpdateStatus
-                            )
+                        is UpdateState_Antigravity.Error -> {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .background(Color(0xFF331414))
+                                    .border(1.dp, SmartTubeRed.copy(alpha = 0.5f), RoundedCornerShape(8.dp))
+                                    .padding(12.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Text(
+                                    text = "Update Error: ${updateState.message}",
+                                    color = Color(0xFFFFCDD2),
+                                    fontSize = 12.sp,
+                                    modifier = Modifier.weight(1f)
+                                )
+                                ActionPillButton(
+                                    icon = Icons.Default.Refresh,
+                                    text = "Dismiss",
+                                    isPrimary = false,
+                                    onClick = onDismissUpdateStatus
+                                )
+                            }
                         }
                     }
                 }
             }
         }
+
+        // Trailing spacer item so Card 6 can scroll well above the bottom edge of the screen
+        item(key = "settings_bottom_spacer") {
+            Spacer(modifier = Modifier.height(56.dp))
+        }
+    }
+
+    if (showManageLibraryDataDialog) {
+        ManageLibraryAndDataDialog_Antigravity(
+            savedChannels = savedChannels,
+            savedPlaylists = savedPlaylists,
+            onAddYouTubeLink = onAddYouTubeLink,
+            onDeleteChannel = onDeleteChannel,
+            onDeletePlaylist = onDeletePlaylist,
+            onClearWatchHistory = onClearWatchHistory,
+            onClearFavorites = onClearFavorites,
+            onClearYouTubeLibrary = onClearYouTubeLibrary,
+            onResetSettings = onResetSettings,
+            onDismiss = { showManageLibraryDataDialog = false }
+        )
     }
 
     pendingDestructiveAction?.let { action ->

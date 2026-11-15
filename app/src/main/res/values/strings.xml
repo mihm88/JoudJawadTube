@@ -7,6 +7,7 @@
     <string name="edition_tablet">Tablet Auto-Detect</string>
 
     <!-- Navigation & Sections -->
+    <string name="nav_menu">Menu</string>
     <string name="nav_home">Home</string>
     <string name="nav_kids_picks">Kids Picks</string>
     <string name="nav_channels">Channels</string>
@@ -101,6 +102,8 @@
     <string name="player_speed">Speed: %.2fx</string>
     <string name="player_hw_accel">HEVC HW</string>
     <string name="player_now_playing">Now Playing</string>
+    <string name="player_more_in">More in: %s</string>
+    <string name="player_now_playing_badge">Now playing</string>
     <string name="player_rotate">Rotate</string>
     <string name="player_options">Options</string>
     <string name="player_options_title">Player Options</string>
@@ -150,7 +153,7 @@
     <string name="settings_font_scale_normal">Normal (100%)</string>
     <string name="settings_font_scale_large">Large (110%)</string>
     <string name="settings_sidebar_mode">Sidebar Style</string>
-    <string name="settings_sidebar_overlay">Overlay on Focus (Zero Lag)</string>
+    <string name="settings_sidebar_overlay">Collapsed — open with Menu button</string>
     <string name="settings_sidebar_collapsed">Always Collapsed</string>
     <string name="settings_sidebar_expanded">Always Expanded</string>
 
@@ -193,4 +196,18 @@
     <string name="dialog_playlist_title_hint">Playlist Name</string>
     <string name="dialog_confirm_delete_title">Confirm Deletion</string>
     <string name="dialog_confirm_delete_msg">Are you sure you want to remove \"%s\"?</string>
+    <string name="quick_channels_playlists_btn">Channels &amp; Playlists</string>
+    <string name="quick_picker_title">Quick Access: Channels &amp; Playlists</string>
+    <string name="quick_picker_subtitle">Select any channel or playlist to browse or play all its videos</string>
+    <string name="action_add_youtube">+ YouTube Link</string>
+    <string name="action_back_to_list">Back to List</string>
+    <string name="video_option_open_source">Go to Channel / Playlist</string>
+    <string name="video_option_open_source_sub">Browse all videos in %1$s</string>
+    <string name="player_channel_videos_btn">Channel / Playlist</string>
+    <string name="player_tab_source">Channel / Playlist: %1$s</string>
+    <string name="player_tab_category">Category: %1$s</string>
+    <string name="settings_manage_library_data_title">Manage Channels, Playlists &amp; Data</string>
+    <string name="settings_manage_library_data_sub">%1$d Channels • %2$d Playlists • Watch History, Favorites &amp; Reset</string>
+    <string name="settings_manage_library_data_btn">Open Manager</string>
+    <string name="settings_data_tab_reset">Data &amp; Reset</string>
 </resources>
