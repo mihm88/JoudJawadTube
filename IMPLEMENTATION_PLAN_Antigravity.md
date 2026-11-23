@@ -40,7 +40,7 @@ Master engineering checklist covering Tasks **T01–T18** across **Phases 0–3*
   - **Verification**:
     - `.\gradlew.bat :app:compileDebugKotlin :app:testDebugUnitTest`
 
-- [x] **T04 — In-App Updater Security Hardening** *(T04-core & security tests done; T04-UI updater dialog/settings wiring tracked in T09)*
+- [x] **T04 — In-App Updater Security Hardening** *(Core hardening, security tests, and SettingsScreen/MainActivity installer UI wiring complete)*
   - **Goal**: Sanitize downloaded APK filenames (`sanitizeApkFileName`), enforce canonical directory containment inside `updatesDir`, verify HTTP 2xx status and disconnect sockets in `finally`, and enforce mandatory SHA-256 signing certificate verification (removing silent fallback bypasses) with unit tests.
   - **Target Files**:
     - `app/src/main/kotlin/com/joudjawadtube/player/data/updater/AppUpdater_Antigravity.kt`
@@ -52,7 +52,7 @@ Master engineering checklist covering Tasks **T01–T18** across **Phases 0–3*
 
 ## Phase 1 — Kid-Safety, Offline Resilience & Parental Controls
 
-- [ ] **T05 — Kid-Safe YouTube Resolution & Fallback Guardrails**
+- [x] **T05 — Kid-Safe YouTube Resolution & Fallback Guardrails** *(YouTubeService, PlaybackScreen, CatalogViewModel, YouTubeSafetyTest complete)*
   - **Goal**: Honor `allowGeneralFallbackForSavedChannels` and `allowWebViewFallback` inside YouTube resolution and related-video filtering, differentiating kids-restricted, offline, and generic YouTube stream errors cleanly.
   - **Target Files**:
     - `app/src/main/kotlin/com/joudjawadtube/player/data/youtube/YouTubeService_Antigravity.kt`
@@ -61,7 +61,7 @@ Master engineering checklist covering Tasks **T01–T18** across **Phases 0–3*
   - **Verification**:
     - `.\gradlew.bat :app:testDebugUnitTest`
 
-- [ ] **T06 — Parental Gate & Kid Lock UI Components**
+- [x] **T06 — Parental Gate & Kid Lock UI Components** *(ParentalGateDialog_Antigravity, MainActivity gating, PlaybackScreen error/WebView/subtitles, and SmartTubePlayerHud slider complete; KidLockOverlay_Antigravity scheduled next)*
   - **Goal**: Build a reusable multiplication/math Parental Gate modal (`parental_gate_title`, `parental_gate_prompt`, `parental_gate_wrong`) governed by `parentalGateEnabled`, plus a Kid Lock playback overlay requiring hold-to-unlock (`kid_lock_label`, `kid_lock_hold_to_unlock`, `kid_lock_unlocked`) for TV D-pad and touch screens.
   - **Target Files**:
     - `app/src/main/kotlin/com/joudjawadtube/player/ui/components/ParentalGateDialog_Antigravity.kt`

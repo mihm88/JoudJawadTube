@@ -58,6 +58,7 @@ import androidx.compose.ui.res.stringResource
 import com.joudjawadtube.player.R
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -553,16 +554,24 @@ private fun PlayerTimelineBar(
 ) {
     var currentPosMs by remember { mutableLongStateOf(positionProvider()) }
     var seekbarFocused by remember { mutableStateOf(false) }
+    var isDragging by remember { mutableStateOf(false) }
+    var dragFraction by remember { mutableFloatStateOf(0f) }
 
     LaunchedEffect(Unit) {
         while (isActive) {
-            currentPosMs = positionProvider().coerceAtLeast(0L)
+            if (!isDragging) {
+                currentPosMs = positionProvider().coerceAtLeast(0L)
+            }
             delay(500L)
         }
     }
 
     val safeDuration = durationMs.coerceAtLeast(1L)
-    val progressFraction = (currentPosMs.toFloat() / safeDuration.toFloat()).coerceIn(0f, 1f)
+    val progressFraction = if (isDragging) {
+        dragFraction.coerceIn(0f, 1f)
+    } else {
+        (currentPosMs.toFloat() / safeDuration.toFloat()).coerceIn(0f, 1f)
+    }
 
     Row(
         modifier = Modifier.fillMaxWidth(),
@@ -589,8 +598,14 @@ private fun PlayerTimelineBar(
             value = progressFraction,
             onValueChange = { frac ->
                 onUserInteraction()
-                val targetMs = (frac * safeDuration).toLong()
+                isDragging = true
+                dragFraction = frac.coerceIn(0f, 1f)
+                currentPosMs = (dragFraction * safeDuration).toLong()
+            },
+            onValueChangeFinished = {
+                val targetMs = (dragFraction * safeDuration).toLong()
                 currentPosMs = targetMs
+                isDragging = false
                 onSeekTo(targetMs)
             },
             colors = sliderColors,

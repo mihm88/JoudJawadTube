@@ -133,6 +133,7 @@ fun TvCatalogScreen(
     onResetSettings: () -> Unit,
     onCheckForUpdates: () -> Unit = {},
     onDownloadAndInstallUpdate: (UpdateInfo_Antigravity) -> Unit = {},
+    onInstallDownloadedApk: (java.io.File) -> Unit = {},
     onDismissUpdateStatus: () -> Unit = {}
 ) {
     Row(
@@ -226,6 +227,7 @@ fun TvCatalogScreen(
                     updateState = uiState.updateState,
                     onCheckForUpdates = onCheckForUpdates,
                     onDownloadAndInstallUpdate = onDownloadAndInstallUpdate,
+                    onInstallDownloadedApk = onInstallDownloadedApk,
                     onDismissUpdateStatus = onDismissUpdateStatus
                 )
             } else if (uiState.selectedSection == SidebarSection.KIDS_PICKS) {

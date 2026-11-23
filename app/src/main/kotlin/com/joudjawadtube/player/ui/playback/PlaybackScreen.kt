@@ -8,13 +8,16 @@ import android.content.pm.ActivityInfo
 import android.content.res.Configuration
 import android.net.Uri
 import android.view.ViewGroup
+import android.webkit.CookieManager
 import android.webkit.WebChromeClient
+import android.webkit.WebResourceRequest
 import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.widget.FrameLayout
 import androidx.activity.compose.BackHandler
 import androidx.annotation.OptIn
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.focusable
@@ -22,16 +25,32 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.rounded.ArrowBack
+import androidx.compose.material.icons.rounded.ErrorOutline
+import androidx.compose.material.icons.rounded.Refresh
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Icon
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
@@ -44,6 +63,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
@@ -54,6 +74,7 @@ import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -65,18 +86,23 @@ import androidx.media3.common.Player
 import androidx.media3.common.Tracks
 import androidx.media3.common.VideoSize
 import androidx.media3.common.util.UnstableApi
+import androidx.media3.datasource.DataSource
 import androidx.media3.datasource.DefaultDataSource
 import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.hls.HlsMediaSource
+import androidx.media3.exoplayer.source.MediaSource
 import androidx.media3.exoplayer.source.MergingMediaSource
 import androidx.media3.exoplayer.source.ProgressiveMediaSource
+import androidx.media3.exoplayer.source.SingleSampleMediaSource
 import androidx.media3.exoplayer.trackselection.DefaultTrackSelector
 import androidx.media3.exoplayer.upstream.DefaultLoadErrorHandlingPolicy
 import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.PlayerView
+import com.joudjawadtube.player.R
+import com.joudjawadtube.player.data.local.SidecarSubtitle
 import com.joudjawadtube.player.data.local.VideoItem
 import com.joudjawadtube.player.data.repository.RelatedTabMode
 import com.joudjawadtube.player.data.settings.AppSettingsState
@@ -87,7 +113,10 @@ import com.joudjawadtube.player.data.youtube.ResolvedYouTubeStream
 import com.joudjawadtube.player.data.youtube.YouTubeChunkedHttpDataSource_Antigravity
 import com.joudjawadtube.player.data.youtube.YouTubeService
 import com.joudjawadtube.player.ui.catalog.PlaybackSession
+import com.joudjawadtube.player.ui.theme.SmartTubeCardBg
+import com.joudjawadtube.player.ui.theme.SmartTubeFocusBorder
 import com.joudjawadtube.player.ui.theme.SmartTubeRed
+import com.joudjawadtube.player.ui.theme.SmartTubeSurface
 import com.joudjawadtube.player.ui.theme.SmartTubeTextPrimary
 import com.joudjawadtube.player.ui.theme.SmartTubeTextSecondary
 import kotlinx.coroutines.delay
@@ -130,6 +159,9 @@ fun PlaybackScreen(
     var triedFallbackStreamStage by remember(video.id) { mutableIntStateOf(0) }
     var useWebViewYouTubeFallback by remember(video.id) { mutableStateOf(false) }
     var webViewRef by remember { mutableStateOf<WebView?>(null) }
+    var playbackErrorResId by remember(video.id) { mutableStateOf<Int?>(null) }
+    var playbackErrorDetail by remember(video.id) { mutableStateOf<String?>(null) }
+    var retryNonce by remember(video.id) { mutableIntStateOf(0) }
 
     val coroutineScope = rememberCoroutineScope()
     var hasAttemptedStreamRefresh by remember(video.id) { mutableStateOf(false) }
@@ -143,6 +175,29 @@ fun PlaybackScreen(
     val latestOnNextVideo by rememberUpdatedState(onNextVideo)
     val latestResolvedStream by rememberUpdatedState(resolvedYouTubeStream)
     val latestCurrentQuality by rememberUpdatedState(currentQuality)
+    val latestAllowWebViewFallback by rememberUpdatedState(settings.allowWebViewFallback)
+    val latestAllowGeneralFallback by rememberUpdatedState(settings.allowGeneralFallbackForSavedChannels)
+    val latestSubtitlesEnabledByDefault by rememberUpdatedState(settings.subtitlesEnabledByDefault)
+
+    val handleYouTubePlaybackFailure: (ResolvedYouTubeStream?, String?) -> Unit = remember {
+        { resolved, detail ->
+            val canUseWebView = latestAllowWebViewFallback &&
+                YouTubeService.SAFE_VIDEO_ID_REGEX.matches(latestVideo.youtubeVideoId)
+            if (canUseWebView) {
+                playbackErrorResId = null
+                playbackErrorDetail = null
+                useWebViewYouTubeFallback = true
+            } else {
+                useWebViewYouTubeFallback = false
+                playbackErrorResId = if (resolved?.restrictionReason == "KIDS_RESTRICTED") {
+                    R.string.player_error_kids_restricted
+                } else {
+                    R.string.player_error_youtube
+                }
+                playbackErrorDetail = detail
+            }
+        }
+    }
 
     var hudVisible by remember { mutableStateOf(true) }
     var relatedRowVisible by remember(video.id) { mutableStateOf(false) }
@@ -217,7 +272,7 @@ fun PlaybackScreen(
                     null
                 }
 
-                var prepared = true
+                val primarySources = mutableListOf<MediaSource>()
                 when {
                     preferredVariant != null && (!preferredVariant.isProgressive && !resolved.audioStreamUrl.isNullOrBlank()) -> {
                         triedFallbackStreamStage = 1
@@ -227,14 +282,15 @@ fun PlaybackScreen(
                         val aSource = ProgressiveMediaSource.Factory(dataSourceFactory)
                             .setLoadErrorHandlingPolicy(fastFailPolicy)
                             .createMediaSource(MediaItem.fromUri(resolved.audioStreamUrl))
-                        exoPlayer.setMediaSource(MergingMediaSource(vSource, aSource), resumePos)
+                        primarySources += vSource
+                        primarySources += aSource
                     }
                     preferredVariant != null && preferredVariant.isProgressive -> {
                         triedFallbackStreamStage = 3
                         val pSource = ProgressiveMediaSource.Factory(dataSourceFactory)
                             .setLoadErrorHandlingPolicy(fastFailPolicy)
                             .createMediaSource(MediaItem.fromUri(preferredVariant.videoUrl))
-                        exoPlayer.setMediaSource(pSource, resumePos)
+                        primarySources += pSource
                     }
                     !resolved.videoStreamUrl.isNullOrBlank() && !resolved.audioStreamUrl.isNullOrBlank() -> {
                         triedFallbackStreamStage = 1
@@ -244,25 +300,33 @@ fun PlaybackScreen(
                         val aSource = ProgressiveMediaSource.Factory(dataSourceFactory)
                             .setLoadErrorHandlingPolicy(fastFailPolicy)
                             .createMediaSource(MediaItem.fromUri(resolved.audioStreamUrl))
-                        exoPlayer.setMediaSource(MergingMediaSource(vSource, aSource), resumePos)
+                        primarySources += vSource
+                        primarySources += aSource
                     }
                     !resolved.hlsManifestUrl.isNullOrBlank() -> {
                         triedFallbackStreamStage = 2
                         val hlsSource = HlsMediaSource.Factory(dataSourceFactory)
                             .setLoadErrorHandlingPolicy(fastFailPolicy)
                             .createMediaSource(MediaItem.fromUri(resolved.hlsManifestUrl))
-                        exoPlayer.setMediaSource(hlsSource, resumePos)
+                        primarySources += hlsSource
                     }
                     !resolved.progressiveUrl.isNullOrBlank() -> {
                         triedFallbackStreamStage = 3
                         val pSource = ProgressiveMediaSource.Factory(dataSourceFactory)
                             .setLoadErrorHandlingPolicy(fastFailPolicy)
                             .createMediaSource(MediaItem.fromUri(resolved.progressiveUrl))
-                        exoPlayer.setMediaSource(pSource, resumePos)
+                        primarySources += pSource
                     }
-                    else -> prepared = false
                 }
+                val prepared = primarySources.isNotEmpty()
                 if (prepared) {
+                    val combinedSource = buildYouTubeMediaSourceWithSubtitles(
+                        primarySources = primarySources,
+                        subtitles = resolved.subtitles,
+                        dataSourceFactory = dataSourceFactory,
+                        subtitlesEnabledByDefault = latestSubtitlesEnabledByDefault
+                    )
+                    exoPlayer.setMediaSource(combinedSource, resumePos)
                     if (applyPlaybackSpeed) {
                         exoPlayer.setPlaybackSpeed(playbackSpeed)
                     }
@@ -274,8 +338,10 @@ fun PlaybackScreen(
         }
     }
 
-    // Load or switch MediaItem when session.currentVideo changes
-    LaunchedEffect(video.id, video.entity.uri) {
+    // Load or switch MediaItem when session.currentVideo changes or user retries
+    LaunchedEffect(video.id, video.entity.uri, retryNonce) {
+        playbackErrorResId = null
+        playbackErrorDetail = null
         useWebViewYouTubeFallback = false
         hasAttemptedStreamRefresh = false
         isRefreshingExpiredStream = false
@@ -292,7 +358,13 @@ fun PlaybackScreen(
         if (video.isYoutube && video.youtubeVideoId.isNotBlank()) {
             isResolvingYouTube = true
             triedFallbackStreamStage = 0
-            val resolved = YouTubeService.resolveStreamForPlayback(video.youtubeVideoId)
+            if (retryNonce > 0) {
+                YouTubeService.invalidateStreamCache(video.youtubeVideoId)
+            }
+            val resolved = YouTubeService.resolveStreamForPlayback(
+                videoId = video.youtubeVideoId,
+                allowGeneralClientFallback = latestAllowGeneralFallback
+            )
             resolvedYouTubeStream = resolved
             isResolvingYouTube = false
 
@@ -301,7 +373,7 @@ fun PlaybackScreen(
             }
 
             if (!prepareYouTubeStreamSource(resolved, currentQuality, resumePos, true)) {
-                useWebViewYouTubeFallback = true
+                handleYouTubePlaybackFailure(resolved, null)
             }
         } else {
             isResolvingYouTube = false
@@ -332,14 +404,17 @@ fun PlaybackScreen(
         if (session.hasNext) {
             val nextVid = session.playlist.getOrNull(session.currentIndex + 1)
             if (nextVid != null && nextVid.isYoutube && nextVid.youtubeVideoId.isNotBlank()) {
-                YouTubeService.preResolveStream(nextVid.youtubeVideoId)
+                YouTubeService.preResolveStream(
+                    videoId = nextVid.youtubeVideoId,
+                    allowGeneralClientFallback = latestAllowGeneralFallback
+                )
             }
         }
     }
 
-    // Cascade fallback (Stage 2 HLS -> Stage 3 Progressive -> Stage 4 WebView)
-    val cascadeYouTubeFallback: (ResolvedYouTubeStream, Long) -> Unit = remember(exoPlayer, context) {
-        { resolved, currentPos ->
+    // Cascade fallback (Stage 2 HLS -> Stage 3 Progressive -> Stage 4 WebView or Kid-Friendly Error)
+    val cascadeYouTubeFallback: (ResolvedYouTubeStream, Long, String?) -> Unit = remember(exoPlayer, context) {
+        { resolved, currentPos, detail ->
             val httpFactory = YouTubeChunkedHttpDataSource_Antigravity.Factory(
                 userAgent = resolved.userAgent,
                 connectTimeoutMs = 6_000,
@@ -355,7 +430,15 @@ fun PlaybackScreen(
                         val hlsSource = HlsMediaSource.Factory(dataSourceFactory)
                             .setLoadErrorHandlingPolicy(fastFailPolicy)
                             .createMediaSource(MediaItem.fromUri(resolved.hlsManifestUrl))
-                        exoPlayer.setMediaSource(hlsSource, currentPos)
+                        exoPlayer.setMediaSource(
+                            buildYouTubeMediaSourceWithSubtitles(
+                                primarySources = listOf(hlsSource),
+                                subtitles = resolved.subtitles,
+                                dataSourceFactory = dataSourceFactory,
+                                subtitlesEnabledByDefault = latestSubtitlesEnabledByDefault
+                            ),
+                            currentPos
+                        )
                         exoPlayer.prepare()
                         exoPlayer.playWhenReady = true
                     } else if (!resolved.progressiveUrl.isNullOrBlank()) {
@@ -363,12 +446,20 @@ fun PlaybackScreen(
                         val pSource = ProgressiveMediaSource.Factory(dataSourceFactory)
                             .setLoadErrorHandlingPolicy(fastFailPolicy)
                             .createMediaSource(MediaItem.fromUri(resolved.progressiveUrl))
-                        exoPlayer.setMediaSource(pSource, currentPos)
+                        exoPlayer.setMediaSource(
+                            buildYouTubeMediaSourceWithSubtitles(
+                                primarySources = listOf(pSource),
+                                subtitles = resolved.subtitles,
+                                dataSourceFactory = dataSourceFactory,
+                                subtitlesEnabledByDefault = latestSubtitlesEnabledByDefault
+                            ),
+                            currentPos
+                        )
                         exoPlayer.prepare()
                         exoPlayer.playWhenReady = true
                     } else {
                         triedFallbackStreamStage = 4
-                        useWebViewYouTubeFallback = true
+                        handleYouTubePlaybackFailure(resolved, detail)
                     }
                 }
                 2 -> {
@@ -377,17 +468,25 @@ fun PlaybackScreen(
                         val pSource = ProgressiveMediaSource.Factory(dataSourceFactory)
                             .setLoadErrorHandlingPolicy(fastFailPolicy)
                             .createMediaSource(MediaItem.fromUri(resolved.progressiveUrl))
-                        exoPlayer.setMediaSource(pSource, currentPos)
+                        exoPlayer.setMediaSource(
+                            buildYouTubeMediaSourceWithSubtitles(
+                                primarySources = listOf(pSource),
+                                subtitles = resolved.subtitles,
+                                dataSourceFactory = dataSourceFactory,
+                                subtitlesEnabledByDefault = latestSubtitlesEnabledByDefault
+                            ),
+                            currentPos
+                        )
                         exoPlayer.prepare()
                         exoPlayer.playWhenReady = true
                     } else {
                         triedFallbackStreamStage = 4
-                        useWebViewYouTubeFallback = true
+                        handleYouTubePlaybackFailure(resolved, detail)
                     }
                 }
                 else -> {
                     triedFallbackStreamStage = 4
-                    useWebViewYouTubeFallback = true
+                    handleYouTubePlaybackFailure(resolved, detail)
                 }
             }
         }
@@ -408,7 +507,10 @@ fun PlaybackScreen(
                     isRefreshingExpiredStream = true
                     coroutineScope.launch {
                         try {
-                            val fresh = YouTubeService.refreshStreamForPlayback(expectedVideoId)
+                            val fresh = YouTubeService.refreshStreamForPlayback(
+                                videoId = expectedVideoId,
+                                allowGeneralClientFallback = latestAllowGeneralFallback
+                            )
                             if (latestVideo.youtubeVideoId == expectedVideoId) {
                                 resolvedYouTubeStream = fresh
                                 if (fresh.durationMs > 0L) {
@@ -434,8 +536,8 @@ fun PlaybackScreen(
     }
 
     // Dynamic error recovery: refresh expired/failing stream URL once before cascading fallbacks
-    val tryNextYouTubeFallback: () -> Unit = remember(exoPlayer, refreshAndResumeYouTubeStream, cascadeYouTubeFallback) {
-        {
+    val tryNextYouTubeFallback: (String?) -> Unit = remember(exoPlayer, refreshAndResumeYouTubeStream, cascadeYouTubeFallback) {
+        { detail ->
             val resolved = latestResolvedStream
             val activeVideo = latestVideo
             if (activeVideo.isYoutube && resolved != null) {
@@ -447,12 +549,14 @@ fun PlaybackScreen(
 
                 if (shouldAttemptRefresh) {
                     hasAttemptedStreamRefresh = true
-                    refreshAndResumeYouTubeStream(currentPos) {
-                        cascadeYouTubeFallback(resolved, currentPos)
+                    refreshAndResumeYouTubeStream(currentPos) { fresh ->
+                        cascadeYouTubeFallback(fresh ?: resolved, currentPos, detail)
                     }
                 } else {
-                    cascadeYouTubeFallback(resolved, currentPos)
+                    cascadeYouTubeFallback(resolved, currentPos, detail)
                 }
+            } else if (activeVideo.isYoutube) {
+                handleYouTubePlaybackFailure(null, detail)
             }
         }
     }
@@ -520,7 +624,10 @@ fun PlaybackScreen(
 
             override fun onPlayerError(error: PlaybackException) {
                 if (latestVideo.isYoutube) {
-                    latestTryNextYouTubeFallback()
+                    latestTryNextYouTubeFallback(error.localizedMessage)
+                } else {
+                    playbackErrorResId = R.string.player_error_local
+                    playbackErrorDetail = error.localizedMessage
                 }
             }
         }
@@ -535,7 +642,13 @@ fun PlaybackScreen(
     DisposableEffect(Unit) {
         onDispose {
             hostActivity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
-            webViewRef?.destroy()
+            webViewRef?.let { wv ->
+                wv.stopLoading()
+                wv.loadUrl("about:blank")
+                wv.removeAllViews()
+                wv.destroy()
+                webViewRef = null
+            }
             exoPlayer.release()
         }
     }
@@ -635,7 +748,7 @@ fun PlaybackScreen(
 
                 if (needsStreamRenewal) {
                     refreshAndResumeYouTubeStream(exoPlayer.currentPosition.coerceAtLeast(0L)) { fresh ->
-                        if (fresh != null) useWebViewYouTubeFallback = true else exoPlayer.play()
+                        handleYouTubePlaybackFailure(fresh, null)
                     }
                 } else {
                     exoPlayer.play()
@@ -781,32 +894,80 @@ fun PlaybackScreen(
                 interactionSignal.tryEmit(Unit)
             }
     ) {
-        if (useWebViewYouTubeFallback && video.youtubeVideoId.isNotBlank()) {
-            AndroidView(
-                factory = { ctx ->
-                    WebView(ctx).apply {
-                        setBackgroundColor(android.graphics.Color.BLACK)
-                        isFocusable = false
-                        isFocusableInTouchMode = false
-                        this.settings.apply {
-                            javaScriptEnabled = true
-                            mediaPlaybackRequiresUserGesture = false
-                            domStorageEnabled = true
-                            cacheMode = WebSettings.LOAD_DEFAULT
-                            userAgentString = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+        if (useWebViewYouTubeFallback &&
+            settings.allowWebViewFallback &&
+            YouTubeService.SAFE_VIDEO_ID_REGEX.matches(video.youtubeVideoId)
+        ) {
+            key(video.youtubeVideoId) {
+                AndroidView(
+                    factory = { ctx ->
+                        WebView(ctx).apply {
+                            val webView = this
+                            setBackgroundColor(android.graphics.Color.BLACK)
+                            isFocusable = false
+                            isFocusableInTouchMode = false
+                            CookieManager.getInstance().apply {
+                                setAcceptCookie(false)
+                                setAcceptThirdPartyCookies(webView, false)
+                            }
+                            this.settings.apply {
+                                javaScriptEnabled = true
+                                mediaPlaybackRequiresUserGesture = false
+                                domStorageEnabled = false
+                                allowFileAccess = false
+                                allowContentAccess = false
+                                cacheMode = WebSettings.LOAD_DEFAULT
+                                userAgentString = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+                            }
+                            webChromeClient = WebChromeClient()
+                            webViewClient = object : WebViewClient() {
+                                private fun isAllowedEmbedUrl(rawUrl: String?): Boolean {
+                                    val uri = rawUrl?.let { runCatching { Uri.parse(it) }.getOrNull() } ?: return false
+                                    if (!uri.scheme.equals("https", ignoreCase = true)) return false
+                                    val host = uri.host?.lowercase() ?: return false
+                                    val path = uri.path ?: ""
+                                    val allowedHost = host == "www.youtube-nocookie.com" ||
+                                        host == "youtube-nocookie.com" ||
+                                        host == "www.youtube.com" ||
+                                        host == "youtube.com"
+                                    return allowedHost && path.startsWith("/embed/")
+                                }
+
+                                override fun shouldOverrideUrlLoading(
+                                    view: WebView?,
+                                    request: WebResourceRequest?
+                                ): Boolean = !isAllowedEmbedUrl(request?.url?.toString())
+
+                                @Deprecated("Deprecated in Java")
+                                override fun shouldOverrideUrlLoading(view: WebView?, url: String?): Boolean =
+                                    !isAllowedEmbedUrl(url)
+                            }
+                            webViewRef = this
+                            val html = buildYouTubeEmbedHtml(video.youtubeVideoId)
+                            loadDataWithBaseURL(
+                                "https://www.youtube-nocookie.com",
+                                html,
+                                "text/html",
+                                "UTF-8",
+                                null
+                            )
                         }
-                        webChromeClient = WebChromeClient()
-                        webViewClient = WebViewClient()
-                        webViewRef = this
-                        val html = buildYouTubeEmbedHtml(video.youtubeVideoId)
-                        loadDataWithBaseURL("https://www.youtube.com", html, "text/html", "UTF-8", null)
-                    }
-                },
-                update = { wv ->
-                    webViewRef = wv
-                },
-                modifier = Modifier.fillMaxSize()
-            )
+                    },
+                    update = { wv ->
+                        webViewRef = wv
+                    },
+                    onRelease = { wv ->
+                        wv.stopLoading()
+                        wv.loadUrl("about:blank")
+                        wv.removeAllViews()
+                        wv.destroy()
+                        if (webViewRef === wv) {
+                            webViewRef = null
+                        }
+                    },
+                    modifier = Modifier.fillMaxSize()
+                )
+            }
         } else {
             AndroidView(
                 factory = { ctx ->
@@ -847,7 +1008,7 @@ fun PlaybackScreen(
                 )
                 Spacer(modifier = Modifier.height(12.dp))
                 Text(
-                    text = "Loading YouTube HD Stream...",
+                    text = stringResource(R.string.player_loading_stream),
                     color = SmartTubeTextPrimary,
                     fontSize = 15.sp,
                     fontWeight = FontWeight.Bold
@@ -858,6 +1019,16 @@ fun PlaybackScreen(
                     fontSize = 12.sp
                 )
             }
+        }
+
+        val activeErrorResId = playbackErrorResId
+        if (activeErrorResId != null && !isResolvingYouTube && !isRefreshingExpiredStream) {
+            PlaybackErrorOverlay(
+                errorResId = activeErrorResId,
+                errorDetail = playbackErrorDetail,
+                onRetry = { retryNonce++ },
+                onBack = onBack
+            )
         }
 
         val availableQualities = remember(
@@ -975,7 +1146,162 @@ fun PlaybackScreen(
     }
 }
 
+@OptIn(UnstableApi::class)
+private fun buildYouTubeMediaSourceWithSubtitles(
+    primarySources: List<MediaSource>,
+    subtitles: List<SidecarSubtitle>,
+    dataSourceFactory: DataSource.Factory,
+    subtitlesEnabledByDefault: Boolean
+): MediaSource {
+    if (subtitles.isEmpty()) {
+        return if (primarySources.size == 1) {
+            primarySources.first()
+        } else {
+            MergingMediaSource(*primarySources.toTypedArray())
+        }
+    }
+    val subtitleSources = subtitles.mapIndexed { index, sub ->
+        val config = MediaItem.SubtitleConfiguration.Builder(Uri.parse(sub.uriOrPath))
+            .setMimeType(sub.mimeType)
+            .setLanguage(sub.language)
+            .setLabel(sub.label)
+            .setSelectionFlags(if (index == 0 && subtitlesEnabledByDefault) C.SELECTION_FLAG_DEFAULT else 0)
+            .build()
+        SingleSampleMediaSource.Factory(dataSourceFactory)
+            .createMediaSource(config, C.TIME_UNSET)
+    }
+    val allSources = primarySources + subtitleSources
+    return MergingMediaSource(*allSources.toTypedArray())
+}
+
+@Composable
+private fun PlaybackErrorOverlay(
+    errorResId: Int,
+    errorDetail: String?,
+    onRetry: () -> Unit,
+    onBack: () -> Unit
+) {
+    val retryFocusRequester = remember { FocusRequester() }
+    var retryFocused by remember { mutableStateOf(false) }
+    var backFocused by remember { mutableStateOf(false) }
+
+    LaunchedEffect(errorResId) {
+        runCatching { retryFocusRequester.requestFocus() }
+    }
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color.Black.copy(alpha = 0.86f)),
+        contentAlignment = Alignment.Center
+    ) {
+        Surface(
+            shape = RoundedCornerShape(20.dp),
+            color = SmartTubeSurface,
+            border = BorderStroke(1.dp, SmartTubeFocusBorder.copy(alpha = 0.25f)),
+            modifier = Modifier
+                .fillMaxWidth(0.9f)
+                .widthIn(max = 520.dp)
+        ) {
+            Column(
+                modifier = Modifier.padding(28.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Rounded.ErrorOutline,
+                    contentDescription = null,
+                    tint = SmartTubeRed,
+                    modifier = Modifier.size(52.dp)
+                )
+                Text(
+                    text = stringResource(R.string.player_error_title),
+                    color = SmartTubeTextPrimary,
+                    fontSize = 20.sp,
+                    fontWeight = FontWeight.Bold,
+                    textAlign = TextAlign.Center
+                )
+                Text(
+                    text = stringResource(errorResId),
+                    color = SmartTubeTextSecondary,
+                    fontSize = 15.sp,
+                    textAlign = TextAlign.Center
+                )
+                if (!errorDetail.isNullOrBlank()) {
+                    Text(
+                        text = errorDetail,
+                        color = SmartTubeTextSecondary.copy(alpha = 0.75f),
+                        fontSize = 12.sp,
+                        textAlign = TextAlign.Center
+                    )
+                }
+                Spacer(modifier = Modifier.height(4.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Button(
+                        onClick = onRetry,
+                        shape = RoundedCornerShape(12.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = SmartTubeRed,
+                            contentColor = Color.White
+                        ),
+                        border = if (retryFocused) BorderStroke(2.dp, SmartTubeFocusBorder) else null,
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(56.dp)
+                            .focusRequester(retryFocusRequester)
+                            .onFocusChanged { retryFocused = it.isFocused }
+                    ) {
+                        Icon(
+                            imageVector = Icons.Rounded.Refresh,
+                            contentDescription = null,
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = stringResource(R.string.player_retry),
+                            fontSize = 15.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                    OutlinedButton(
+                        onClick = onBack,
+                        shape = RoundedCornerShape(12.dp),
+                        colors = ButtonDefaults.outlinedButtonColors(
+                            containerColor = SmartTubeCardBg,
+                            contentColor = SmartTubeTextPrimary
+                        ),
+                        border = BorderStroke(
+                            width = if (backFocused) 2.dp else 1.dp,
+                            color = if (backFocused) SmartTubeFocusBorder else SmartTubeTextSecondary.copy(alpha = 0.35f)
+                        ),
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(56.dp)
+                            .onFocusChanged { backFocused = it.isFocused }
+                    ) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Rounded.ArrowBack,
+                            contentDescription = null,
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = stringResource(R.string.player_back),
+                            fontSize = 15.sp,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
 private fun buildYouTubeEmbedHtml(videoId: String): String {
+    require(YouTubeService.SAFE_VIDEO_ID_REGEX.matches(videoId)) { "Invalid YouTube video ID" }
     return """
         <!DOCTYPE html>
         <html>
@@ -987,28 +1313,25 @@ private fun buildYouTubeEmbedHtml(videoId: String): String {
         </style>
         </head>
         <body>
-        <div id="player"></div>
-        <script src="https://www.youtube.com/iframe_api"></script>
+        <iframe id="player"
+            src="https://www.youtube-nocookie.com/embed/$videoId?autoplay=1&controls=0&rel=0&playsinline=1&modestbranding=1&iv_load_policy=3&enablejsapi=1"
+            allow="autoplay; encrypted-media"
+            allowfullscreen></iframe>
         <script>
-            var player;
-            function onYouTubeIframeAPIReady() {
-                player = new YT.Player('player', {
-                    width: '100%',
-                    height: '100%',
-                    videoId: '$videoId',
-                    playerVars: {
-                        'autoplay': 1,
-                        'controls': 0,
-                        'rel': 0,
-                        'playsinline': 1,
-                        'modestbranding': 1,
-                        'iv_load_policy': 3
-                    },
-                    events: {
-                        'onReady': function(event) { event.target.playVideo(); }
+            var frame = document.getElementById('player');
+            window.player = {
+                playVideo: function() {
+                    if (frame && frame.contentWindow) {
+                        frame.contentWindow.postMessage('{"event":"command","func":"playVideo","args":""}', 'https://www.youtube-nocookie.com');
                     }
-                });
-            }
+                },
+                pauseVideo: function() {
+                    if (frame && frame.contentWindow) {
+                        frame.contentWindow.postMessage('{"event":"command","func":"pauseVideo","args":""}', 'https://www.youtube-nocookie.com');
+                    }
+                },
+                seekTo: function() {}
+            };
         </script>
         </body>
         </html>

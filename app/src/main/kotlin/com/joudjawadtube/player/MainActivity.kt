@@ -27,8 +27,10 @@ import androidx.compose.foundation.lazy.grid.LazyGridState
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -50,6 +52,7 @@ import com.joudjawadtube.player.ui.catalog.TabletCatalogScreen
 import com.joudjawadtube.player.ui.catalog.TvCatalogScreen
 import com.joudjawadtube.player.ui.components.AddYouTubeLinkDialog
 import com.joudjawadtube.player.ui.components.LocalWindowLayoutInfo
+import com.joudjawadtube.player.ui.components.ParentalGateDialog_Antigravity
 import com.joudjawadtube.player.ui.components.ProvideWindowLayoutInfo
 import com.joudjawadtube.player.ui.components.QuickChannelsPlaylistsDialog_Antigravity
 import com.joudjawadtube.player.ui.components.QuickCollectionTarget_Antigravity
@@ -62,6 +65,8 @@ import com.joudjawadtube.player.ui.theme.JoudJawadTubeTheme
 class MainActivity : AppCompatActivity() {
 
     private val viewModel: CatalogViewModel by viewModels()
+    private var pendingIncomingUri by mutableStateOf<Uri?>(null)
+    private var pendingIncomingShareText by mutableStateOf<String?>(null)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -90,6 +95,42 @@ class MainActivity : AppCompatActivity() {
                     ) {
                         val context = LocalContext.current
                     val lifecycleOwner = LocalLifecycleOwner.current
+
+                    var pendingParentalAction by remember { mutableStateOf<(() -> Unit)?>(null) }
+                    var lastParentUnlockAtMs by remember { mutableLongStateOf(0L) }
+
+                    val runWithParentalGate: (() -> Unit) -> Unit = { action ->
+                        val now = System.currentTimeMillis()
+                        val withinUnlockWindow =
+                            lastParentUnlockAtMs > 0L && (now - lastParentUnlockAtMs) < 120_000L
+                        if (!uiState.settings.parentalGateEnabled || withinUnlockWindow) {
+                            action()
+                        } else {
+                            pendingParentalAction = action
+                        }
+                    }
+
+                    LaunchedEffect(
+                        pendingIncomingUri,
+                        pendingIncomingShareText,
+                        uiState.settings.parentalGateEnabled
+                    ) {
+                        val incomingUri = pendingIncomingUri
+                        if (incomingUri != null) {
+                            pendingIncomingUri = null
+                            runWithParentalGate {
+                                viewModel.handleIncomingExternalOrYouTubeUri(incomingUri)
+                            }
+                        } else {
+                            val incomingText = pendingIncomingShareText
+                            if (!incomingText.isNullOrBlank()) {
+                                pendingIncomingShareText = null
+                                runWithParentalGate {
+                                    viewModel.importYouTubeLink(incomingText, playImmediately = true)
+                                }
+                            }
+                        }
+                    }
 
                     var hasReadPermission by remember {
                         mutableStateOf(checkReadVideoPermission(context))
@@ -151,25 +192,27 @@ class MainActivity : AppCompatActivity() {
                     }
 
                     val requestAllFilesAccessAction: () -> Unit = {
-                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-                            val perAppIntent = Intent(
-                                Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION,
-                                Uri.parse("package:$packageName")
-                            )
-                            val genericIntent = Intent(Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION)
-                            runCatching {
-                                startActivity(perAppIntent)
-                            }.onFailure {
-                                runCatching { startActivity(genericIntent) }
+                        runWithParentalGate {
+                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                                val perAppIntent = Intent(
+                                    Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION,
+                                    Uri.parse("package:$packageName")
+                                )
+                                val genericIntent = Intent(Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION)
+                                runCatching {
+                                    startActivity(perAppIntent)
+                                }.onFailure {
+                                    runCatching { startActivity(genericIntent) }
+                                }
+                            } else {
+                                requestReadPermissionAction()
                             }
-                        } else {
-                            requestReadPermissionAction()
                         }
                     }
 
                     // Open the in-app D-Pad TV & USB Folder Browser so it works reliably on Android TV
                     val pickFolderAction: () -> Unit = {
-                        viewModel.openFolderPickerDialog()
+                        runWithParentalGate { viewModel.openFolderPickerDialog() }
                     }
 
                     // Hoisted lazy list / grid states for persistent scroll preservation across playback exits
@@ -199,7 +242,13 @@ class MainActivity : AppCompatActivity() {
                                     lazyListState = tvHomeListState,
                                     hasReadVideoPermission = hasReadPermission,
                                     hasAllFilesAccess = hasAllFilesAccess,
-                                    onSelectSection = { viewModel.selectSection(it) },
+                                    onSelectSection = { section ->
+                                        if (section == SidebarSection.SETTINGS) {
+                                            runWithParentalGate { viewModel.selectSection(section) }
+                                        } else {
+                                            viewModel.selectSection(section)
+                                        }
+                                    },
                                     onSelectTopCategory = { viewModel.selectTopCategory(it) },
                                     onSearchQueryChange = { viewModel.updateSearchQuery(it) },
                                     onSelectFolderFilter = { viewModel.selectFolderFilter(it) },
@@ -208,9 +257,15 @@ class MainActivity : AppCompatActivity() {
                                     },
                                     onToggleFavorite = { viewModel.toggleFavorite(it) },
                                     onOpenVideoOptions = { viewModel.openVideoOptions(it) },
-                                    onOpenAddYouTubeDialog = { viewModel.openAddYouTubeDialog() },
-                                    onDeletePlaylist = { viewModel.deleteYouTubePlaylist(it) },
-                                    onDeleteChannel = { viewModel.deleteYouTubeChannel(it) },
+                                    onOpenAddYouTubeDialog = {
+                                        runWithParentalGate { viewModel.openAddYouTubeDialog() }
+                                    },
+                                    onDeletePlaylist = { playlistId ->
+                                        runWithParentalGate { viewModel.deleteYouTubePlaylist(playlistId) }
+                                    },
+                                    onDeleteChannel = { channelId ->
+                                        runWithParentalGate { viewModel.deleteYouTubeChannel(channelId) }
+                                    },
                                     onChangeChannelCategory = { channelId, cat -> viewModel.updateChannelCategory(channelId, cat) },
                                     onChangePlaylistCategory = { playlistId, cat -> viewModel.updatePlaylistCategory(playlistId, cat) },
                                     onOpenKidsPlaylist = { plId, _ -> viewModel.openOrImportKidsPlaylist(plId, playImmediately = true) },
@@ -229,7 +284,12 @@ class MainActivity : AppCompatActivity() {
                                     onClearYouTubeLibrary = { viewModel.clearYouTubeLibrary() },
                                     onResetSettings = { viewModel.resetSettingsToDefaults() },
                                     onCheckForUpdates = { viewModel.checkForAppUpdates(isManual = true) },
-                                    onDownloadAndInstallUpdate = { viewModel.downloadAndInstallUpdate(it) },
+                                    onDownloadAndInstallUpdate = { info ->
+                                        runWithParentalGate { viewModel.downloadAndInstallUpdate(info) }
+                                    },
+                                    onInstallDownloadedApk = { apkFile ->
+                                        runWithParentalGate { viewModel.installDownloadedApk(apkFile) }
+                                    },
                                     onDismissUpdateStatus = { viewModel.dismissUpdateStatus() }
                                 )
                             } else {
@@ -239,7 +299,13 @@ class MainActivity : AppCompatActivity() {
                                     lazyGridState = tabletGridState,
                                     hasReadVideoPermission = hasReadPermission,
                                     hasAllFilesAccess = hasAllFilesAccess,
-                                    onSelectSection = { viewModel.selectSection(it) },
+                                    onSelectSection = { section ->
+                                        if (section == SidebarSection.SETTINGS) {
+                                            runWithParentalGate { viewModel.selectSection(section) }
+                                        } else {
+                                            viewModel.selectSection(section)
+                                        }
+                                    },
                                     onSelectTopCategory = { viewModel.selectTopCategory(it) },
                                     onSearchQueryChange = { viewModel.updateSearchQuery(it) },
                                     onSelectFolderFilter = { viewModel.selectFolderFilter(it) },
@@ -248,9 +314,15 @@ class MainActivity : AppCompatActivity() {
                                     },
                                     onToggleFavorite = { viewModel.toggleFavorite(it) },
                                     onOpenVideoOptions = { viewModel.openVideoOptions(it) },
-                                    onOpenAddYouTubeDialog = { viewModel.openAddYouTubeDialog() },
-                                    onDeletePlaylist = { viewModel.deleteYouTubePlaylist(it) },
-                                    onDeleteChannel = { viewModel.deleteYouTubeChannel(it) },
+                                    onOpenAddYouTubeDialog = {
+                                        runWithParentalGate { viewModel.openAddYouTubeDialog() }
+                                    },
+                                    onDeletePlaylist = { playlistId ->
+                                        runWithParentalGate { viewModel.deleteYouTubePlaylist(playlistId) }
+                                    },
+                                    onDeleteChannel = { channelId ->
+                                        runWithParentalGate { viewModel.deleteYouTubeChannel(channelId) }
+                                    },
                                     onChangeChannelCategory = { channelId, cat -> viewModel.updateChannelCategory(channelId, cat) },
                                     onChangePlaylistCategory = { playlistId, cat -> viewModel.updatePlaylistCategory(playlistId, cat) },
                                     onOpenKidsPlaylist = { plId, _ -> viewModel.openOrImportKidsPlaylist(plId, playImmediately = true) },
@@ -270,7 +342,12 @@ class MainActivity : AppCompatActivity() {
                                     onClearYouTubeLibrary = { viewModel.clearYouTubeLibrary() },
                                     onResetSettings = { viewModel.resetSettingsToDefaults() },
                                     onCheckForUpdates = { viewModel.checkForAppUpdates(isManual = true) },
-                                    onDownloadAndInstallUpdate = { viewModel.downloadAndInstallUpdate(it) },
+                                    onDownloadAndInstallUpdate = { info ->
+                                        runWithParentalGate { viewModel.downloadAndInstallUpdate(info) }
+                                    },
+                                    onInstallDownloadedApk = { apkFile ->
+                                        runWithParentalGate { viewModel.installDownloadedApk(apkFile) }
+                                    },
                                     onDismissUpdateStatus = { viewModel.dismissUpdateStatus() }
                                 )
                             }
@@ -378,7 +455,7 @@ class MainActivity : AppCompatActivity() {
                                     viewModel.extractCustomFrameThumbnailForVideo(selectedVideo, frac)
                                 },
                                 onDeleteVideo = if (selectedVideo.isYoutube) {
-                                    { viewModel.deleteYouTubeVideo(selectedVideo) }
+                                    { runWithParentalGate { viewModel.deleteYouTubeVideo(selectedVideo) } }
                                 } else {
                                     null
                                 },
@@ -393,8 +470,23 @@ class MainActivity : AppCompatActivity() {
                                 allVideos = uiState.snapshot.allVideos,
                                 initialTarget = target,
                                 onPlayVideo = { video, playlist -> viewModel.openVideo(video, playlist) },
-                                onAddYouTubeClick = { viewModel.openAddYouTubeDialog() },
+                                onAddYouTubeClick = {
+                                    runWithParentalGate { viewModel.openAddYouTubeDialog() }
+                                },
                                 onDismiss = { videoCardSourceTarget = null }
+                            )
+                        }
+
+                        pendingParentalAction?.let { action ->
+                            ParentalGateDialog_Antigravity(
+                                onSuccess = {
+                                    lastParentUnlockAtMs = System.currentTimeMillis()
+                                    pendingParentalAction = null
+                                    action()
+                                },
+                                onDismiss = {
+                                    pendingParentalAction = null
+                                }
                             )
                         }
                     }
@@ -416,7 +508,7 @@ class MainActivity : AppCompatActivity() {
                 if (dataUri != null) {
                     intent.action = Intent.ACTION_MAIN
                     intent.data = null
-                    viewModel.handleIncomingExternalOrYouTubeUri(dataUri)
+                    pendingIncomingUri = dataUri
                 }
             }
             Intent.ACTION_SEND -> {
@@ -424,7 +516,7 @@ class MainActivity : AppCompatActivity() {
                 if (!sharedText.isNullOrBlank()) {
                     intent.action = Intent.ACTION_MAIN
                     intent.removeExtra(Intent.EXTRA_TEXT)
-                    viewModel.importYouTubeLink(sharedText, playImmediately = true)
+                    pendingIncomingShareText = sharedText
                 }
             }
         }

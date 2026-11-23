@@ -406,7 +406,10 @@ class CatalogViewModel(application: Application) : AndroidViewModel(application)
                     if (topIds.isEmpty()) return@collectLatest
                     delay(1_200L)
                     topIds.forEach { vidId ->
-                        YouTubeService.preResolveStream(vidId)
+                        YouTubeService.preResolveStream(
+                            videoId = vidId,
+                            allowGeneralClientFallback = settingsRepository.settingsFlow.value.allowGeneralFallbackForSavedChannels
+                        )
                     }
                 }
         }
@@ -492,6 +495,15 @@ class CatalogViewModel(application: Application) : AndroidViewModel(application)
                     updateState = UpdateState_Antigravity.Error("Download failed: ${err.message}")
                 )
             }
+        }
+    }
+
+    fun installDownloadedApk(apkFile: java.io.File) {
+        appUpdater.installApk(apkFile).onFailure { err ->
+            val msg = err.message ?: "Failed to launch installer"
+            _dialogState.value = _dialogState.value.copy(
+                updateState = UpdateState_Antigravity.Error(msg)
+            )
         }
     }
 

@@ -32,16 +32,21 @@ import androidx.compose.material.icons.filled.CloudDownload
 import androidx.compose.material.icons.filled.ClosedCaption
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.FolderOpen
+import androidx.compose.material.icons.filled.Headphones
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.Language
+import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Public
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Restore
+import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Speed
 import androidx.compose.material.icons.filled.Storage
 import androidx.compose.material.icons.filled.SystemUpdate
+import androidx.compose.material.icons.filled.Timer
 import androidx.compose.material.icons.filled.Tv
 import androidx.compose.material.icons.filled.Usb
 import androidx.compose.material3.HorizontalDivider
@@ -132,6 +137,7 @@ fun SettingsScreen(
     updateState: UpdateState_Antigravity = UpdateState_Antigravity.Idle,
     onCheckForUpdates: () -> Unit = {},
     onDownloadAndInstallUpdate: (UpdateInfo_Antigravity) -> Unit = {},
+    onInstallDownloadedApk: (java.io.File) -> Unit = {},
     onDismissUpdateStatus: () -> Unit = {}
 ) {
     val context = LocalContext.current
@@ -146,8 +152,9 @@ fun SettingsScreen(
     var showManageLibraryDataDialog by remember { mutableStateOf(false) }
     val lazyListState = rememberLazyListState()
     val coroutineScope = rememberCoroutineScope()
-    var cacheSizeBytes by remember(isGeneratingThumbnails, thumbnailStatusMessage) {
-        mutableLongStateOf(ThumbnailManager.getCacheSizeBytes(context))
+    var cacheSizeBytes by remember { mutableLongStateOf(0L) }
+    LaunchedEffect(isGeneratingThumbnails, thumbnailStatusMessage) {
+        cacheSizeBytes = ThumbnailManager.getCacheSizeBytesAsync(context)
     }
 
     val resizeLabel = when (settings.defaultResizeMode) {
@@ -295,6 +302,94 @@ fun SettingsScreen(
                         val themes = ThemeMode.entries
                         val next = themes[(themes.indexOf(settings.themeMode) + 1) % themes.size]
                         onUpdateSettings { it.copy(themeMode = next) }
+                    }
+                )
+            }
+        }
+
+        // Section: Parental Controls & Kids Safety
+        item(key = "settings_parental") {
+            SettingsCategoryCard(
+                title = stringResource(R.string.settings_parental_section_title),
+                subtitle = stringResource(R.string.settings_parental_section_sub)
+            ) {
+                SettingsCycleOptionRow(
+                    icon = Icons.Default.Lock,
+                    title = stringResource(R.string.settings_parental_gate_title),
+                    subtitle = stringResource(R.string.settings_parental_gate_sub),
+                    valueLabel = if (settings.parentalGateEnabled) {
+                        stringResource(R.string.settings_enabled)
+                    } else {
+                        stringResource(R.string.settings_disabled)
+                    },
+                    isAccent = settings.parentalGateEnabled,
+                    onClick = {
+                        onUpdateSettings { it.copy(parentalGateEnabled = !it.parentalGateEnabled) }
+                    }
+                )
+
+                val watchLimits = listOf(0, 15, 30, 45, 60)
+                SettingsCycleOptionRow(
+                    icon = Icons.Default.Timer,
+                    title = stringResource(R.string.settings_watch_timer_title),
+                    subtitle = stringResource(R.string.settings_watch_timer_sub),
+                    valueLabel = if (settings.watchTimeLimitMinutes <= 0) {
+                        stringResource(R.string.watch_timer_off)
+                    } else {
+                        stringResource(R.string.watch_timer_minutes, settings.watchTimeLimitMinutes)
+                    },
+                    isAccent = settings.watchTimeLimitMinutes > 0,
+                    onClick = {
+                        val idx = watchLimits.indexOf(settings.watchTimeLimitMinutes)
+                        val next = watchLimits[(idx + 1).coerceAtLeast(0) % watchLimits.size]
+                        onUpdateSettings { it.copy(watchTimeLimitMinutes = next) }
+                    }
+                )
+
+                SettingsCycleOptionRow(
+                    icon = Icons.Default.Headphones,
+                    title = stringResource(R.string.settings_background_playback_title),
+                    subtitle = stringResource(R.string.settings_background_playback_sub),
+                    valueLabel = if (settings.backgroundPlaybackEnabled) {
+                        stringResource(R.string.settings_enabled)
+                    } else {
+                        stringResource(R.string.settings_disabled)
+                    },
+                    isAccent = settings.backgroundPlaybackEnabled,
+                    onClick = {
+                        onUpdateSettings { it.copy(backgroundPlaybackEnabled = !it.backgroundPlaybackEnabled) }
+                    }
+                )
+
+                SettingsCycleOptionRow(
+                    icon = Icons.Default.Security,
+                    title = stringResource(R.string.settings_general_fallback_title),
+                    subtitle = stringResource(R.string.settings_general_fallback_sub),
+                    valueLabel = if (settings.allowGeneralFallbackForSavedChannels) {
+                        stringResource(R.string.settings_enabled)
+                    } else {
+                        stringResource(R.string.settings_disabled)
+                    },
+                    isAccent = settings.allowGeneralFallbackForSavedChannels,
+                    onClick = {
+                        onUpdateSettings {
+                            it.copy(allowGeneralFallbackForSavedChannels = !it.allowGeneralFallbackForSavedChannels)
+                        }
+                    }
+                )
+
+                SettingsCycleOptionRow(
+                    icon = Icons.Default.Public,
+                    title = stringResource(R.string.settings_webview_fallback_title),
+                    subtitle = stringResource(R.string.settings_webview_fallback_sub),
+                    valueLabel = if (settings.allowWebViewFallback) {
+                        stringResource(R.string.settings_enabled)
+                    } else {
+                        stringResource(R.string.settings_disabled)
+                    },
+                    isAccent = settings.allowWebViewFallback,
+                    onClick = {
+                        onUpdateSettings { it.copy(allowWebViewFallback = !it.allowWebViewFallback) }
                     }
                 )
             }
@@ -747,7 +842,7 @@ fun SettingsScreen(
                                     icon = Icons.Default.SystemUpdate,
                                     text = "Launch Installer",
                                     isPrimary = true,
-                                    onClick = { onDownloadAndInstallUpdate(updateState.info) }
+                                    onClick = { onInstallDownloadedApk(updateState.apkFile) }
                                 )
                             }
                         }

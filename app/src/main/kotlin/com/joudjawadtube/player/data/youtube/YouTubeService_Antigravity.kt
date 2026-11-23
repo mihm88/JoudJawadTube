@@ -143,7 +143,8 @@ data class ResolvedYouTubeStream(
     val durationMs: Long = 0L,
     val qualityVariants: List<YouTubeQualityVariant> = emptyList(),
     val subtitles: List<SidecarSubtitle> = emptyList(),
-    val userAgent: String = "com.google.ios.youtubekids/9.40.0 (iPad14,1; U; CPU iOS 18_1_0 like Mac OS X;)"
+    val userAgent: String = "com.google.ios.youtubekids/9.40.0 (iPad14,1; U; CPU iOS 18_1_0 like Mac OS X;)",
+    val restrictionReason: String? = null
 ) {
     val hasDirectStream: Boolean
         get() = !hlsManifestUrl.isNullOrBlank() ||
@@ -175,9 +176,11 @@ sealed class ParsedYouTubeInput {
 
 object YouTubeService {
 
+    val SAFE_VIDEO_ID_REGEX = Regex("""^[a-zA-Z0-9_-]{11}$""")
+
     private val VIDEO_ID_REGEX = Regex("""(?:v=|youtu\.be/|shorts/|embed/|/v/)([a-zA-Z0-9_-]{11})""")
     private val PLAYLIST_ID_REGEX = Regex("""[?&]list=([a-zA-Z0-9_-]+)""")
-    private val RAW_VIDEO_ID_REGEX = Regex("""^[a-zA-Z0-9_-]{11}$""")
+    private val RAW_VIDEO_ID_REGEX = SAFE_VIDEO_ID_REGEX
     private val RAW_PLAYLIST_ID_REGEX = Regex("""^(?:PL|UU|FL|OLAK5uy_|RD)[a-zA-Z0-9_-]{10,}$""")
 
     fun parseInput(rawInput: String): ParsedYouTubeInput {
@@ -262,6 +265,8 @@ object YouTubeService {
      * Fetches single video metadata (title, channel, duration, HD thumbnail).
      */
     suspend fun fetchVideoDetails(videoId: String): YouTubeVideoMetadata? = withContext(Dispatchers.IO) {
+        if (!SAFE_VIDEO_ID_REGEX.matches(videoId)) return@withContext null
+
         // 1. Try InnerTube player for full duration & dimensions
         val playerJson = callInnerTubePlayer(
             videoId = videoId,
@@ -661,7 +666,8 @@ object YouTubeService {
 
     private data class CachedStreamEntry(
         val stream: ResolvedYouTubeStream,
-        val cachedAtMs: Long
+        val cachedAtMs: Long,
+        val fromGeneralFallback: Boolean = false
     )
 
     private val streamCache = ConcurrentHashMap<String, CachedStreamEntry>()
@@ -695,9 +701,12 @@ object YouTubeService {
         }
     }
 
-    suspend fun refreshStreamForPlayback(videoId: String): ResolvedYouTubeStream {
+    suspend fun refreshStreamForPlayback(
+        videoId: String,
+        allowGeneralClientFallback: Boolean = false
+    ): ResolvedYouTubeStream {
         invalidateStreamCache(videoId)
-        return resolveStreamForPlayback(videoId)
+        return resolveStreamForPlayback(videoId, allowGeneralClientFallback = allowGeneralClientFallback)
     }
 
     private fun getOrFetchVisitorData(): String? {
@@ -739,26 +748,39 @@ object YouTubeService {
     /**
      * Pre-warms the stream cache in the background (e.g., for the next video in a playlist).
      */
-    suspend fun preResolveStream(videoId: String) {
-        if (videoId.isBlank()) return
+    suspend fun preResolveStream(
+        videoId: String,
+        allowGeneralClientFallback: Boolean = false
+    ) {
+        if (!SAFE_VIDEO_ID_REGEX.matches(videoId)) return
         val existing = streamCache[videoId]
         if (existing != null &&
             (System.currentTimeMillis() - existing.cachedAtMs) < STREAM_CACHE_TTL_MS &&
+            (!existing.fromGeneralFallback || allowGeneralClientFallback) &&
             !existing.stream.isExpired()
         ) {
             return
         }
-        runCatching { resolveStreamForPlayback(videoId) }
+        runCatching {
+            resolveStreamForPlayback(videoId, allowGeneralClientFallback = allowGeneralClientFallback)
+        }
     }
 
     /**
      * Resolves direct playable video/audio/HLS streams for Media3 ExoPlayer.
      * Uses parallel client racing + in-memory stream caching for sub-second startup.
      */
-    suspend fun resolveStreamForPlayback(videoId: String): ResolvedYouTubeStream = withContext(Dispatchers.IO) {
+    suspend fun resolveStreamForPlayback(
+        videoId: String,
+        allowGeneralClientFallback: Boolean = false
+    ): ResolvedYouTubeStream = withContext(Dispatchers.IO) {
+        if (!SAFE_VIDEO_ID_REGEX.matches(videoId)) {
+            return@withContext ResolvedYouTubeStream(videoId = videoId)
+        }
         val now = System.currentTimeMillis()
         streamCache[videoId]?.let { cached ->
             if ((now - cached.cachedAtMs) < STREAM_CACHE_TTL_MS &&
+                (!cached.fromGeneralFallback || allowGeneralClientFallback) &&
                 cached.stream.hasDirectStream &&
                 !cached.stream.isExpired()
             ) {
@@ -822,8 +844,19 @@ object YouTubeService {
         }
 
         if (wave1Winner != null) {
-            streamCache[videoId] = CachedStreamEntry(wave1Winner, System.currentTimeMillis())
+            streamCache[videoId] = CachedStreamEntry(
+                stream = wave1Winner,
+                cachedAtMs = System.currentTimeMillis(),
+                fromGeneralFallback = false
+            )
             return@withContext wave1Winner
+        }
+
+        if (!allowGeneralClientFallback) {
+            return@withContext ResolvedYouTubeStream(
+                videoId = videoId,
+                restrictionReason = "KIDS_RESTRICTED"
+            )
         }
 
         // Wave 2 Fallback (for general non-Kids videos): Race ANDROID, IOS, and ANDROID_VR in parallel
@@ -920,7 +953,11 @@ object YouTubeService {
         }
 
         if (wave2Winner != null) {
-            streamCache[videoId] = CachedStreamEntry(wave2Winner, System.currentTimeMillis())
+            streamCache[videoId] = CachedStreamEntry(
+                stream = wave2Winner,
+                cachedAtMs = System.currentTimeMillis(),
+                fromGeneralFallback = true
+            )
             return@withContext wave2Winner
         }
 
@@ -1203,8 +1240,6 @@ object YouTubeService {
         val body = JSONObject().apply {
             put("videoId", videoId)
             put("context", JSONObject().put("client", clientObj))
-            put("contentCheckOk", true)
-            put("racyCheckOk", true)
         }
 
         val extraHeaders = mutableMapOf<String, String>()
