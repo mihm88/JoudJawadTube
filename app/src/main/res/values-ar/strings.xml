@@ -105,6 +105,7 @@
     <string name="player_more_in">المزيد من: %s</string>
     <string name="player_now_playing_badge">قيد التشغيل</string>
     <string name="player_rotate">تدوير</string>
+    <string name="player_pip">نافذة عائمة</string>
     <string name="player_options">خيارات</string>
     <string name="player_options_title">خيارات المشغّل</string>
     <string name="player_option_quality">الجودة</string>
@@ -128,6 +129,7 @@
     <string name="settings_theme_system">حسب مظهر الجهاز</string>
     <string name="settings_theme_dark">داكن (Obsidian)</string>
     <string name="settings_theme_light">فاتح (Light)</string>
+    <string name="settings_theme_liquid_glass">زجاج سائل (Liquid Glass)</string>
 
     <!-- Settings: Playback & General -->
     <string name="settings_section_playback">التشغيل</string>
@@ -258,7 +260,8 @@
     <string name="settings_disabled">معطّل</string>
 
     <!-- Bottom Nav & Catalog Localization (T13) -->
-    <string name="nav_more_parents">المزيد / الوالدين</string>
+    <string name="nav_more_parents">المزيد</string>
+    <string name="nav_more_sheet_title">المزيد ومنطقة الوالدين</string>
     <string name="status_scanning">جاري الفحص...</string>
     <string name="filter_all_folders">كل المجلدات</string>
     <string name="action_view_rows">صفوف</string>

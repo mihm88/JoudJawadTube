@@ -49,14 +49,12 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.rounded.ErrorOutline
-import androidx.compose.material.icons.rounded.PictureInPictureAlt
 import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material.icons.rounded.Timer
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -102,6 +100,7 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
+import androidx.media3.common.MimeTypes
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.common.Tracks
@@ -111,10 +110,10 @@ import androidx.media3.datasource.DataSource
 import androidx.media3.datasource.DefaultDataSource
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.hls.HlsMediaSource
+import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.exoplayer.source.MediaSource
 import androidx.media3.exoplayer.source.MergingMediaSource
 import androidx.media3.exoplayer.source.ProgressiveMediaSource
-import androidx.media3.exoplayer.source.SingleSampleMediaSource
 import androidx.media3.exoplayer.upstream.DefaultLoadErrorHandlingPolicy
 import androidx.media3.session.MediaController
 import androidx.media3.session.SessionToken
@@ -191,6 +190,12 @@ fun PlaybackScreen(
     var playbackErrorDetail by remember(video.id) { mutableStateOf<String?>(null) }
     var retryNonce by remember(video.id) { mutableIntStateOf(0) }
     var wasOfflineDuringPlaybackError by remember(video.id) { mutableStateOf(false) }
+    var disableSubtitlesForCurrentVideo by remember(video.id) { mutableStateOf(false) }
+
+    val isTrustedSavedSource = remember(video.id, video.playlistId, video.entity.folderPath) {
+        video.playlistId.isNotBlank() || video.entity.folderPath.startsWith("youtube_")
+    }
+    val allowGeneralForVideo = settings.allowGeneralFallbackForSavedChannels && isTrustedSavedSource
 
     var isScreenLocked by remember { mutableStateOf(false) }
     var showUnlockedBanner by remember { mutableStateOf(false) }
@@ -212,8 +217,9 @@ fun PlaybackScreen(
     val latestResolvedStream by rememberUpdatedState(resolvedYouTubeStream)
     val latestCurrentQuality by rememberUpdatedState(currentQuality)
     val latestAllowWebViewFallback by rememberUpdatedState(settings.allowWebViewFallback)
-    val latestAllowGeneralFallback by rememberUpdatedState(settings.allowGeneralFallbackForSavedChannels)
+    val latestAllowGeneralFallback by rememberUpdatedState(allowGeneralForVideo)
     val latestSubtitlesEnabledByDefault by rememberUpdatedState(settings.subtitlesEnabledByDefault)
+    val latestDisableSubtitlesForCurrentVideo by rememberUpdatedState(disableSubtitlesForCurrentVideo)
     val latestIsOnline by rememberUpdatedState(isOnline)
 
     val handleYouTubePlaybackFailure: (ResolvedYouTubeStream?, String?) -> Unit = remember {
@@ -276,8 +282,8 @@ fun PlaybackScreen(
     }
 
     // Prepare ExoPlayer MediaSource from a resolved YouTube stream (initial, refresh, or quality change)
-    val prepareYouTubeStreamSource: (ResolvedYouTubeStream, String, Long, Boolean) -> Boolean = remember(activeExoPlayer, context) {
-        { resolved, requestedQuality, resumePos, applyPlaybackSpeed ->
+    val prepareYouTubeStreamSource: (ResolvedYouTubeStream, String, Long, Boolean, Boolean) -> Boolean = remember(activeExoPlayer, context) {
+        { resolved, requestedQuality, resumePos, applyPlaybackSpeed, includeSubtitles ->
             val exoPlayer = activeExoPlayer
             if (exoPlayer == null || !resolved.hasDirectStream) {
                 false
@@ -290,6 +296,29 @@ fun PlaybackScreen(
                 val dataSourceFactory = DefaultDataSource.Factory(context, httpFactory)
                 val fastFailPolicy = DefaultLoadErrorHandlingPolicy(/* minimumLoadableRetryCount = */ 3)
                 val videoMediaMetadata = buildVideoMediaMetadata(latestVideo)
+                val subtitleConfigs = if (includeSubtitles) {
+                    selectPreferredSubtitleConfigs(resolved.subtitles, latestSubtitlesEnabledByDefault)
+                } else {
+                    emptyList()
+                }
+                fun createVideoSource(url: String): MediaSource {
+                    val item = MediaItem.Builder()
+                        .setMediaId(latestVideo.videoKey)
+                        .setUri(url)
+                        .setMediaMetadata(videoMediaMetadata)
+                        .setSubtitleConfigurations(subtitleConfigs)
+                        .build()
+                    return if (subtitleConfigs.isEmpty()) {
+                        ProgressiveMediaSource.Factory(dataSourceFactory)
+                            .setLoadErrorHandlingPolicy(fastFailPolicy)
+                            .createMediaSource(item)
+                    } else {
+                        DefaultMediaSourceFactory(context)
+                            .setDataSourceFactory(dataSourceFactory)
+                            .setLoadErrorHandlingPolicy(fastFailPolicy)
+                            .createMediaSource(item)
+                    }
+                }
                 fun taggedMediaItem(url: String): MediaItem = MediaItem.Builder()
                     .setMediaId(latestVideo.videoKey)
                     .setUri(url)
@@ -312,61 +341,42 @@ fun PlaybackScreen(
                     null
                 }
 
-                val primarySources = mutableListOf<MediaSource>()
+                var finalSource: MediaSource? = null
                 when {
                     preferredVariant != null && (!preferredVariant.isProgressive && !resolved.audioStreamUrl.isNullOrBlank()) -> {
                         triedFallbackStreamStage = 1
-                        val vSource = ProgressiveMediaSource.Factory(dataSourceFactory)
-                            .setLoadErrorHandlingPolicy(fastFailPolicy)
-                            .createMediaSource(taggedMediaItem(preferredVariant.videoUrl))
+                        val vSource = createVideoSource(preferredVariant.videoUrl)
                         val aSource = ProgressiveMediaSource.Factory(dataSourceFactory)
                             .setLoadErrorHandlingPolicy(fastFailPolicy)
                             .createMediaSource(MediaItem.fromUri(resolved.audioStreamUrl))
-                        primarySources += vSource
-                        primarySources += aSource
+                        finalSource = MergingMediaSource(vSource, aSource)
                     }
                     preferredVariant != null && preferredVariant.isProgressive -> {
                         triedFallbackStreamStage = 3
-                        val pSource = ProgressiveMediaSource.Factory(dataSourceFactory)
-                            .setLoadErrorHandlingPolicy(fastFailPolicy)
-                            .createMediaSource(taggedMediaItem(preferredVariant.videoUrl))
-                        primarySources += pSource
+                        finalSource = createVideoSource(preferredVariant.videoUrl)
                     }
                     !resolved.videoStreamUrl.isNullOrBlank() && !resolved.audioStreamUrl.isNullOrBlank() -> {
                         triedFallbackStreamStage = 1
-                        val vSource = ProgressiveMediaSource.Factory(dataSourceFactory)
-                            .setLoadErrorHandlingPolicy(fastFailPolicy)
-                            .createMediaSource(taggedMediaItem(resolved.videoStreamUrl))
+                        val vSource = createVideoSource(resolved.videoStreamUrl)
                         val aSource = ProgressiveMediaSource.Factory(dataSourceFactory)
                             .setLoadErrorHandlingPolicy(fastFailPolicy)
                             .createMediaSource(MediaItem.fromUri(resolved.audioStreamUrl))
-                        primarySources += vSource
-                        primarySources += aSource
+                        finalSource = MergingMediaSource(vSource, aSource)
                     }
                     !resolved.hlsManifestUrl.isNullOrBlank() -> {
                         triedFallbackStreamStage = 2
-                        val hlsSource = HlsMediaSource.Factory(dataSourceFactory)
+                        finalSource = HlsMediaSource.Factory(dataSourceFactory)
                             .setLoadErrorHandlingPolicy(fastFailPolicy)
                             .createMediaSource(taggedMediaItem(resolved.hlsManifestUrl))
-                        primarySources += hlsSource
                     }
                     !resolved.progressiveUrl.isNullOrBlank() -> {
                         triedFallbackStreamStage = 3
-                        val pSource = ProgressiveMediaSource.Factory(dataSourceFactory)
-                            .setLoadErrorHandlingPolicy(fastFailPolicy)
-                            .createMediaSource(taggedMediaItem(resolved.progressiveUrl))
-                        primarySources += pSource
+                        finalSource = createVideoSource(resolved.progressiveUrl)
                     }
                 }
-                val prepared = primarySources.isNotEmpty()
-                if (prepared) {
-                    val combinedSource = buildYouTubeMediaSourceWithSubtitles(
-                        primarySources = primarySources,
-                        subtitles = resolved.subtitles,
-                        dataSourceFactory = dataSourceFactory,
-                        subtitlesEnabledByDefault = latestSubtitlesEnabledByDefault
-                    )
-                    exoPlayer.setMediaSource(combinedSource, resumePos)
+                val prepared = finalSource != null
+                if (finalSource != null) {
+                    exoPlayer.setMediaSource(finalSource, resumePos)
                     if (applyPlaybackSpeed) {
                         exoPlayer.setPlaybackSpeed(playbackSpeed)
                     }
@@ -384,6 +394,7 @@ fun PlaybackScreen(
         playbackErrorResId = null
         playbackErrorDetail = null
         wasOfflineDuringPlaybackError = false
+        disableSubtitlesForCurrentVideo = false
         useWebViewYouTubeFallback = false
         hasAttemptedStreamRefresh = false
         isRefreshingExpiredStream = false
@@ -414,7 +425,7 @@ fun PlaybackScreen(
                 durationMs = resolved.durationMs
             }
 
-            if (!prepareYouTubeStreamSource(resolved, currentQuality, resumePos, true)) {
+            if (!prepareYouTubeStreamSource(resolved, currentQuality, resumePos, true, !disableSubtitlesForCurrentVideo)) {
                 handleYouTubePlaybackFailure(resolved, null)
             }
         } else {
@@ -471,10 +482,20 @@ fun PlaybackScreen(
                 val dataSourceFactory = DefaultDataSource.Factory(context, httpFactory)
                 val fastFailPolicy = DefaultLoadErrorHandlingPolicy(/* minimumLoadableRetryCount = */ 3)
                 val metadata = buildVideoMediaMetadata(latestVideo)
-                fun taggedMediaItem(url: String): MediaItem = MediaItem.Builder()
+                val subtitleConfigs = if (!latestDisableSubtitlesForCurrentVideo) {
+                    selectPreferredSubtitleConfigs(resolved.subtitles, latestSubtitlesEnabledByDefault)
+                } else {
+                    emptyList()
+                }
+                fun taggedMediaItem(url: String, withSubtitles: Boolean = false): MediaItem = MediaItem.Builder()
                     .setMediaId(latestVideo.videoKey)
                     .setUri(url)
                     .setMediaMetadata(metadata)
+                    .apply {
+                        if (withSubtitles && subtitleConfigs.isNotEmpty()) {
+                            setSubtitleConfigurations(subtitleConfigs)
+                        }
+                    }
                     .build()
 
                 when (triedFallbackStreamStage) {
@@ -484,31 +505,23 @@ fun PlaybackScreen(
                             val hlsSource = HlsMediaSource.Factory(dataSourceFactory)
                                 .setLoadErrorHandlingPolicy(fastFailPolicy)
                                 .createMediaSource(taggedMediaItem(resolved.hlsManifestUrl))
-                            exoPlayer.setMediaSource(
-                                buildYouTubeMediaSourceWithSubtitles(
-                                    primarySources = listOf(hlsSource),
-                                    subtitles = resolved.subtitles,
-                                    dataSourceFactory = dataSourceFactory,
-                                    subtitlesEnabledByDefault = latestSubtitlesEnabledByDefault
-                                ),
-                                currentPos
-                            )
+                            exoPlayer.setMediaSource(hlsSource, currentPos)
                             exoPlayer.prepare()
                             exoPlayer.playWhenReady = true
                         } else if (!resolved.progressiveUrl.isNullOrBlank()) {
                             triedFallbackStreamStage = 3
-                            val pSource = ProgressiveMediaSource.Factory(dataSourceFactory)
-                                .setLoadErrorHandlingPolicy(fastFailPolicy)
-                                .createMediaSource(taggedMediaItem(resolved.progressiveUrl))
-                            exoPlayer.setMediaSource(
-                                buildYouTubeMediaSourceWithSubtitles(
-                                    primarySources = listOf(pSource),
-                                    subtitles = resolved.subtitles,
-                                    dataSourceFactory = dataSourceFactory,
-                                    subtitlesEnabledByDefault = latestSubtitlesEnabledByDefault
-                                ),
-                                currentPos
-                            )
+                            val pItem = taggedMediaItem(resolved.progressiveUrl, withSubtitles = true)
+                            val pSource = if (subtitleConfigs.isEmpty()) {
+                                ProgressiveMediaSource.Factory(dataSourceFactory)
+                                    .setLoadErrorHandlingPolicy(fastFailPolicy)
+                                    .createMediaSource(pItem)
+                            } else {
+                                DefaultMediaSourceFactory(context)
+                                    .setDataSourceFactory(dataSourceFactory)
+                                    .setLoadErrorHandlingPolicy(fastFailPolicy)
+                                    .createMediaSource(pItem)
+                            }
+                            exoPlayer.setMediaSource(pSource, currentPos)
                             exoPlayer.prepare()
                             exoPlayer.playWhenReady = true
                         } else {
@@ -519,18 +532,18 @@ fun PlaybackScreen(
                     2 -> {
                         if (!resolved.progressiveUrl.isNullOrBlank()) {
                             triedFallbackStreamStage = 3
-                            val pSource = ProgressiveMediaSource.Factory(dataSourceFactory)
-                                .setLoadErrorHandlingPolicy(fastFailPolicy)
-                                .createMediaSource(taggedMediaItem(resolved.progressiveUrl))
-                            exoPlayer.setMediaSource(
-                                buildYouTubeMediaSourceWithSubtitles(
-                                    primarySources = listOf(pSource),
-                                    subtitles = resolved.subtitles,
-                                    dataSourceFactory = dataSourceFactory,
-                                    subtitlesEnabledByDefault = latestSubtitlesEnabledByDefault
-                                ),
-                                currentPos
-                            )
+                            val pItem = taggedMediaItem(resolved.progressiveUrl, withSubtitles = true)
+                            val pSource = if (subtitleConfigs.isEmpty()) {
+                                ProgressiveMediaSource.Factory(dataSourceFactory)
+                                    .setLoadErrorHandlingPolicy(fastFailPolicy)
+                                    .createMediaSource(pItem)
+                            } else {
+                                DefaultMediaSourceFactory(context)
+                                    .setDataSourceFactory(dataSourceFactory)
+                                    .setLoadErrorHandlingPolicy(fastFailPolicy)
+                                    .createMediaSource(pItem)
+                            }
+                            exoPlayer.setMediaSource(pSource, currentPos)
                             exoPlayer.prepare()
                             exoPlayer.playWhenReady = true
                         } else {
@@ -571,7 +584,7 @@ fun PlaybackScreen(
                                 if (fresh.durationMs > 0L) {
                                     durationMs = fresh.durationMs
                                 }
-                                if (!prepareYouTubeStreamSource(fresh, requestedQuality, resumePos, true)) {
+                                if (!prepareYouTubeStreamSource(fresh, requestedQuality, resumePos, true, !latestDisableSubtitlesForCurrentVideo)) {
                                     onFallback(fresh)
                                 }
                             }
@@ -590,26 +603,33 @@ fun PlaybackScreen(
         }
     }
 
-    // Dynamic error recovery: refresh expired/failing stream URL once before cascading fallbacks
-    val tryNextYouTubeFallback: (String?) -> Unit = remember(activeExoPlayer, refreshAndResumeYouTubeStream, cascadeYouTubeFallback) {
+    // Dynamic error recovery: retry without subtitles first, then refresh/cascade fallbacks
+    val tryNextYouTubeFallback: (String?) -> Unit = remember(activeExoPlayer, refreshAndResumeYouTubeStream, cascadeYouTubeFallback, prepareYouTubeStreamSource) {
         { detail ->
             val resolved = latestResolvedStream
             val activeVideo = latestVideo
             val exoPlayer = activeExoPlayer
             if (activeVideo.isYoutube && resolved != null) {
                 val currentPos = exoPlayer?.currentPosition?.coerceAtLeast(0L) ?: 0L
-                val shouldAttemptRefresh = !hasAttemptedStreamRefresh &&
-                    !isRefreshingExpiredStream &&
-                    activeVideo.youtubeVideoId.isNotBlank() &&
-                    (resolved.isExpired(safetyMarginSec = 300L) || currentPos > 5_000L)
+                var handledWithoutSubtitles = false
+                if (!latestDisableSubtitlesForCurrentVideo && resolved.subtitles.isNotEmpty()) {
+                    disableSubtitlesForCurrentVideo = true
+                    handledWithoutSubtitles = prepareYouTubeStreamSource(resolved, latestCurrentQuality, currentPos, false, false)
+                }
+                if (!handledWithoutSubtitles) {
+                    val shouldAttemptRefresh = !hasAttemptedStreamRefresh &&
+                        !isRefreshingExpiredStream &&
+                        activeVideo.youtubeVideoId.isNotBlank() &&
+                        (resolved.isExpired(safetyMarginSec = 300L) || currentPos > 5_000L)
 
-                if (shouldAttemptRefresh) {
-                    hasAttemptedStreamRefresh = true
-                    refreshAndResumeYouTubeStream(currentPos) { fresh ->
-                        cascadeYouTubeFallback(fresh ?: resolved, currentPos, detail)
+                    if (shouldAttemptRefresh) {
+                        hasAttemptedStreamRefresh = true
+                        refreshAndResumeYouTubeStream(currentPos) { fresh ->
+                            cascadeYouTubeFallback(fresh ?: resolved, currentPos, detail)
+                        }
+                    } else {
+                        cascadeYouTubeFallback(resolved, currentPos, detail)
                     }
-                } else {
-                    cascadeYouTubeFallback(resolved, currentPos, detail)
                 }
             } else if (activeVideo.isYoutube) {
                 handleYouTubePlaybackFailure(null, detail)
@@ -900,7 +920,7 @@ fun PlaybackScreen(
                 val resolved = resolvedYouTubeStream
                 if (video.isYoutube && resolved != null && (newQuality == "Auto" || resolved.qualityVariants.isNotEmpty())) {
                     val currentPos = exoPlayer.currentPosition.coerceAtLeast(0L)
-                    prepareYouTubeStreamSource(resolved, newQuality, currentPos, false)
+                    prepareYouTubeStreamSource(resolved, newQuality, currentPos, false, !latestDisableSubtitlesForCurrentVideo)
                 }
             }
         }
@@ -1234,13 +1254,13 @@ fun PlaybackScreen(
                 Spacer(modifier = Modifier.height(12.dp))
                 Text(
                     text = stringResource(R.string.player_loading_stream),
-                    color = SmartTubeTextPrimary,
+                    color = Color.White,
                     fontSize = 15.sp,
                     fontWeight = FontWeight.Bold
                 )
                 Text(
                     text = video.title,
-                    color = SmartTubeTextSecondary,
+                    color = Color(0xFFD1DAE6),
                     fontSize = 12.sp
                 )
             }
@@ -1260,38 +1280,6 @@ fun PlaybackScreen(
                 onRetry = { retryNonce++ },
                 onBack = exitPlayback
             )
-        }
-
-        if (onEnterPictureInPicture != null &&
-            hudVisible &&
-            !isInPictureInPictureMode &&
-            !isScreenLocked &&
-            !isTimeUp &&
-            !useWebViewYouTubeFallback &&
-            activeDialogTab == null &&
-            !relatedRowVisible &&
-            activeErrorResId == null
-        ) {
-            IconButton(
-                onClick = {
-                    interactionSignal.tryEmit(Unit)
-                    onEnterPictureInPicture()
-                },
-                modifier = Modifier
-                    .align(Alignment.TopEnd)
-                    .systemBarsPadding()
-                    .padding(16.dp)
-                    .size(48.dp)
-                    .clip(CircleShape)
-                    .background(Color.Black.copy(alpha = 0.55f))
-            ) {
-                Icon(
-                    imageVector = Icons.Rounded.PictureInPictureAlt,
-                    contentDescription = "Picture-in-Picture",
-                    tint = Color.White,
-                    modifier = Modifier.size(22.dp)
-                )
-            }
         }
 
         val availableQualities = remember(
@@ -1376,6 +1364,7 @@ fun PlaybackScreen(
                 relatedRowVisible = false
                 activeDialogTab = null
             },
+            onEnterPictureInPicture = if (!useWebViewYouTubeFallback) onEnterPictureInPicture else null,
             onBack = exitPlayback,
             onUserInteraction = {
                 interactionSignal.tryEmit(Unit)
@@ -1486,32 +1475,38 @@ private fun buildVideoMediaMetadata(video: VideoItem): MediaMetadata {
     return builder.build()
 }
 
-@OptIn(UnstableApi::class)
-private fun buildYouTubeMediaSourceWithSubtitles(
-    primarySources: List<MediaSource>,
+private fun selectPreferredSubtitleConfigs(
     subtitles: List<SidecarSubtitle>,
-    dataSourceFactory: DataSource.Factory,
     subtitlesEnabledByDefault: Boolean
-): MediaSource {
-    if (subtitles.isEmpty()) {
-        return if (primarySources.size == 1) {
-            primarySources.first()
-        } else {
-            MergingMediaSource(*primarySources.toTypedArray())
-        }
+): List<MediaItem.SubtitleConfiguration> {
+    if (subtitles.isEmpty()) return emptyList()
+    val valid = subtitles.filter {
+        it.uriOrPath.startsWith("https://", ignoreCase = true) ||
+            it.uriOrPath.startsWith("http://", ignoreCase = true)
     }
-    val subtitleSources = subtitles.mapIndexed { index, sub ->
-        val config = MediaItem.SubtitleConfiguration.Builder(Uri.parse(sub.uriOrPath))
-            .setMimeType(sub.mimeType)
+    if (valid.isEmpty()) return emptyList()
+
+    val prioritized = valid.sortedBy { sub ->
+        val lang = sub.language.lowercase(java.util.Locale.ROOT)
+        when {
+            lang.startsWith("ar") -> 0
+            lang.startsWith("en") -> 1
+            else -> 2
+        }
+    }.take(4)
+
+    return prioritized.mapIndexed { index, sub ->
+        val mime = when {
+            sub.mimeType.equals("text/vtt", ignoreCase = true) -> MimeTypes.TEXT_VTT
+            else -> sub.mimeType.ifBlank { MimeTypes.TEXT_VTT }
+        }
+        MediaItem.SubtitleConfiguration.Builder(Uri.parse(sub.uriOrPath))
+            .setMimeType(mime)
             .setLanguage(sub.language)
             .setLabel(sub.label)
             .setSelectionFlags(if (index == 0 && subtitlesEnabledByDefault) C.SELECTION_FLAG_DEFAULT else 0)
             .build()
-        SingleSampleMediaSource.Factory(dataSourceFactory)
-            .createMediaSource(config, C.TIME_UNSET)
     }
-    val allSources = primarySources + subtitleSources
-    return MergingMediaSource(*allSources.toTypedArray())
 }
 
 @Composable

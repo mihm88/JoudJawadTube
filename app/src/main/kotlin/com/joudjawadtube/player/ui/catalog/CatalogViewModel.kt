@@ -443,16 +443,17 @@ class CatalogViewModel(
                     state.filteredVideos
                         .filter { it.isYoutube && it.youtubeVideoId.isNotBlank() }
                         .take(3)
-                        .map { it.youtubeVideoId }
+                        .map { it.youtubeVideoId to (it.playlistId.isNotBlank() || it.entity.folderPath.startsWith("youtube_")) }
                 }
                 .distinctUntilChanged()
-                .collectLatest { topIds ->
-                    if (topIds.isEmpty()) return@collectLatest
+                .collectLatest { topItems ->
+                    if (topItems.isEmpty()) return@collectLatest
                     delay(1_200L)
-                    topIds.forEach { vidId ->
+                    val allowFallbackSetting = settingsRepository.settingsFlow.value.allowGeneralFallbackForSavedChannels
+                    topItems.forEach { (vidId, isTrusted) ->
                         YouTubeService.preResolveStream(
                             videoId = vidId,
-                            allowGeneralClientFallback = settingsRepository.settingsFlow.value.allowGeneralFallbackForSavedChannels
+                            allowGeneralClientFallback = allowFallbackSetting && isTrusted
                         )
                     }
                 }

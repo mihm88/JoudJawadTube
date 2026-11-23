@@ -67,6 +67,7 @@ import androidx.annotation.StringRes
 import androidx.compose.ui.res.stringResource
 import com.joudjawadtube.player.R
 import com.joudjawadtube.player.data.settings.SidebarMode
+import com.joudjawadtube.player.ui.theme.LocalJoudColors
 import com.joudjawadtube.player.ui.theme.SmartTubeCardFocusedBg
 import com.joudjawadtube.player.ui.theme.SmartTubeFocusBorder
 import com.joudjawadtube.player.ui.theme.SmartTubeRed
@@ -142,7 +143,9 @@ fun SmartTubeSidebar(
                     if (isFloatingOverlay) {
                         Modifier
                             .shadow(elevation = 24.dp)
-                            .border(width = 1.dp, color = Color.White.copy(alpha = 0.12f))
+                            .border(width = 1.dp, color = Color.White.copy(alpha = 0.18f))
+                    } else if (LocalJoudColors.current.isLiquidGlass) {
+                        Modifier.border(width = 1.dp, color = LocalJoudColors.current.glassBorderHighlight.copy(alpha = 0.45f))
                     } else {
                         Modifier
                     }

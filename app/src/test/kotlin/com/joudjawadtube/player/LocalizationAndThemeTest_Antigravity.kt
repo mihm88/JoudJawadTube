@@ -19,10 +19,11 @@ class LocalizationAndThemeTest_Antigravity {
     @Test
     fun testThemeModes() {
         val modes = ThemeMode.entries
-        assertEquals(3, modes.size)
+        assertEquals(4, modes.size)
         assertEquals(ThemeMode.FOLLOW_SYSTEM, modes[0])
         assertEquals(ThemeMode.DARK, modes[1])
         assertEquals(ThemeMode.LIGHT, modes[2])
+        assertEquals(ThemeMode.LIQUID_GLASS, modes[3])
     }
 
     @Test

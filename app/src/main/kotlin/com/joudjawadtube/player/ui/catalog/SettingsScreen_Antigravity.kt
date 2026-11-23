@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
@@ -104,6 +105,7 @@ import com.joudjawadtube.player.ui.theme.SmartTubeSurface
 import com.joudjawadtube.player.ui.theme.SmartTubeTextPrimary
 import com.joudjawadtube.player.ui.theme.SmartTubeTextSecondary
 import com.joudjawadtube.player.ui.theme.SmartTubeUsbCyan
+import com.joudjawadtube.player.ui.theme.liquidGlassBorder
 
 data class DestructiveAction(
     val title: String,
@@ -174,11 +176,16 @@ fun SettingsScreen(
     ) {
         // Header Banner
         item(key = "settings_header") {
+            val bannerShape = RoundedCornerShape(14.dp)
             val bannerModifier = Modifier
                 .fillMaxWidth()
-                .clip(RoundedCornerShape(14.dp))
+                .clip(bannerShape)
                 .background(SmartTubeCardBg)
-                .border(1.dp, SmartTubeTextSecondary.copy(alpha = 0.16f), RoundedCornerShape(14.dp))
+                .liquidGlassBorder(
+                    shape = bannerShape,
+                    isFocused = false,
+                    fallbackColor = SmartTubeTextSecondary.copy(alpha = 0.16f)
+                )
                 .padding(if (isCompact) 14.dp else 18.dp)
 
             @Composable
@@ -299,6 +306,7 @@ fun SettingsScreen(
                     ThemeMode.FOLLOW_SYSTEM -> stringResource(R.string.settings_theme_system)
                     ThemeMode.DARK -> stringResource(R.string.settings_theme_dark)
                     ThemeMode.LIGHT -> stringResource(R.string.settings_theme_light)
+                    ThemeMode.LIQUID_GLASS -> stringResource(R.string.settings_theme_liquid_glass)
                 }
 
                 SettingsCycleOptionRow(
@@ -938,12 +946,17 @@ private fun SettingsCategoryCard(
     subtitle: String,
     content: @Composable () -> Unit
 ) {
+    val cardShape = RoundedCornerShape(14.dp)
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(14.dp))
+            .clip(cardShape)
             .background(SmartTubeCardBg)
-            .border(1.dp, SmartTubeTextSecondary.copy(alpha = 0.16f), RoundedCornerShape(14.dp))
+            .liquidGlassBorder(
+                shape = cardShape,
+                isFocused = false,
+                fallbackColor = SmartTubeTextSecondary.copy(alpha = 0.16f)
+            )
             .padding(18.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
@@ -982,61 +995,14 @@ private fun SettingsCycleOptionRow(
         isFocused -> SmartTubeCardFocusedBg
         else -> SmartTubeSurface
     }
+    val isCompact = LocalWindowLayoutInfo.current.isCompact
+    val useStackedLayout = isCompact || valueLabel.length > 18
+    val rowShape = RoundedCornerShape(10.dp)
 
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(10.dp))
-            .background(bgColor)
-            .border(
-                width = if (isFocused) 2.dp else 1.dp,
-                color = if (isFocused) SmartTubeFocusBorder else SmartTubeTextSecondary.copy(alpha = 0.14f),
-                shape = RoundedCornerShape(10.dp)
-            )
-            .onFocusChanged { isFocused = it.isFocused }
-            .clickable { onClick() }
-            .padding(horizontal = 14.dp, vertical = 11.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.SpaceBetween
-    ) {
-        Row(
-            modifier = Modifier.weight(1f),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Icon(
-                imageVector = icon,
-                contentDescription = null,
-                tint = if (isFocused || isAccent) SmartTubeRed else SmartTubeTextSecondary,
-                modifier = Modifier.size(20.dp)
-            )
-            Spacer(modifier = Modifier.width(12.dp))
-            Column(modifier = Modifier.weight(1f)) {
-                val isCompact = LocalWindowLayoutInfo.current.isCompact
-                Text(
-                    text = title,
-                    color = SmartTubeTextPrimary,
-                    fontSize = 14.sp,
-                    lineHeight = 18.sp,
-                    fontWeight = if (isFocused) FontWeight.Bold else FontWeight.SemiBold,
-                    maxLines = if (isCompact) 2 else 1,
-                    softWrap = isCompact,
-                    overflow = TextOverflow.Ellipsis
-                )
-                Text(
-                    text = subtitle,
-                    color = SmartTubeTextSecondary,
-                    fontSize = 11.sp,
-                    lineHeight = 15.sp,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis
-                )
-            }
-        }
-
-        Spacer(modifier = Modifier.width(12.dp))
-
+    @Composable
+    fun ValueBadgeBox(badgeModifier: Modifier = Modifier) {
         Box(
-            modifier = Modifier
+            modifier = badgeModifier
                 .clip(RoundedCornerShape(8.dp))
                 .background(
                     when {
@@ -1049,7 +1015,7 @@ private fun SettingsCycleOptionRow(
                     width = 1.dp,
                     color = when {
                         isAccent && !isFocused -> SmartTubeUsbCyan.copy(alpha = 0.5f)
-                        !isFocused -> SmartTubeTextSecondary.copy(alpha = 0.2f)
+                        !isFocused -> SmartTubeTextSecondary.copy(alpha = 0.22f)
                         else -> Color.Transparent
                     },
                     shape = RoundedCornerShape(8.dp)
@@ -1065,11 +1031,118 @@ private fun SettingsCycleOptionRow(
                     else -> SmartTubeTextPrimary
                 },
                 fontSize = 12.sp,
-                lineHeight = 15.sp,
+                lineHeight = 16.sp,
                 fontWeight = FontWeight.Bold,
-                maxLines = 1,
-                softWrap = false
+                maxLines = if (useStackedLayout) 2 else 1,
+                softWrap = useStackedLayout,
+                overflow = TextOverflow.Ellipsis
             )
+        }
+    }
+
+    val rowModifier = Modifier
+        .fillMaxWidth()
+        .clip(rowShape)
+        .background(bgColor)
+        .liquidGlassBorder(
+            shape = rowShape,
+            isFocused = isFocused,
+            focusedColor = SmartTubeFocusBorder,
+            fallbackColor = SmartTubeTextSecondary.copy(alpha = 0.14f),
+            defaultWidth = 1.dp,
+            focusedWidth = 2.dp
+        )
+        .onFocusChanged { isFocused = it.isFocused }
+        .clickable { onClick() }
+        .padding(horizontal = 14.dp, vertical = 12.dp)
+
+    if (useStackedLayout) {
+        Column(
+            modifier = rowModifier,
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = null,
+                    tint = if (isFocused || isAccent) SmartTubeRed else SmartTubeTextSecondary,
+                    modifier = Modifier.size(20.dp)
+                )
+                Spacer(modifier = Modifier.width(12.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = title,
+                        color = SmartTubeTextPrimary,
+                        fontSize = 14.sp,
+                        lineHeight = 19.sp,
+                        fontWeight = if (isFocused) FontWeight.Bold else FontWeight.SemiBold,
+                        maxLines = 2,
+                        softWrap = true,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    Text(
+                        text = subtitle,
+                        color = SmartTubeTextSecondary,
+                        fontSize = 11.sp,
+                        lineHeight = 15.sp,
+                        maxLines = 3,
+                        softWrap = true,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+            }
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(start = 32.dp)
+            ) {
+                ValueBadgeBox()
+            }
+        }
+    } else {
+        Row(
+            modifier = rowModifier,
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Row(
+                modifier = Modifier.weight(1f),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = null,
+                    tint = if (isFocused || isAccent) SmartTubeRed else SmartTubeTextSecondary,
+                    modifier = Modifier.size(20.dp)
+                )
+                Spacer(modifier = Modifier.width(12.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = title,
+                        color = SmartTubeTextPrimary,
+                        fontSize = 14.sp,
+                        lineHeight = 18.sp,
+                        fontWeight = if (isFocused) FontWeight.Bold else FontWeight.SemiBold,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    Text(
+                        text = subtitle,
+                        color = SmartTubeTextSecondary,
+                        fontSize = 11.sp,
+                        lineHeight = 15.sp,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.width(12.dp))
+
+            ValueBadgeBox(badgeModifier = Modifier.widthIn(max = 220.dp))
         }
     }
 }

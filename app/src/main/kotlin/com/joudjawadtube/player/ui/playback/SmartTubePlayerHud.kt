@@ -47,6 +47,7 @@ import androidx.compose.material.icons.filled.Speed
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material.icons.filled.Usb
 import androidx.compose.material.icons.filled.VideoLibrary
+import androidx.compose.material.icons.rounded.PictureInPictureAlt
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
@@ -89,13 +90,10 @@ import com.joudjawadtube.player.data.repository.RelatedTabMode
 import com.joudjawadtube.player.data.repository.RelatedVideos
 import com.joudjawadtube.player.data.settings.RepeatMode
 import com.joudjawadtube.player.ui.components.LocalWindowLayoutInfo
-import com.joudjawadtube.player.ui.theme.SmartTubeCardBg
-import com.joudjawadtube.player.ui.theme.SmartTubeCardFocusedBg
+import com.joudjawadtube.player.ui.theme.LocalJoudColors
 import com.joudjawadtube.player.ui.theme.SmartTubeFocusBorder
 import com.joudjawadtube.player.ui.theme.SmartTubeGold4K
 import com.joudjawadtube.player.ui.theme.SmartTubeRed
-import com.joudjawadtube.player.ui.theme.SmartTubeTextPrimary
-import com.joudjawadtube.player.ui.theme.SmartTubeTextSecondary
 import com.joudjawadtube.player.ui.theme.SmartTubeUsbCyan
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
@@ -125,6 +123,7 @@ fun SmartTubePlayerHud(
     onToggleFavorite: () -> Unit,
     onOpenPlayerOptions: () -> Unit = {},
     onToggleOrientation: (() -> Unit)? = null,
+    onEnterPictureInPicture: (() -> Unit)? = null,
     onLockScreen: (() -> Unit)? = null,
     onBack: () -> Unit,
     onUserInteraction: () -> Unit
@@ -186,7 +185,7 @@ fun SmartTubePlayerHud(
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
                             text = video.title,
-                            color = SmartTubeTextPrimary,
+                            color = Color.White,
                             fontSize = if (layoutInfo.isCompact) 15.sp else 18.sp,
                             lineHeight = if (layoutInfo.isCompact) 19.sp else 23.sp,
                             fontWeight = FontWeight.ExtraBold,
@@ -203,7 +202,7 @@ fun SmartTubePlayerHud(
                                 Icon(
                                     imageVector = Icons.Default.OndemandVideo,
                                     contentDescription = "YouTube",
-                                    tint = SmartTubeRed,
+                                    tint = Color(0xFF38BDF8),
                                     modifier = Modifier.size(14.dp)
                                 )
                             } else if (video.isUsb) {
@@ -217,9 +216,9 @@ fun SmartTubePlayerHud(
                             Text(
                                 text = "${video.folderName} • ${video.volumeLabel}",
                                 color = when {
-                                    video.isYoutube -> SmartTubeRed
-                                    video.isUsb -> SmartTubeUsbCyan
-                                    else -> SmartTubeTextSecondary
+                                    video.isYoutube -> Color(0xFF7DD3FC)
+                                    video.isUsb -> Color(0xFFFDBA74)
+                                    else -> Color(0xFFD6E0EC)
                                 },
                                 fontSize = 12.sp,
                                 lineHeight = 15.sp,
@@ -232,7 +231,7 @@ fun SmartTubePlayerHud(
                     }
                 }
 
-                // Single Actual Stream Resolution Badge + Touch Orientation Toggle
+                // Single Actual Stream Resolution Badge + Touch PiP & Orientation Toggles
                 val actualResolutionBadge = videoStreamBadge?.takeIf { it.isNotBlank() }
                     ?: video.resolutionBadge?.takeIf { it.isNotBlank() }
 
@@ -248,7 +247,12 @@ fun SmartTubePlayerHud(
                         Box(
                             modifier = Modifier
                                 .clip(RoundedCornerShape(6.dp))
-                                .background(if (is4K) SmartTubeGold4K else SmartTubeCardBg)
+                                .background(if (is4K) SmartTubeGold4K else Color(0xCC1E293B))
+                                .border(
+                                    width = 1.dp,
+                                    color = if (is4K) Color.Transparent else Color.White.copy(alpha = 0.24f),
+                                    shape = RoundedCornerShape(6.dp)
+                                )
                                 .padding(horizontal = 8.dp, vertical = 4.dp),
                             contentAlignment = Alignment.Center
                         ) {
@@ -262,6 +266,15 @@ fun SmartTubePlayerHud(
                                 softWrap = false
                             )
                         }
+                    }
+
+                    if (layoutInfo.isTouchDevice && onEnterPictureInPicture != null) {
+                        HudControlPill(
+                            icon = Icons.Rounded.PictureInPictureAlt,
+                            label = stringResource(R.string.player_pip),
+                            onClick = onEnterPictureInPicture,
+                            onUserInteraction = onUserInteraction
+                        )
                     }
 
                     if (layoutInfo.isTouchDevice && onToggleOrientation != null) {
@@ -526,12 +539,12 @@ fun SmartTubePlayerHud(
                             Icon(
                                 imageVector = Icons.Default.KeyboardArrowUp,
                                 contentDescription = null,
-                                tint = SmartTubeRed,
+                                tint = Color(0xFF38BDF8),
                                 modifier = Modifier.size(16.dp)
                             )
                             Text(
                                 text = stringResource(R.string.player_more_in, hintTitle),
-                                color = SmartTubeTextSecondary,
+                                color = Color(0xFFE2E8F0),
                                 fontSize = 11.sp,
                                 fontWeight = FontWeight.SemiBold,
                                 maxLines = 1,
@@ -599,7 +612,7 @@ private fun PlayerTimelineBar(
     ) {
         Text(
             text = FormatUtils.formatDuration(currentPosMs),
-            color = SmartTubeTextPrimary,
+            color = Color.White,
             fontSize = 12.sp,
             lineHeight = 15.sp,
             fontWeight = FontWeight.Bold,
@@ -608,8 +621,8 @@ private fun PlayerTimelineBar(
         )
 
         val sliderColors = SliderDefaults.colors(
-            thumbColor = if (seekbarFocused) Color.White else SmartTubeRed,
-            activeTrackColor = SmartTubeRed,
+            thumbColor = if (seekbarFocused) Color.White else Color(0xFF22D3EE),
+            activeTrackColor = Color(0xFF06B6D4),
             inactiveTrackColor = Color.White.copy(alpha = 0.28f)
         )
 
@@ -656,7 +669,7 @@ private fun PlayerTimelineBar(
 
         Text(
             text = FormatUtils.formatDuration(durationMs),
-            color = SmartTubeTextSecondary,
+            color = Color(0xFFD6E0EC),
             fontSize = 12.sp,
             lineHeight = 15.sp,
             fontWeight = FontWeight.Bold,
@@ -683,12 +696,14 @@ private fun HudControlPill(
 ) {
     var isFocused by remember { mutableStateOf(false) }
     val interactionSource = remember { MutableInteractionSource() }
+    val isGlass = LocalJoudColors.current.isLiquidGlass
 
+    // Dedicated Always-Dark Frosted OSD palette so player pills never turn light/unreadable in Light Mode
     val bgColor = when {
-        isFocused && isPrimary -> SmartTubeRed
-        isFocused -> SmartTubeCardFocusedBg
-        isPrimary -> SmartTubeRed.copy(alpha = 0.88f)
-        else -> SmartTubeCardBg.copy(alpha = 0.88f)
+        isFocused && isPrimary -> Color(0xFF06B6D4)
+        isFocused -> if (isGlass) Color(0x9920355E) else Color(0xE6253352)
+        isPrimary -> Color(0xFF0891B2)
+        else -> if (isGlass) Color(0x66111B33) else Color(0xCC141B2D)
     }
 
     Row(
@@ -698,7 +713,11 @@ private fun HudControlPill(
             .background(bgColor)
             .border(
                 width = if (isFocused) 2.5.dp else 1.dp,
-                color = if (isFocused) SmartTubeFocusBorder else Color.White.copy(alpha = 0.14f),
+                color = when {
+                    isFocused -> SmartTubeFocusBorder
+                    isGlass -> Color.White.copy(alpha = 0.34f)
+                    else -> Color.White.copy(alpha = 0.24f)
+                },
                 shape = CircleShape
             )
             .onFocusChanged { isFocused = it.isFocused }

@@ -78,6 +78,7 @@ import com.joudjawadtube.player.ui.components.SearchIconBar_Antigravity
 import com.joudjawadtube.player.ui.components.SidebarSection
 import com.joudjawadtube.player.ui.components.SmartTubeSidebar
 import com.joudjawadtube.player.ui.components.VideoCard
+import com.joudjawadtube.player.ui.theme.LocalJoudColors
 import com.joudjawadtube.player.ui.theme.SmartTubeBackground
 import com.joudjawadtube.player.ui.theme.SmartTubeCardBg
 import com.joudjawadtube.player.ui.theme.SmartTubeCardFocusedBg
@@ -98,7 +99,9 @@ fun TabletCatalogScreen(
     BoxWithConstraints(
         modifier = Modifier
             .fillMaxSize()
-            .background(SmartTubeBackground)
+            .background(
+                if (LocalJoudColors.current.isLiquidGlass) Color.Transparent else SmartTubeBackground
+            )
     ) {
         val layoutInfo = LocalWindowLayoutInfo.current
         val isCompactWidth = maxWidth < 600.dp

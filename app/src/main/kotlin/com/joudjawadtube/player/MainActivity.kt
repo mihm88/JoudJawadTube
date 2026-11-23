@@ -64,6 +64,7 @@ import com.joudjawadtube.player.ui.components.TvFolderPickerDialog
 import com.joudjawadtube.player.ui.components.VideoOptionsDialog
 import com.joudjawadtube.player.ui.playback.PlaybackScreen
 import com.joudjawadtube.player.ui.theme.JoudJawadTubeTheme
+import com.joudjawadtube.player.ui.theme.LiquidGlassRootContainer
 
 class MainActivity : AppCompatActivity() {
 
@@ -273,10 +274,9 @@ class MainActivity : AppCompatActivity() {
                     val layoutInfo = LocalWindowLayoutInfo.current
                     val useTvLayout = layoutInfo.isTv
 
-                    Box(
+                    LiquidGlassRootContainer(
                         modifier = Modifier
                             .fillMaxSize()
-                            .background(MaterialTheme.colorScheme.background)
                             .then(
                                 if (activePlaybackSession == null && layoutInfo.isTouchDevice) {
                                     Modifier.systemBarsPadding()

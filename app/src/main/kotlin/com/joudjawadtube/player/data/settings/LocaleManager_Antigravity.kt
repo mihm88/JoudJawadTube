@@ -14,7 +14,8 @@ enum class AppLanguage(val tag: String?, @StringRes val labelRes: Int) {
 enum class ThemeMode(@StringRes val labelRes: Int) {
     FOLLOW_SYSTEM(R.string.settings_theme_system),
     DARK(R.string.settings_theme_dark),
-    LIGHT(R.string.settings_theme_light)
+    LIGHT(R.string.settings_theme_light),
+    LIQUID_GLASS(R.string.settings_theme_liquid_glass)
 }
 
 object LocaleManager_Antigravity {
@@ -36,6 +37,7 @@ object LocaleManager_Antigravity {
             ThemeMode.FOLLOW_SYSTEM -> AppCompatDelegate.MODE_NIGHT_FOLLOW_SYSTEM
             ThemeMode.DARK -> AppCompatDelegate.MODE_NIGHT_YES
             ThemeMode.LIGHT -> AppCompatDelegate.MODE_NIGHT_NO
+            ThemeMode.LIQUID_GLASS -> AppCompatDelegate.MODE_NIGHT_YES
         }
         if (AppCompatDelegate.getDefaultNightMode() != mode) {
             AppCompatDelegate.setDefaultNightMode(mode)

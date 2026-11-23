@@ -106,7 +106,9 @@ fun TvCatalogScreen(
     Row(
         modifier = Modifier
             .fillMaxSize()
-            .background(SmartTubeBackground)
+            .background(
+                if (LocalJoudColors.current.isLiquidGlass) Color.Transparent else SmartTubeBackground
+            )
     ) {
         SmartTubeSidebar(
             selectedSection = uiState.selectedSection,

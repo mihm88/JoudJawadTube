@@ -21,7 +21,9 @@ data class JoudColors(
     val textPrimary: Color,
     val textSecondary: Color,
     val overlayDark: Color,
-    val isDark: Boolean
+    val isDark: Boolean,
+    val isLiquidGlass: Boolean = false,
+    val glassBorderHighlight: Color = Color.White.copy(alpha = 0.22f)
 )
 
 val DarkJoudColors = JoudColors(
@@ -56,6 +58,25 @@ val LightJoudColors = JoudColors(
     textSecondary = Color(0xFF475569),
     overlayDark = Color(0xCC060812),
     isDark = false
+)
+
+val LiquidGlassJoudColors = JoudColors(
+    background = Color(0xFF070D1F),
+    sidebarBg = Color(0x66121D38),
+    surface = Color(0x5C152240),
+    cardBg = Color(0x541B2B4F),
+    cardFocusedBg = Color(0x88263F70),
+    red = Color(0xFF22D3EE),
+    redDark = Color(0xFF0891B2),
+    focusBorder = Color(0xFF7DD3FC),
+    usbCyan = Color(0xFFFB923C),
+    gold4K = Color(0xFFFCD34D),
+    textPrimary = Color(0xFFF8FAFC),
+    textSecondary = Color(0xFFCBD5E1),
+    overlayDark = Color(0xB8060B18),
+    isDark = true,
+    isLiquidGlass = true,
+    glassBorderHighlight = Color(0x70E0F2FE)
 )
 
 val LocalJoudColors = staticCompositionLocalOf { DarkJoudColors }

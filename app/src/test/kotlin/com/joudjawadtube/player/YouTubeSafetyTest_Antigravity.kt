@@ -3,6 +3,7 @@ package com.joudjawadtube.player
 import com.joudjawadtube.player.data.youtube.ResolvedYouTubeStream
 import com.joudjawadtube.player.data.youtube.YouTubeService
 import com.joudjawadtube.player.ui.components.ParentalGateChallenge_Antigravity
+import org.json.JSONObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -72,5 +73,31 @@ class YouTubeSafetyTest_Antigravity {
         )
         assertEquals("KIDS_RESTRICTED", restricted.restrictionReason)
         assertFalse(restricted.hasDirectStream)
+    }
+
+    @Test
+    fun isAgeOrContentRestricted_detectsAgeAndLoginRestrictionsOnly() {
+        val ageRestricted = JSONObject(
+            """{"playabilityStatus":{"status":"AGE_CHECK_REQUIRED","reason":"Confirm your age"}}"""
+        )
+        val loginRequired = JSONObject(
+            """{"playabilityStatus":{"status":"LOGIN_REQUIRED","reason":"Sign in to confirm your age"}}"""
+        )
+        val contentCheck = JSONObject(
+            """{"playabilityStatus":{"status":"CONTENT_CHECK_REQUIRED","reason":"Inappropriate for some viewers"}}"""
+        )
+        val normalOk = JSONObject(
+            """{"playabilityStatus":{"status":"OK"}}"""
+        )
+        val normalUnplayable = JSONObject(
+            """{"playabilityStatus":{"status":"UNPLAYABLE","reason":"Video unavailable in this region"}}"""
+        )
+
+        assertTrue(YouTubeService.isAgeOrContentRestricted(ageRestricted))
+        assertTrue(YouTubeService.isAgeOrContentRestricted(loginRequired))
+        assertTrue(YouTubeService.isAgeOrContentRestricted(contentCheck))
+        assertFalse(YouTubeService.isAgeOrContentRestricted(normalOk))
+        assertFalse(YouTubeService.isAgeOrContentRestricted(normalUnplayable))
+        assertFalse(YouTubeService.isAgeOrContentRestricted(null))
     }
 }

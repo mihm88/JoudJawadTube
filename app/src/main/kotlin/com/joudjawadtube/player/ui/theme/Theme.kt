@@ -41,14 +41,13 @@ fun JoudJawadTubeTheme(
     content: @Composable () -> Unit
 ) {
     val isSystemDark = isSystemInDarkTheme()
-    val isDark = when (themeMode) {
-        ThemeMode.FOLLOW_SYSTEM -> isSystemDark
-        ThemeMode.DARK -> true
-        ThemeMode.LIGHT -> false
+    val joudColors = when (themeMode) {
+        ThemeMode.LIQUID_GLASS -> LiquidGlassJoudColors
+        ThemeMode.DARK -> DarkJoudColors
+        ThemeMode.LIGHT -> LightJoudColors
+        ThemeMode.FOLLOW_SYSTEM -> if (isSystemDark) DarkJoudColors else LightJoudColors
     }
-
-    val joudColors = if (isDark) DarkJoudColors else LightJoudColors
-    val colorScheme = if (isDark) createDarkColorScheme(joudColors) else createLightColorScheme(joudColors)
+    val colorScheme = if (joudColors.isDark) createDarkColorScheme(joudColors) else createLightColorScheme(joudColors)
 
     CompositionLocalProvider(LocalJoudColors provides joudColors) {
         MaterialTheme(

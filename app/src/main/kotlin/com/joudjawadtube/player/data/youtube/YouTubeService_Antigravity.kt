@@ -721,29 +721,53 @@ object YouTubeService {
 
             var bestFallback: ResolvedYouTubeStream? = null
             var adaptiveWinner: ResolvedYouTubeStream? = null
+            var sawAgeOrContentRestriction = false
             repeat(jobs.size) {
                 val candidate = resultChannel.receive()
                 if (candidate != null) {
-                    if (!candidate.videoStreamUrl.isNullOrBlank() && !candidate.audioStreamUrl.isNullOrBlank()) {
+                    if (candidate.restrictionReason == "KIDS_RESTRICTED") {
+                        sawAgeOrContentRestriction = true
+                    } else if (!candidate.videoStreamUrl.isNullOrBlank() && !candidate.audioStreamUrl.isNullOrBlank()) {
                         adaptiveWinner = candidate
                         jobs.forEach { it.cancel() }
                         return@coroutineScope candidate
-                    }
-                    if (bestFallback == null) {
+                    } else if (bestFallback == null) {
                         bestFallback = candidate
                     }
                 }
             }
             jobs.forEach { it.cancel() }
-            adaptiveWinner ?: bestFallback
+            adaptiveWinner ?: bestFallback ?: if (sawAgeOrContentRestriction) {
+                ResolvedYouTubeStream(videoId = videoId, restrictionReason = "KIDS_RESTRICTED")
+            } else {
+                null
+            }
         }
 
         if (wave2Winner != null) {
-            putCachedStream(videoId, wave2Winner, fromGeneralFallback = true)
+            if (wave2Winner.hasDirectStream) {
+                putCachedStream(videoId, wave2Winner, fromGeneralFallback = true)
+            }
             return@withContext wave2Winner
         }
 
         ResolvedYouTubeStream(videoId = videoId)
+    }
+
+    fun isAgeOrContentRestricted(playerJson: JSONObject?): Boolean {
+        val playability = playerJson?.optJSONObject("playabilityStatus") ?: return false
+        val status = playability.optString("status", "").uppercase(java.util.Locale.ROOT)
+        if (status == "LOGIN_REQUIRED" ||
+            status == "AGE_CHECK_REQUIRED" ||
+            status == "CONTENT_CHECK_REQUIRED"
+        ) {
+            return true
+        }
+        val reason = playability.optString("reason", "").lowercase(java.util.Locale.ROOT)
+        return reason.contains("sign in to confirm your age") ||
+            reason.contains("age-restricted") ||
+            reason.contains("inappropriate") ||
+            reason.contains("offensive")
     }
 
     private suspend fun resolveWithClientProfile(
@@ -757,6 +781,9 @@ object YouTubeService {
             profile = profile,
             visitorData = visitorData
         )
+        if (isAgeOrContentRestricted(json)) {
+            return ResolvedYouTubeStream(videoId = videoId, restrictionReason = "KIDS_RESTRICTED")
+        }
         val parsed = parseStreamingData(videoId, json, profile.userAgent)?.takeIf { it.hasDirectStream }
             ?: return null
         return if (validateAdaptiveProbe) {

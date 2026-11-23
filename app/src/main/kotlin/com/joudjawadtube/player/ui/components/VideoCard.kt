@@ -68,6 +68,7 @@ import com.joudjawadtube.player.ui.theme.SmartTubeRed
 import com.joudjawadtube.player.ui.theme.SmartTubeTextPrimary
 import com.joudjawadtube.player.ui.theme.SmartTubeTextSecondary
 import com.joudjawadtube.player.ui.theme.SmartTubeUsbCyan
+import com.joudjawadtube.player.ui.theme.liquidGlassBorder
 import java.io.File
 
 @OptIn(ExperimentalFoundationApi::class)
@@ -147,10 +148,13 @@ fun VideoCard(
             }
             .clip(cardShape)
             .background(if (isFocused) SmartTubeCardFocusedBg else SmartTubeCardBg)
-            .border(
-                width = if (isFocused) 2.5.dp else 1.dp,
-                color = if (isFocused) SmartTubeFocusBorder else SmartTubeTextSecondary.copy(alpha = 0.14f),
-                shape = cardShape
+            .liquidGlassBorder(
+                shape = cardShape,
+                isFocused = isFocused,
+                focusedColor = SmartTubeFocusBorder,
+                fallbackColor = SmartTubeTextSecondary.copy(alpha = 0.14f),
+                defaultWidth = 1.dp,
+                focusedWidth = 2.5.dp
             )
             .onFocusChanged { isFocused = it.isFocused }
             .onPreviewKeyEvent { event ->

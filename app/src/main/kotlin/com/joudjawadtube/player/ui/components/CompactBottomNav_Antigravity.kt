@@ -43,6 +43,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.joudjawadtube.player.R
+import com.joudjawadtube.player.ui.theme.LocalJoudColors
 import com.joudjawadtube.player.ui.theme.SmartTubeRed
 import com.joudjawadtube.player.ui.theme.SmartTubeSidebarBg
 import com.joudjawadtube.player.ui.theme.SmartTubeSurface
@@ -80,11 +81,14 @@ fun CompactBottomNav_Antigravity(
             .fillMaxWidth()
             .background(SmartTubeSidebarBg)
     ) {
+        val colors = LocalJoudColors.current
         Box(
             modifier = Modifier
                 .fillMaxWidth()
                 .height(1.dp)
-                .background(SmartTubeTextSecondary.copy(alpha = 0.16f))
+                .background(
+                    if (colors.isLiquidGlass) colors.glassBorderHighlight else SmartTubeTextSecondary.copy(alpha = 0.16f)
+                )
         )
         Row(
             modifier = Modifier
@@ -146,7 +150,7 @@ fun CompactBottomNav_Antigravity(
                 verticalArrangement = Arrangement.spacedBy(6.dp)
             ) {
                 Text(
-                    text = stringResource(R.string.nav_more_parents),
+                    text = stringResource(R.string.nav_more_sheet_title),
                     color = SmartTubeTextPrimary,
                     fontSize = 17.sp,
                     fontWeight = FontWeight.ExtraBold,

@@ -81,7 +81,7 @@ data class AppSettingsState(
     val removedBuiltInChannelIds: Set<String> = emptySet(),
     val backgroundPlaybackEnabled: Boolean = true,
     val parentalGateEnabled: Boolean = true,
-    val allowGeneralFallbackForSavedChannels: Boolean = false,
+    val allowGeneralFallbackForSavedChannels: Boolean = true,
     val allowWebViewFallback: Boolean = false,
     val watchTimeLimitMinutes: Int = 0
 )
@@ -143,7 +143,7 @@ class AppSettingsRepository(context: Context) {
             removedBuiltInChannelIds = prefs.getStringSet("removed_builtin_channel_ids", emptySet())?.toSet() ?: emptySet(),
             backgroundPlaybackEnabled = prefs.getBoolean("background_playback_enabled", true),
             parentalGateEnabled = prefs.getBoolean("parental_gate_enabled", true),
-            allowGeneralFallbackForSavedChannels = prefs.getBoolean("allow_general_fallback_saved_channels", false),
+            allowGeneralFallbackForSavedChannels = prefs.getBoolean("allow_general_fallback_saved_channels", true),
             allowWebViewFallback = prefs.getBoolean("allow_webview_fallback", false),
             watchTimeLimitMinutes = prefs.getInt("watch_time_limit_minutes", 0).coerceAtLeast(0)
         )

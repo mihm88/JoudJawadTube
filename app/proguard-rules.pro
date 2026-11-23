@@ -18,6 +18,8 @@
 -keepclassmembers class * implements androidx.media3.datasource.DataSource$Factory {
     <init>(...);
 }
+-keep class androidx.media3.extractor.text.** { *; }
+-keep class androidx.media3.exoplayer.text.** { *; }
 -dontwarn androidx.media3.**
 
 # Keep Coil reflection / decoder entry points (tightened)
