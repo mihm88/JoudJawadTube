@@ -210,4 +210,50 @@
     <string name="settings_manage_library_data_sub">%1$d قناة • %2$d قائمة تشغيل • سجل المشاهدة والمفضلة وإعادة الضبط</string>
     <string name="settings_manage_library_data_btn">فتح الإدارة</string>
     <string name="settings_data_tab_reset">البيانات والضبط</string>
+
+    <!-- Player Loading & Errors -->
+    <string name="player_loading_stream">جاري تحميل البث...</string>
+    <string name="player_error_title">خطأ في التشغيل</string>
+    <string name="player_error_local">تعذر تشغيل ملف الفيديو المحلي أو ملف الـ USB.</string>
+    <string name="player_error_youtube">تعذر تحميل بث يوتيوب حالياً.</string>
+    <string name="player_error_kids_restricted">هذا الفيديو مقيّد بواسطة إعدادات أمان الأطفال.</string>
+    <string name="player_error_offline">أنت غير متصل بالإنترنت. اتصل بالشبكة لتشغيل فيديوهات يوتيوب.</string>
+    <string name="player_retry">إعادة المحاولة</string>
+
+    <!-- Offline Banner -->
+    <string name="offline_banner_message">وضع عدم الاتصال — الفيديوهات المحلية وفيديوهات USB ما زالت متاحة.</string>
+
+    <!-- Parental Gate -->
+    <string name="parental_gate_title">للآباء فقط</string>
+    <string name="parental_gate_prompt">للمتابعة، يرجى حل المسألة: %1$d × %2$d = ؟</string>
+    <string name="parental_gate_wrong">إجابة غير صحيحة. يرجى المحاولة مرة أخرى.</string>
+
+    <!-- Kid Lock -->
+    <string name="kid_lock_label">قفل الأطفال</string>
+    <string name="kid_lock_hold_to_unlock">اضغط مطولاً لفتح أزرار التحكم</string>
+    <string name="kid_lock_unlocked">تم فتح أزرار التحكم</string>
+
+    <!-- Watch Timer -->
+    <string name="watch_timer_title">حد وقت المشاهدة</string>
+    <string name="watch_timer_times_up_title">انتهى الوقت!</string>
+    <string name="watch_timer_times_up_message">لقد وصلت إلى الحد الأقصى لوقت المشاهدة. حان وقت الاستراحة!</string>
+    <string name="watch_timer_extend_parent">الوالدين: تمديد الوقت</string>
+    <string name="watch_timer_off">إيقاف (بلا حد)</string>
+    <string name="watch_timer_minutes">%d دقيقة</string>
+
+    <!-- Settings: Parental & Kid Safety -->
+    <string name="settings_parental_section_title">الرقابة الأبوية وأمان الأطفال</string>
+    <string name="settings_parental_section_sub">التحكم في قفل الوالدين وحدود المشاهدة والتشغيل في الخلفية وخيارات يوتيوب</string>
+    <string name="settings_parental_gate_title">حماية بوابة الوالدين</string>
+    <string name="settings_parental_gate_sub">طلب حل مسألة حسابية قبل تعديل الإعدادات أو حذف العناصر</string>
+    <string name="settings_background_playback_title">التشغيل في الخلفية</string>
+    <string name="settings_background_playback_sub">استمرار تشغيل الصوت عند الخروج من المشغّل أو إطفاء الشاشة</string>
+    <string name="settings_general_fallback_title">البحث العام البديل للقنوات المحفوظة</string>
+    <string name="settings_general_fallback_sub">السماح بالبحث البديل الأوسع على يوتيوب للقنوات المحفوظة عند تعذر الجلب المباشر</string>
+    <string name="settings_webview_fallback_title">السماح بمشغّل الويب البديل (WebView)</string>
+    <string name="settings_webview_fallback_sub">استخدام مشغّل الويب فقط عند فشل بث ExoPlayer الخالي من الإعلانات (معطل افتراضياً)</string>
+    <string name="settings_watch_timer_title">مؤقت وقت المشاهدة</string>
+    <string name="settings_watch_timer_sub">إيقاف التشغيل تلقائياً بعد عدد محدد من الدقائق</string>
+    <string name="settings_enabled">مفعّل</string>
+    <string name="settings_disabled">معطّل</string>
 </resources>

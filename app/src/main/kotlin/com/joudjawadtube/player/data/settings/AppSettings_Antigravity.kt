@@ -78,7 +78,12 @@ data class AppSettingsState(
     val autoScanOnStartup: Boolean = true,
     val autoScanOnUsbMount: Boolean = true,
     val hideBootUsbPartitions: Boolean = true,
-    val removedBuiltInChannelIds: Set<String> = emptySet()
+    val removedBuiltInChannelIds: Set<String> = emptySet(),
+    val backgroundPlaybackEnabled: Boolean = true,
+    val parentalGateEnabled: Boolean = true,
+    val allowGeneralFallbackForSavedChannels: Boolean = false,
+    val allowWebViewFallback: Boolean = false,
+    val watchTimeLimitMinutes: Int = 0
 )
 
 class AppSettingsRepository(context: Context) {
@@ -135,15 +140,27 @@ class AppSettingsRepository(context: Context) {
             autoScanOnStartup = prefs.getBoolean("auto_scan_startup", true),
             autoScanOnUsbMount = prefs.getBoolean("auto_scan_usb_mount", true),
             hideBootUsbPartitions = prefs.getBoolean("hide_boot_usb_partitions", true),
-            removedBuiltInChannelIds = prefs.getStringSet("removed_builtin_channel_ids", emptySet())?.toSet() ?: emptySet()
+            removedBuiltInChannelIds = prefs.getStringSet("removed_builtin_channel_ids", emptySet())?.toSet() ?: emptySet(),
+            backgroundPlaybackEnabled = prefs.getBoolean("background_playback_enabled", true),
+            parentalGateEnabled = prefs.getBoolean("parental_gate_enabled", true),
+            allowGeneralFallbackForSavedChannels = prefs.getBoolean("allow_general_fallback_saved_channels", false),
+            allowWebViewFallback = prefs.getBoolean("allow_webview_fallback", false),
+            watchTimeLimitMinutes = prefs.getInt("watch_time_limit_minutes", 0).coerceAtLeast(0)
         )
     }
 
     fun update(transform: (AppSettingsState) -> AppSettingsState) {
-        val updated = transform(_settingsFlow.value)
+        val prev = _settingsFlow.value
+        val updated = transform(prev).let {
+            it.copy(watchTimeLimitMinutes = it.watchTimeLimitMinutes.coerceAtLeast(0))
+        }
         _settingsFlow.value = updated
-        LocaleManager_Antigravity.apply(updated.appLanguage)
-        LocaleManager_Antigravity.applyTheme(updated.themeMode)
+        if (updated.appLanguage != prev.appLanguage) {
+            LocaleManager_Antigravity.apply(updated.appLanguage)
+        }
+        if (updated.themeMode != prev.themeMode) {
+            LocaleManager_Antigravity.applyTheme(updated.themeMode)
+        }
         prefs.edit()
             .putString("app_language", updated.appLanguage.name)
             .putString("theme_mode", updated.themeMode.name)
@@ -165,6 +182,11 @@ class AppSettingsRepository(context: Context) {
             .putBoolean("auto_scan_usb_mount", updated.autoScanOnUsbMount)
             .putBoolean("hide_boot_usb_partitions", updated.hideBootUsbPartitions)
             .putStringSet("removed_builtin_channel_ids", updated.removedBuiltInChannelIds.toSet())
+            .putBoolean("background_playback_enabled", updated.backgroundPlaybackEnabled)
+            .putBoolean("parental_gate_enabled", updated.parentalGateEnabled)
+            .putBoolean("allow_general_fallback_saved_channels", updated.allowGeneralFallbackForSavedChannels)
+            .putBoolean("allow_webview_fallback", updated.allowWebViewFallback)
+            .putInt("watch_time_limit_minutes", updated.watchTimeLimitMinutes)
             .apply()
     }
 

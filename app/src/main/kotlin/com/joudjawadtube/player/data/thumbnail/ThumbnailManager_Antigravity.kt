@@ -11,7 +11,6 @@ import com.joudjawadtube.player.data.local.YouTubeIdExtractor
 import com.joudjawadtube.player.data.settings.AppSettingsState
 import com.joudjawadtube.player.data.settings.FrameCapturePosition
 import com.joudjawadtube.player.data.settings.ThumbnailMode
-import com.joudjawadtube.player.data.youtube.YouTubeService
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
@@ -22,6 +21,9 @@ import java.net.HttpURLConnection
 import java.net.URL
 
 object ThumbnailManager {
+
+    private const val THUMB_WIDTH = 480
+    private const val THUMB_HEIGHT = 270
 
     // Limit concurrent thumbnail network/USB operations so UI scrolling stays 60fps
     private val generationSemaphore = Semaphore(3)
@@ -65,7 +67,7 @@ object ThumbnailManager {
         settings: AppSettingsState
     ): File? {
         if (!indexInitialized.get()) {
-            warmUpIndex(context)
+            return null
         }
 
         if (video.entity.customThumbnailPath.isNotBlank()) {
@@ -101,7 +103,7 @@ object ThumbnailManager {
     /**
      * Resolves or generates a persistent local JPEG thumbnail following user priority:
      * 1. Custom user override (if set)
-     * 2. Official YouTube Thumbnail (via extracted [videoId] in filename, saved youtubeVideoId, or YouTube title search)
+     * 2. Official YouTube Thumbnail (via extracted [videoId] in filename/URI or saved youtubeVideoId)
      * 3. Sidecar cover image (.jpg/.webp/.png in video folder)
      * 4. Automatic video frame extraction via MediaMetadataRetriever at fast sync keyframe
      */
@@ -112,6 +114,9 @@ object ThumbnailManager {
         videoDao: VideoDao? = null,
         forceRefresh: Boolean = false
     ): File? = withContext(Dispatchers.IO) {
+        if (!indexInitialized.get()) {
+            warmUpIndex(context)
+        }
         if (!forceRefresh) {
             getCachedThumbnailFile(context, video, settings)?.let { return@withContext it }
         }
@@ -197,13 +202,8 @@ object ThumbnailManager {
         }
 
         // 2. Check known or filename-embedded 11-char YouTube ID (e.g. [IJT0Hk7d808].webm)
-        var ytId = video.youtubeVideoId.takeIf { it.length == 11 }
+        val ytId = video.youtubeVideoId.takeIf { it.length == 11 }
             ?: YouTubeIdExtractor.extractFromFileNameOrUri(video.entity.fileName, video.entity.uri)
-
-        // 3. If no [videoId] in filename, search YouTube by cleaned video title
-        if (ytId.isNullOrBlank()) {
-            ytId = YouTubeService.searchVideoIdByTitle(video.title)
-        }
 
         if (ytId.isNullOrBlank()) return null
 
@@ -223,21 +223,63 @@ object ThumbnailManager {
         return null
     }
 
+    private fun calculateInSampleSize(
+        options: BitmapFactory.Options,
+        reqWidth: Int,
+        reqHeight: Int
+    ): Int {
+        val height = options.outHeight
+        val width = options.outWidth
+        var inSampleSize = 1
+        if (height > reqHeight || width > reqWidth) {
+            val halfHeight = height / 2
+            val halfWidth = width / 2
+            while ((halfHeight / inSampleSize) >= reqHeight && (halfWidth / inSampleSize) >= reqWidth) {
+                inSampleSize *= 2
+            }
+        }
+        return inSampleSize
+    }
+
+    private inline fun decodeSampledBitmap(
+        reqWidth: Int = THUMB_WIDTH,
+        reqHeight: Int = THUMB_HEIGHT,
+        decode: (BitmapFactory.Options) -> Bitmap?
+    ): Bitmap? {
+        val boundsOptions = BitmapFactory.Options().apply {
+            inJustDecodeBounds = true
+        }
+        decode(boundsOptions)
+        if (boundsOptions.outWidth <= 0 || boundsOptions.outHeight <= 0) return null
+
+        val decodeOptions = BitmapFactory.Options().apply {
+            inSampleSize = calculateInSampleSize(boundsOptions, reqWidth, reqHeight)
+        }
+        return decode(decodeOptions)
+    }
+
     private fun downloadImageToFile(urlString: String, targetFile: File): Boolean {
         return runCatching {
-            val conn = (URL(urlString).openConnection() as HttpURLConnection).apply {
-                requestMethod = "GET"
-                connectTimeout = 6_000
-                readTimeout = 7_000
-                setRequestProperty("User-Agent", "Mozilla/5.0")
+            var conn: HttpURLConnection? = null
+            val bytes = try {
+                conn = (URL(urlString).openConnection() as HttpURLConnection).apply {
+                    requestMethod = "GET"
+                    connectTimeout = 6_000
+                    readTimeout = 7_000
+                    setRequestProperty("User-Agent", "Mozilla/5.0")
+                }
+                if (conn.responseCode !in 200..299) return@runCatching false
+                conn.inputStream.use { it.readBytes() }
+            } finally {
+                conn?.disconnect()
             }
-            if (conn.responseCode !in 200..299) return false
-            val bytes = conn.inputStream.use { it.readBytes() }
             if (bytes.size < 1024) return false
 
             // Decode and re-save cropped/scaled 16:9 (remove 4:3 letterbox bars on hqdefault.jpg)
-            val decoded = BitmapFactory.decodeByteArray(bytes, 0, bytes.size) ?: return false
-            val cropped = cropTo16By9AndScale(decoded, 480, 270)
+            val decoded = decodeSampledBitmap { opts ->
+                BitmapFactory.decodeByteArray(bytes, 0, bytes.size, opts)
+            } ?: return false
+            val cropped = cropTo16By9AndScale(decoded, THUMB_WIDTH, THUMB_HEIGHT)
             val tmpFile = File(targetFile.parentFile, "${targetFile.name}.tmp")
             FileOutputStream(tmpFile).use { out ->
                 cropped.compress(Bitmap.CompressFormat.JPEG, 86, out)
@@ -274,14 +316,21 @@ object ThumbnailManager {
 
     private fun copyAndScaleImageFile(sourceFile: File, targetFile: File): Boolean {
         return runCatching {
-            val bmp = BitmapFactory.decodeFile(sourceFile.absolutePath) ?: return false
-            val scaled = cropTo16By9AndScale(bmp, 480, 270)
-            FileOutputStream(targetFile).use { out ->
+            val bmp = decodeSampledBitmap { opts ->
+                BitmapFactory.decodeFile(sourceFile.absolutePath, opts)
+            } ?: return false
+            val scaled = cropTo16By9AndScale(bmp, THUMB_WIDTH, THUMB_HEIGHT)
+            val tmpFile = File(targetFile.parentFile, "${targetFile.name}.tmp")
+            FileOutputStream(tmpFile).use { out ->
                 scaled.compress(Bitmap.CompressFormat.JPEG, 85, out)
             }
             if (scaled !== bmp) bmp.recycle()
             scaled.recycle()
-            targetFile.exists() && targetFile.length() > 512L
+            if (targetFile.exists()) targetFile.delete()
+            tmpFile.renameTo(targetFile)
+            val ok = targetFile.exists() && targetFile.length() > 512L
+            if (ok) inMemoryCacheIndex[targetFile.name] = targetFile
+            ok
         }.getOrDefault(false)
     }
 
@@ -374,6 +423,10 @@ object ThumbnailManager {
     fun getCacheSizeBytes(context: Context): Long {
         val dir = getThumbnailsDir(context)
         return dir.listFiles()?.sumOf { it.length() } ?: 0L
+    }
+
+    suspend fun getCacheSizeBytesAsync(context: Context): Long = withContext(Dispatchers.IO) {
+        getCacheSizeBytes(context)
     }
 
     fun clearThumbnailCache(context: Context) {

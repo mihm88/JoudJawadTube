@@ -210,4 +210,50 @@
     <string name="settings_manage_library_data_sub">%1$d Channels • %2$d Playlists • Watch History, Favorites &amp; Reset</string>
     <string name="settings_manage_library_data_btn">Open Manager</string>
     <string name="settings_data_tab_reset">Data &amp; Reset</string>
+
+    <!-- Player Loading & Errors -->
+    <string name="player_loading_stream">Loading stream...</string>
+    <string name="player_error_title">Playback Error</string>
+    <string name="player_error_local">Unable to play this local or USB video file.</string>
+    <string name="player_error_youtube">Unable to load this YouTube stream right now.</string>
+    <string name="player_error_kids_restricted">This video is restricted by kid-safety settings.</string>
+    <string name="player_error_offline">You are offline. Connect to the internet to play YouTube videos.</string>
+    <string name="player_retry">Retry</string>
+
+    <!-- Offline Banner -->
+    <string name="offline_banner_message">Offline Mode — Local &amp; USB videos are still available.</string>
+
+    <!-- Parental Gate -->
+    <string name="parental_gate_title">Parents Only</string>
+    <string name="parental_gate_prompt">To continue, please solve: %1$d × %2$d = ?</string>
+    <string name="parental_gate_wrong">Incorrect answer. Please try again.</string>
+
+    <!-- Kid Lock -->
+    <string name="kid_lock_label">Kid Lock</string>
+    <string name="kid_lock_hold_to_unlock">Hold to unlock controls</string>
+    <string name="kid_lock_unlocked">Controls unlocked</string>
+
+    <!-- Watch Timer -->
+    <string name="watch_timer_title">Watch Time Limit</string>
+    <string name="watch_timer_times_up_title">Time\'s Up!</string>
+    <string name="watch_timer_times_up_message">Your daily watch time limit has been reached. Take a break!</string>
+    <string name="watch_timer_extend_parent">Parent: Extend Time</string>
+    <string name="watch_timer_off">Off (Unlimited)</string>
+    <string name="watch_timer_minutes">%d minutes</string>
+
+    <!-- Settings: Parental & Kid Safety -->
+    <string name="settings_parental_section_title">Parental &amp; Kid Safety</string>
+    <string name="settings_parental_section_sub">Control parental lock, watch limits, background play, and YouTube fallbacks</string>
+    <string name="settings_parental_gate_title">Parental Gate Protection</string>
+    <string name="settings_parental_gate_sub">Require solving a math question before changing settings or deleting items</string>
+    <string name="settings_background_playback_title">Background Playback</string>
+    <string name="settings_background_playback_sub">Keep audio playing when leaving the player or turning off the screen</string>
+    <string name="settings_general_fallback_title">General Fallback for Saved Channels</string>
+    <string name="settings_general_fallback_sub">Allow broader YouTube search fallback for saved channels if strict resolution fails</string>
+    <string name="settings_webview_fallback_title">Allow WebView Fallback</string>
+    <string name="settings_webview_fallback_sub">Use embedded WebView only if ad-free ExoPlayer streams fail (disabled by default)</string>
+    <string name="settings_watch_timer_title">Watch Time Limit</string>
+    <string name="settings_watch_timer_sub">Automatically pause playback after a set number of minutes</string>
+    <string name="settings_enabled">Enabled</string>
+    <string name="settings_disabled">Disabled</string>
 </resources>
