@@ -1,10 +1,8 @@
 package com.joudjawadtube.player.ui.catalog
 
-import android.app.Application
 import android.net.Uri
-import androidx.lifecycle.AndroidViewModel
+import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.joudjawadtube.player.data.local.AppDatabase
 import com.joudjawadtube.player.data.local.SavedChannelEntity
 import com.joudjawadtube.player.data.local.SavedPlaylistEntity
 import com.joudjawadtube.player.data.local.VideoEntity
@@ -12,7 +10,6 @@ import com.joudjawadtube.player.data.local.VideoItem
 import com.joudjawadtube.player.data.network.NetworkMonitor_Antigravity
 import com.joudjawadtube.player.data.repository.CatalogSnapshot
 import com.joudjawadtube.player.data.repository.CategoryRow
-import com.joudjawadtube.player.data.repository.KidsCatalogRepository_Antigravity
 import com.joudjawadtube.player.data.repository.KidsChannelItem
 import com.joudjawadtube.player.data.repository.RelatedVideos
 import com.joudjawadtube.player.data.repository.RelatedVideosResolver_Antigravity
@@ -24,7 +21,6 @@ import com.joudjawadtube.player.data.settings.AppLanguage
 import com.joudjawadtube.player.data.settings.AppSettingsRepository
 import com.joudjawadtube.player.data.settings.AppSettingsState
 import com.joudjawadtube.player.data.settings.UiModePreference
-import com.joudjawadtube.player.data.thumbnail.ThumbnailManager
 import com.joudjawadtube.player.data.updater.AppUpdater_Antigravity
 import com.joudjawadtube.player.data.updater.UpdateInfo_Antigravity
 import com.joudjawadtube.player.data.updater.UpdateState_Antigravity
@@ -42,11 +38,13 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.drop
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import java.util.Collections
 
 data class PlaybackSession(
     val currentVideo: VideoItem,
@@ -88,7 +86,8 @@ data class CatalogUiState(
     val thumbnailStatusMessage: String? = null,
     val thumbnailRevision: Int = 0,
     val updateState: UpdateState_Antigravity = UpdateState_Antigravity.Idle,
-    val isOnline: Boolean = true
+    val isOnline: Boolean = true,
+    val kidsChannels: List<KidsChannelItem> = emptyList()
 ) {
     val usbDriveCount: Int
         get() = mountedVolumes.count { it.isUsbOrRemovable }
@@ -109,19 +108,30 @@ private data class DialogAndThumbState(
 )
 
 @OptIn(FlowPreview::class)
-class CatalogViewModel(application: Application) : AndroidViewModel(application) {
-
-    private val appUpdater = AppUpdater_Antigravity(application)
-    private val database = AppDatabase.getInstance(application)
-    private val repository = VideoRepository(application.applicationContext, database.videoDao())
-    private val settingsRepository = AppSettingsRepository.getInstance(application)
-    private val networkMonitor = NetworkMonitor_Antigravity(application)
+class CatalogViewModel(
+    private val repository: VideoRepository,
+    private val settingsRepository: AppSettingsRepository,
+    private val appUpdater: AppUpdater_Antigravity,
+    private val networkMonitor: NetworkMonitor_Antigravity,
+    private val kidsChannelsLoader: suspend (AppLanguage) -> List<KidsChannelItem>,
+    private val isBuiltInChannelCheck: suspend (String, AppLanguage) -> Boolean,
+    private val currentVersionProvider: () -> String,
+    private val thumbnailResolver: suspend (VideoItem, AppSettingsState, Boolean) -> Unit = { _, _, _ -> },
+    private val thumbnailCacheClearer: suspend () -> Unit = {},
+    private val customFrameExtractor: suspend (VideoItem, Float) -> Unit = { _, _ -> },
+    private val observeUsbEvents: Boolean = true,
+    private val videoCountProvider: suspend () -> Int = { repository.catalogFlow.first().allVideos.size },
+    private val autoCheckUpdatesOnInit: Boolean = true,
+    private val autoScanOnInit: Boolean = true
+) : ViewModel() {
 
     private val _selectedSection = MutableStateFlow(SidebarSection.HOME)
     private val _selectedTopCategory = MutableStateFlow("All")
     private val _searchQuery = MutableStateFlow("")
     private val _selectedFolderFilter = MutableStateFlow<String?>(null)
     private val _dialogState = MutableStateFlow(DialogAndThumbState())
+    private val _kidsChannels = MutableStateFlow<List<KidsChannelItem>>(emptyList())
+    private val inFlightThumbnails: MutableSet<String> = Collections.synchronizedSet(mutableSetOf())
 
     private val _activePlaybackSession = MutableStateFlow<PlaybackSession?>(null)
     val activePlaybackSession: StateFlow<PlaybackSession?> = _activePlaybackSession.asStateFlow()
@@ -136,9 +146,20 @@ class CatalogViewModel(application: Application) : AndroidViewModel(application)
             _selectedTopCategory,
             _searchQuery,
             _selectedFolderFilter,
-            combine(_dialogState, networkMonitor.isOnline) { dlg, online -> dlg to online }
-        ) { section, topCat, query, folder, (dialog, online) ->
-            FilterAndDialogBundle(section, topCat, query, folder, dialog.isTvModeOverride, dialog, online)
+            combine(_dialogState, networkMonitor.isOnline, _kidsChannels) { dlg, online, kids ->
+                Triple(dlg, online, kids)
+            }
+        ) { section, topCat, query, folder, (dialog, online, kids) ->
+            FilterAndDialogBundle(
+                selectedSection = section,
+                selectedTopCategory = topCat,
+                searchQuery = query,
+                selectedFolderFilter = folder,
+                isTvModeOverride = dialog.isTvModeOverride,
+                dialogState = dialog,
+                isOnline = online,
+                kidsChannels = kids
+            )
         }
     ) { snapshot, isScanning, volumes, settings, bundle ->
         val section = bundle.selectedSection
@@ -351,7 +372,8 @@ class CatalogViewModel(application: Application) : AndroidViewModel(application)
             thumbnailStatusMessage = dlg.thumbnailStatusMessage,
             thumbnailRevision = dlg.thumbnailRevision,
             updateState = dlg.updateState,
-            isOnline = bundle.isOnline
+            isOnline = bundle.isOnline,
+            kidsChannels = bundle.kidsChannels
         )
     }.flowOn(Dispatchers.Default).stateIn(
         scope = viewModelScope,
@@ -366,24 +388,37 @@ class CatalogViewModel(application: Application) : AndroidViewModel(application)
         val selectedFolderFilter: String?,
         val isTvModeOverride: Boolean?,
         val dialogState: DialogAndThumbState,
-        val isOnline: Boolean
+        val isOnline: Boolean,
+        val kidsChannels: List<KidsChannelItem>
     )
 
     init {
+        if (autoScanOnInit) {
+            viewModelScope.launch(Dispatchers.IO) {
+                val currentSettings = settingsRepository.settingsFlow.value
+                repository.refreshVolumesOnly(currentSettings.hideBootUsbPartitions)
+                // Seed the 21 bilingual built-in channels (respecting any user removals) first
+                launch {
+                    repository.seedAndSyncBuiltInChannels(
+                        removedChannelIds = currentSettings.removedBuiltInChannelIds,
+                        appLanguage = currentSettings.appLanguage
+                    )
+                }
+                val existingCount = videoCountProvider()
+                if (currentSettings.autoScanOnStartup || existingCount == 0) {
+                    repository.refreshStorageAndScan(currentSettings.hideBootUsbPartitions)
+                }
+            }
+        }
+
+        // Load localized Kids Picks catalog off the main thread whenever appLanguage changes
         viewModelScope.launch(Dispatchers.IO) {
-            val currentSettings = settingsRepository.settingsFlow.value
-            repository.refreshVolumesOnly(currentSettings.hideBootUsbPartitions)
-            // Seed the 21 bilingual built-in channels (respecting any user removals) first
-            launch {
-                repository.seedAndSyncBuiltInChannels(
-                    removedChannelIds = currentSettings.removedBuiltInChannelIds,
-                    appLanguage = currentSettings.appLanguage
-                )
-            }
-            val existingCount = database.videoDao().getVideoCount()
-            if (currentSettings.autoScanOnStartup || existingCount == 0) {
-                repository.refreshStorageAndScan(currentSettings.hideBootUsbPartitions)
-            }
+            settingsRepository.settingsFlow
+                .map { it.appLanguage }
+                .distinctUntilChanged()
+                .collectLatest { lang ->
+                    _kidsChannels.value = kidsChannelsLoader(lang)
+                }
         }
 
         // Re-localize untouched built-in channels if user toggles EN <-> AR in settings
@@ -423,34 +458,72 @@ class CatalogViewModel(application: Application) : AndroidViewModel(application)
                 }
         }
 
-        viewModelScope.launch {
-            UsbMountReceiver.usbEvents
-                .debounce(1_500L)
-                .collectLatest { event ->
-                    if (event != null) {
-                        val currentSettings = settingsRepository.settingsFlow.value
-                        if (currentSettings.autoScanOnUsbMount || event.action == "MANUAL_RESCAN") {
-                            repository.refreshStorageAndScan(currentSettings.hideBootUsbPartitions)
-                        } else {
-                            repository.refreshVolumesOnly(currentSettings.hideBootUsbPartitions)
+        if (observeUsbEvents) {
+            viewModelScope.launch {
+                UsbMountReceiver.usbEvents
+                    .debounce(1_500L)
+                    .collectLatest { event ->
+                        if (event != null) {
+                            val currentSettings = settingsRepository.settingsFlow.value
+                            if (currentSettings.autoScanOnUsbMount || event.action == "MANUAL_RESCAN") {
+                                repository.refreshStorageAndScan(currentSettings.hideBootUsbPartitions)
+                            } else {
+                                repository.refreshVolumesOnly(currentSettings.hideBootUsbPartitions)
+                            }
                         }
                     }
-                }
+            }
         }
 
-        viewModelScope.launch {
-            delay(3500)
-            checkForAppUpdates(isManual = false)
+        if (autoCheckUpdatesOnInit) {
+            viewModelScope.launch {
+                delay(3500)
+                checkForAppUpdates(isManual = false)
+            }
+        }
+    }
+
+    fun onAction(action: CatalogAction) {
+        when (action) {
+            is CatalogAction.SelectSection -> selectSection(action.section)
+            is CatalogAction.SelectTopCategory -> selectTopCategory(action.category)
+            is CatalogAction.UpdateSearchQuery -> updateSearchQuery(action.query)
+            is CatalogAction.SelectFolderFilter -> selectFolderFilter(action.folderName)
+            is CatalogAction.OpenVideo -> openVideo(action.video, action.playlist)
+            is CatalogAction.ToggleFavorite -> toggleFavorite(action.video)
+            is CatalogAction.OpenVideoOptions -> openVideoOptions(action.video)
+            CatalogAction.OpenAddYouTubeDialog -> openAddYouTubeDialog()
+            is CatalogAction.DeletePlaylist -> deleteYouTubePlaylist(action.playlistId)
+            is CatalogAction.DeleteChannel -> deleteYouTubeChannel(action.channelId)
+            is CatalogAction.ChangeChannelCategory -> updateChannelCategory(action.channelId, action.newCategory)
+            is CatalogAction.ChangePlaylistCategory -> updatePlaylistCategory(action.playlistId, action.newCategory)
+            is CatalogAction.OpenKidsPlaylist -> openOrImportKidsPlaylist(action.playlistId, action.playImmediately)
+            is CatalogAction.AddBuiltInChannel -> addBuiltInChannelToLibrary(action.channel)
+            CatalogAction.RequestReadPermission -> Unit
+            CatalogAction.RequestAllFilesAccess -> Unit
+            CatalogAction.PickSafFolder -> openFolderPickerDialog()
+            CatalogAction.RescanStorage -> rescanStorage()
+            CatalogAction.ToggleTabletGridMode -> toggleTabletGridMode()
+            is CatalogAction.UpdateSettings -> updateSettings(action.transform)
+            CatalogAction.RegenerateAllThumbnails -> regenerateAllThumbnails()
+            CatalogAction.ClearThumbnailCache -> clearThumbnailCache()
+            is CatalogAction.RemoveSafFolder -> removeSafFolder(action.uriString)
+            CatalogAction.ClearWatchHistory -> clearWatchHistory()
+            CatalogAction.ClearFavorites -> clearFavorites()
+            CatalogAction.ClearYouTubeLibrary -> clearYouTubeLibrary()
+            CatalogAction.ResetSettings -> resetSettingsToDefaults()
+            CatalogAction.CheckForUpdates -> checkForAppUpdates(isManual = true)
+            is CatalogAction.DownloadAndInstallUpdate -> downloadAndInstallUpdate(action.info)
+            is CatalogAction.InstallDownloadedApk -> installDownloadedApk(action.apkFile)
+            CatalogAction.DismissUpdateStatus -> dismissUpdateStatus()
+            is CatalogAction.ResolveVideoThumbnail -> resolveVideoThumbnail(action.video)
         }
     }
 
     fun checkForAppUpdates(isManual: Boolean = false) {
         viewModelScope.launch {
             _dialogState.update { it.copy(updateState = UpdateState_Antigravity.Checking) }
-            val currentVersion = runCatching {
-                val pInfo = getApplication<Application>().packageManager.getPackageInfo(getApplication<Application>().packageName, 0)
-                pInfo.versionName ?: "1.0.0"
-            }.getOrDefault("1.0.0")
+            val currentVersion = currentVersionProvider()
 
             val result = appUpdater.checkForUpdate(currentVersion)
             result.onSuccess { info ->
@@ -662,17 +735,25 @@ class CatalogViewModel(application: Application) : AndroidViewModel(application)
         _dialogState.update { it.copy(selectedVideoForOptions = null) }
     }
 
+    fun resolveVideoThumbnail(video: VideoItem) {
+        if (!inFlightThumbnails.add(video.id)) return
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val settings = settingsRepository.settingsFlow.value
+                thumbnailResolver(video, settings, false)
+                _dialogState.update {
+                    it.copy(thumbnailRevision = it.thumbnailRevision + 1)
+                }
+            } finally {
+                inFlightThumbnails.remove(video.id)
+            }
+        }
+    }
+
     fun forceYouTubeThumbnailForVideo(video: VideoItem) {
-        viewModelScope.launch {
-            val ctx = getApplication<Application>().applicationContext
+        viewModelScope.launch(Dispatchers.IO) {
             val settings = settingsRepository.settingsFlow.value
-            ThumbnailManager.resolveOrGenerateThumbnail(
-                context = ctx,
-                video = video,
-                settings = settings,
-                videoDao = database.videoDao(),
-                forceRefresh = true
-            )
+            thumbnailResolver(video, settings, true)
             _dialogState.update {
                 it.copy(thumbnailRevision = it.thumbnailRevision + 1)
             }
@@ -680,19 +761,8 @@ class CatalogViewModel(application: Application) : AndroidViewModel(application)
     }
 
     fun extractCustomFrameThumbnailForVideo(video: VideoItem, fraction: Float) {
-        viewModelScope.launch {
-            val ctx = getApplication<Application>().applicationContext
-            val targetMs = if (video.durationMs > 5_000L) {
-                (video.durationMs * fraction).toLong()
-            } else {
-                3_000L
-            }
-            ThumbnailManager.generateCustomFrameThumbnailAt(
-                context = ctx,
-                video = video,
-                positionMs = targetMs,
-                videoDao = database.videoDao()
-            )
+        viewModelScope.launch(Dispatchers.IO) {
+            customFrameExtractor(video, fraction)
             _dialogState.update {
                 it.copy(thumbnailRevision = it.thumbnailRevision + 1)
             }
@@ -701,8 +771,7 @@ class CatalogViewModel(application: Application) : AndroidViewModel(application)
 
     fun regenerateAllThumbnails() {
         if (_dialogState.value.isGeneratingThumbnails) return
-        viewModelScope.launch {
-            val ctx = getApplication<Application>().applicationContext
+        viewModelScope.launch(Dispatchers.IO) {
             val settings = settingsRepository.settingsFlow.value
             val allVideos = uiState.value.snapshot.allVideos
             _dialogState.update {
@@ -713,13 +782,7 @@ class CatalogViewModel(application: Application) : AndroidViewModel(application)
             }
             var done = 0
             for (video in allVideos) {
-                ThumbnailManager.resolveOrGenerateThumbnail(
-                    context = ctx,
-                    video = video,
-                    settings = settings,
-                    videoDao = database.videoDao(),
-                    forceRefresh = true
-                )
+                thumbnailResolver(video, settings, true)
                 done++
                 _dialogState.update {
                     it.copy(
@@ -739,9 +802,8 @@ class CatalogViewModel(application: Application) : AndroidViewModel(application)
     }
 
     fun clearThumbnailCache() {
-        viewModelScope.launch {
-            val ctx = getApplication<Application>().applicationContext
-            ThumbnailManager.clearThumbnailCache(ctx)
+        viewModelScope.launch(Dispatchers.IO) {
+            thumbnailCacheClearer()
             _dialogState.update {
                 it.copy(
                     thumbnailStatusMessage = "Thumbnail disk cache cleared.",
@@ -765,9 +827,10 @@ class CatalogViewModel(application: Application) : AndroidViewModel(application)
 
     fun deleteYouTubeChannel(channelId: String) {
         viewModelScope.launch {
-            val isBuiltIn = KidsCatalogRepository_Antigravity
-                .loadKidsChannels(getApplication(), settingsRepository.settingsFlow.value.appLanguage)
-                .any { it.channelId == channelId }
+            val isBuiltIn = isBuiltInChannelCheck(
+                channelId,
+                settingsRepository.settingsFlow.value.appLanguage
+            )
             if (isBuiltIn) {
                 settingsRepository.markBuiltInChannelRemoved(channelId)
             }
@@ -823,8 +886,7 @@ class CatalogViewModel(application: Application) : AndroidViewModel(application)
 
     fun clearYouTubeLibrary() {
         viewModelScope.launch {
-            val builtInIds = KidsCatalogRepository_Antigravity
-                .loadKidsChannels(getApplication(), settingsRepository.settingsFlow.value.appLanguage)
+            val builtInIds = kidsChannelsLoader(settingsRepository.settingsFlow.value.appLanguage)
                 .map { it.channelId }
                 .toSet()
             settingsRepository.update { it.copy(removedBuiltInChannelIds = it.removedBuiltInChannelIds + builtInIds) }
@@ -991,10 +1053,5 @@ class CatalogViewModel(application: Application) : AndroidViewModel(application)
             val hideBoot = settingsRepository.settingsFlow.value.hideBootUsbPartitions
             repository.removeSafFolder(uriString, hideBoot)
         }
-    }
-
-    override fun onCleared() {
-        super.onCleared()
-        networkMonitor.unregister()
     }
 }

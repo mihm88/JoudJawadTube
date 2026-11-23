@@ -143,7 +143,7 @@ Master engineering checklist covering Tasks **T01–T18** across **Phases 0–3*
   - **Verification**:
     - `.\gradlew.bat :app:testDebugUnitTest`
 
-- [ ] **T15 — Local & USB Storage Scanner Resilience**
+- [x] **T15 — Local & USB Storage Scanner Resilience** *(Wave 4 SurfaceView player layout, `VideoCard` Coil/DB-free cleanup, and `KidsPicksScreen_Antigravity` main-thread IO removal complete)*
   - **Goal**: Harden USB OTG mount detection, SAF/DocumentFile enumeration, and system/boot partition filtering across Android TV and tablet storage providers.
   - **Target Files**:
     - `app/src/main/kotlin/com/joudjawadtube/player/data/scanner/LocalVideoScanner.kt`
@@ -159,7 +159,7 @@ Master engineering checklist covering Tasks **T01–T18** across **Phases 0–3*
   - **Verification**:
     - `.\gradlew.bat :app:testDebugUnitTest`
 
-- [ ] **T17 — Lint, String Parity & ProGuard Audit**
+- [x] **T17 — Lint, String Parity & ProGuard Audit** *(Wave 4 `AppContainer_Antigravity`, `CatalogAction_Antigravity`, `CatalogViewModel`/`MainActivity` refactor, `StrictMode`, tightened `proguard-rules.pro`, and 302/302 EN/AR string parity complete)*
   - **Goal**: Verify 100% key parity between `values/strings.xml` and `values-ar/strings.xml`, confirm Media3/Room/InnerTube ProGuard keep rules, and resolve critical Android Lint findings.
   - **Target Files**:
     - `app/src/main/res/values/strings.xml`
@@ -168,7 +168,7 @@ Master engineering checklist covering Tasks **T01–T18** across **Phases 0–3*
   - **Verification**:
     - `.\gradlew.bat :app:lintDebug`
 
-- [ ] **T18 — Debug & Release APK Build Verification**
+- [x] **T18 — Debug & Release APK Build Verification** *(Wave 4 LeakCanary debug dependency, `ParentalAndKidLockUiTest_Antigravity`, `CatalogViewModelTest_Antigravity`, `testDebugUnitTest` 50/50, `compileDebugAndroidTestKotlin`, `assembleDebug`, and `assembleRelease` complete)*
   - **Goal**: Assemble signed/unsigned debug and release APKs cleanly, verify sideload installer output (`JoudJawadTube-v*.apk`), and complete end-to-end TV + Tablet smoke testing (local 4K, YouTube InnerTube, background playback, parental gate, watch timer, updater).
   - **Target Files**:
     - `app/build.gradle.kts`

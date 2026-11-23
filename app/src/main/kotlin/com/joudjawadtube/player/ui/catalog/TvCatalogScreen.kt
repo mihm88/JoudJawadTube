@@ -1,7 +1,5 @@
 package com.joudjawadtube.player.ui.catalog
 
-import com.joudjawadtube.player.data.updater.UpdateInfo_Antigravity
-
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -71,11 +69,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.joudjawadtube.player.data.local.SavedChannelEntity
-import com.joudjawadtube.player.data.local.SavedPlaylistEntity
 import com.joudjawadtube.player.data.local.VideoItem
 import com.joudjawadtube.player.data.repository.CategoryRow
-import com.joudjawadtube.player.data.repository.KidsChannelItem
 import com.joudjawadtube.player.data.settings.AppSettingsState
 import com.joudjawadtube.player.ui.components.ActionPillButton
 import com.joudjawadtube.player.ui.components.LocalWindowLayoutInfo
@@ -106,37 +101,7 @@ fun TvCatalogScreen(
     lazyListState: LazyListState = rememberLazyListState(),
     hasReadVideoPermission: Boolean,
     hasAllFilesAccess: Boolean,
-    onSelectSection: (SidebarSection) -> Unit,
-    onSelectTopCategory: (String) -> Unit = {},
-    onSearchQueryChange: (String) -> Unit,
-    onSelectFolderFilter: (String?) -> Unit,
-    onVideoClick: (VideoItem, List<VideoItem>) -> Unit,
-    onToggleFavorite: (VideoItem) -> Unit,
-    onOpenVideoOptions: (VideoItem) -> Unit,
-    onOpenAddYouTubeDialog: () -> Unit,
-    onDeletePlaylist: (String) -> Unit,
-    onDeleteChannel: (String) -> Unit = {},
-    onChangeChannelCategory: (channelId: String, newCategory: String) -> Unit = { _, _ -> },
-    onChangePlaylistCategory: (playlistId: String, newCategory: String) -> Unit = { _, _ -> },
-    onOpenKidsPlaylist: (String, String) -> Unit = { _, _ -> },
-    onSaveKidsPlaylist: (String) -> Unit = {},
-    onAddBuiltInChannel: (KidsChannelItem) -> Unit = {},
-    onRequestReadPermission: () -> Unit,
-    onRequestAllFilesAccess: () -> Unit,
-    onPickSafFolder: () -> Unit,
-    onRescanStorage: () -> Unit,
-    onUpdateSettings: ((AppSettingsState) -> AppSettingsState) -> Unit,
-    onRegenerateAllThumbnails: () -> Unit,
-    onClearThumbnailCache: () -> Unit,
-    onRemoveSafFolder: (String) -> Unit,
-    onClearWatchHistory: () -> Unit,
-    onClearFavorites: () -> Unit,
-    onClearYouTubeLibrary: () -> Unit,
-    onResetSettings: () -> Unit,
-    onCheckForUpdates: () -> Unit = {},
-    onDownloadAndInstallUpdate: (UpdateInfo_Antigravity) -> Unit = {},
-    onInstallDownloadedApk: (java.io.File) -> Unit = {},
-    onDismissUpdateStatus: () -> Unit = {}
+    onAction: (CatalogAction) -> Unit
 ) {
     Row(
         modifier = Modifier
@@ -151,10 +116,10 @@ fun TvCatalogScreen(
             isScanning = uiState.isScanning,
             isExpanded = false,
             sidebarMode = uiState.settings.sidebarMode,
-            onSelectSection = onSelectSection,
-            onAddYouTubeLink = onOpenAddYouTubeDialog,
-            onAddSafFolder = onPickSafFolder,
-            onRescanStorage = onRescanStorage
+            onSelectSection = { onAction(CatalogAction.SelectSection(it)) },
+            onAddYouTubeLink = { onAction(CatalogAction.OpenAddYouTubeDialog) },
+            onAddSafFolder = { onAction(CatalogAction.PickSafFolder) },
+            onRescanStorage = { onAction(CatalogAction.RescanStorage) }
         )
 
         Column(
@@ -172,10 +137,10 @@ fun TvCatalogScreen(
 
             TvTopHeaderBar(
                 searchQuery = uiState.searchQuery,
-                onSearchQueryChange = onSearchQueryChange,
+                onSearchQueryChange = { onAction(CatalogAction.UpdateSearchQuery(it)) },
                 categories = categoryList,
                 selectedCategory = uiState.selectedTopCategory,
-                onSelectCategory = onSelectTopCategory,
+                onSelectCategory = { onAction(CatalogAction.SelectTopCategory(it)) },
                 onOpenQuickChannelsPlaylists = {
                     quickCollectionTarget = null
                     showQuickChannelsPlaylistsDialog = true
@@ -196,16 +161,16 @@ fun TvCatalogScreen(
                     matchingChannels = uiState.matchingChannels,
                     matchingPlaylists = uiState.matchingPlaylists,
                     matchingVideos = uiState.filteredVideos,
-                    onOpenChannelVideos = { channel, videos ->
-                        if (videos.isNotEmpty()) onVideoClick(videos.first(), videos)
+                    onOpenChannelVideos = { _, videos ->
+                        if (videos.isNotEmpty()) onAction(CatalogAction.OpenVideo(videos.first(), videos))
                     },
-                    onOpenPlaylistVideos = { playlist, videos ->
-                        if (videos.isNotEmpty()) onVideoClick(videos.first(), videos)
+                    onOpenPlaylistVideos = { _, videos ->
+                        if (videos.isNotEmpty()) onAction(CatalogAction.OpenVideo(videos.first(), videos))
                     },
-                    onVideoClick = onVideoClick,
-                    onToggleFavorite = onToggleFavorite,
-                    onOpenVideoOptions = onOpenVideoOptions,
-                    onClearSearch = { onSearchQueryChange("") }
+                    onVideoClick = { video, playlist -> onAction(CatalogAction.OpenVideo(video, playlist)) },
+                    onToggleFavorite = { onAction(CatalogAction.ToggleFavorite(it)) },
+                    onOpenVideoOptions = { onAction(CatalogAction.OpenVideoOptions(it)) },
+                    onClearSearch = { onAction(CatalogAction.UpdateSearchQuery("")) }
                 )
             } else if (uiState.selectedSection == SidebarSection.SETTINGS) {
                 SettingsScreen(
@@ -218,87 +183,88 @@ fun TvCatalogScreen(
                     isScanning = uiState.isScanning,
                     isGeneratingThumbnails = uiState.isGeneratingThumbnails,
                     thumbnailStatusMessage = uiState.thumbnailStatusMessage,
-                    onUpdateSettings = onUpdateSettings,
-                    onRegenerateAllThumbnails = onRegenerateAllThumbnails,
-                    onClearThumbnailCache = onClearThumbnailCache,
-                    onAddFolder = onPickSafFolder,
-                    onRemoveSafFolder = onRemoveSafFolder,
-                    onAddYouTubeLink = onOpenAddYouTubeDialog,
-                    onDeletePlaylist = onDeletePlaylist,
-                    onDeleteChannel = onDeleteChannel,
-                    onRescanStorage = onRescanStorage,
-                    onClearWatchHistory = onClearWatchHistory,
-                    onClearFavorites = onClearFavorites,
-                    onClearYouTubeLibrary = onClearYouTubeLibrary,
-                    onResetSettings = onResetSettings,
+                    onUpdateSettings = { onAction(CatalogAction.UpdateSettings(it)) },
+                    onRegenerateAllThumbnails = { onAction(CatalogAction.RegenerateAllThumbnails) },
+                    onClearThumbnailCache = { onAction(CatalogAction.ClearThumbnailCache) },
+                    onAddFolder = { onAction(CatalogAction.PickSafFolder) },
+                    onRemoveSafFolder = { onAction(CatalogAction.RemoveSafFolder(it)) },
+                    onAddYouTubeLink = { onAction(CatalogAction.OpenAddYouTubeDialog) },
+                    onDeletePlaylist = { onAction(CatalogAction.DeletePlaylist(it)) },
+                    onDeleteChannel = { onAction(CatalogAction.DeleteChannel(it)) },
+                    onRescanStorage = { onAction(CatalogAction.RescanStorage) },
+                    onClearWatchHistory = { onAction(CatalogAction.ClearWatchHistory) },
+                    onClearFavorites = { onAction(CatalogAction.ClearFavorites) },
+                    onClearYouTubeLibrary = { onAction(CatalogAction.ClearYouTubeLibrary) },
+                    onResetSettings = { onAction(CatalogAction.ResetSettings) },
                     updateState = uiState.updateState,
-                    onCheckForUpdates = onCheckForUpdates,
-                    onDownloadAndInstallUpdate = onDownloadAndInstallUpdate,
-                    onInstallDownloadedApk = onInstallDownloadedApk,
-                    onDismissUpdateStatus = onDismissUpdateStatus
+                    onCheckForUpdates = { onAction(CatalogAction.CheckForUpdates) },
+                    onDownloadAndInstallUpdate = { onAction(CatalogAction.DownloadAndInstallUpdate(it)) },
+                    onInstallDownloadedApk = { onAction(CatalogAction.InstallDownloadedApk(it)) },
+                    onDismissUpdateStatus = { onAction(CatalogAction.DismissUpdateStatus) }
                 )
             } else if (uiState.selectedSection == SidebarSection.KIDS_PICKS) {
                 KidsPicksScreen_Antigravity(
+                    channels = uiState.kidsChannels,
                     savedPlaylistIds = uiState.snapshot.savedPlaylists.map { it.playlistId }.toSet(),
                     savedChannelIds = uiState.snapshot.savedChannels.map { it.channelId }.toSet(),
                     appLanguage = uiState.settings.appLanguage,
-                    onOpenPlaylist = onOpenKidsPlaylist,
-                    onSavePlaylistToLibrary = onSaveKidsPlaylist,
-                    onAddChannelToLibrary = onAddBuiltInChannel,
-                    onRemoveChannelFromLibrary = onDeleteChannel
+                    onOpenPlaylist = { plId, _ -> onAction(CatalogAction.OpenKidsPlaylist(plId, playImmediately = true)) },
+                    onSavePlaylistToLibrary = { plId -> onAction(CatalogAction.OpenKidsPlaylist(plId, playImmediately = false)) },
+                    onAddChannelToLibrary = { onAction(CatalogAction.AddBuiltInChannel(it)) },
+                    onRemoveChannelFromLibrary = { onAction(CatalogAction.DeleteChannel(it)) }
                 )
             } else if (uiState.selectedSection == SidebarSection.CHANNELS) {
                 ChannelsScreen_Antigravity(
                     channels = uiState.snapshot.savedChannels,
                     allVideos = uiState.snapshot.youtubeVideos,
-                    onOpenChannelVideos = { channel, videos ->
-                        if (videos.isNotEmpty()) onVideoClick(videos.first(), videos)
+                    onOpenChannelVideos = { _, videos ->
+                        if (videos.isNotEmpty()) onAction(CatalogAction.OpenVideo(videos.first(), videos))
                     },
-                    onVideoClick = onVideoClick,
-                    onToggleFavorite = onToggleFavorite,
-                    onOpenVideoOptions = onOpenVideoOptions,
-                    onChangeChannelCategory = onChangeChannelCategory,
-                    onDeleteChannel = onDeleteChannel,
-                    onAddChannelClick = onOpenAddYouTubeDialog
+                    onVideoClick = { video, playlist -> onAction(CatalogAction.OpenVideo(video, playlist)) },
+                    onToggleFavorite = { onAction(CatalogAction.ToggleFavorite(it)) },
+                    onOpenVideoOptions = { onAction(CatalogAction.OpenVideoOptions(it)) },
+                    onChangeChannelCategory = { channelId, cat -> onAction(CatalogAction.ChangeChannelCategory(channelId, cat)) },
+                    onDeleteChannel = { onAction(CatalogAction.DeleteChannel(it)) },
+                    onAddChannelClick = { onAction(CatalogAction.OpenAddYouTubeDialog) }
                 )
             } else if (uiState.selectedSection == SidebarSection.PLAYLISTS) {
                 PlaylistsScreen_Antigravity(
                     playlists = uiState.snapshot.savedPlaylists,
                     allVideos = uiState.snapshot.youtubeVideos,
-                    onOpenPlaylistVideos = { playlist, videos ->
-                        if (videos.isNotEmpty()) onVideoClick(videos.first(), videos)
+                    onOpenPlaylistVideos = { _, videos ->
+                        if (videos.isNotEmpty()) onAction(CatalogAction.OpenVideo(videos.first(), videos))
                     },
-                    onVideoClick = onVideoClick,
-                    onToggleFavorite = onToggleFavorite,
-                    onOpenVideoOptions = onOpenVideoOptions,
-                    onChangePlaylistCategory = onChangePlaylistCategory,
-                    onDeletePlaylist = onDeletePlaylist,
-                    onAddPlaylistClick = onOpenAddYouTubeDialog
+                    onVideoClick = { video, playlist -> onAction(CatalogAction.OpenVideo(video, playlist)) },
+                    onToggleFavorite = { onAction(CatalogAction.ToggleFavorite(it)) },
+                    onOpenVideoOptions = { onAction(CatalogAction.OpenVideoOptions(it)) },
+                    onChangePlaylistCategory = { playlistId, cat -> onAction(CatalogAction.ChangePlaylistCategory(playlistId, cat)) },
+                    onDeletePlaylist = { onAction(CatalogAction.DeletePlaylist(it)) },
+                    onAddPlaylistClick = { onAction(CatalogAction.OpenAddYouTubeDialog) }
                 )
             } else if (uiState.selectedSection == SidebarSection.CATEGORIES) {
                 CategoriesScreen_Antigravity(
                     channels = uiState.snapshot.savedChannels,
                     playlists = uiState.snapshot.savedPlaylists,
                     allVideos = uiState.snapshot.youtubeVideos,
-                    onOpenChannelVideos = { channel, videos ->
-                        if (videos.isNotEmpty()) onVideoClick(videos.first(), videos)
+                    onOpenChannelVideos = { _, videos ->
+                        if (videos.isNotEmpty()) onAction(CatalogAction.OpenVideo(videos.first(), videos))
                     },
-                    onOpenPlaylistVideos = { playlist, videos ->
-                        if (videos.isNotEmpty()) onVideoClick(videos.first(), videos)
+                    onOpenPlaylistVideos = { _, videos ->
+                        if (videos.isNotEmpty()) onAction(CatalogAction.OpenVideo(videos.first(), videos))
                     },
-                    onVideoClick = onVideoClick,
-                    onToggleFavorite = onToggleFavorite,
-                    onOpenVideoOptions = onOpenVideoOptions,
-                    onChangeChannelCategory = onChangeChannelCategory,
-                    onChangePlaylistCategory = onChangePlaylistCategory
+                    onVideoClick = { video, playlist -> onAction(CatalogAction.OpenVideo(video, playlist)) },
+                    onToggleFavorite = { onAction(CatalogAction.ToggleFavorite(it)) },
+                    onOpenVideoOptions = { onAction(CatalogAction.OpenVideoOptions(it)) },
+                    onChangeChannelCategory = { channelId, cat -> onAction(CatalogAction.ChangeChannelCategory(channelId, cat)) },
+                    onChangePlaylistCategory = { playlistId, cat -> onAction(CatalogAction.ChangePlaylistCategory(playlistId, cat)) }
                 )
             } else {
                 PermissionBanner(
                     hasReadVideoPermission = hasReadVideoPermission,
                     hasAllFilesAccess = hasAllFilesAccess,
-                    onRequestReadPermission = onRequestReadPermission,
-                    onRequestAllFilesAccess = onRequestAllFilesAccess,
-                    onPickSafFolder = onPickSafFolder
+                    onRequestReadPermission = { onAction(CatalogAction.RequestReadPermission) },
+                    onRequestAllFilesAccess = { onAction(CatalogAction.RequestAllFilesAccess) },
+                    onPickSafFolder = { onAction(CatalogAction.PickSafFolder) }
                 )
 
                 if (uiState.snapshot.folderNames.isNotEmpty() &&
@@ -308,7 +274,7 @@ fun TvCatalogScreen(
                     FolderFilterChipRow(
                         folders = uiState.snapshot.folderNames,
                         selectedFolder = uiState.selectedFolderFilter,
-                        onSelectFolder = onSelectFolderFilter
+                        onSelectFolder = { onAction(CatalogAction.SelectFolderFilter(it)) }
                     )
                 }
 
@@ -319,9 +285,9 @@ fun TvCatalogScreen(
                         isScanning = uiState.isScanning,
                         searchQuery = uiState.searchQuery,
                         selectedSection = uiState.selectedSection,
-                        onPickSafFolder = onPickSafFolder,
-                        onOpenAddYouTube = onOpenAddYouTubeDialog,
-                        onRescanStorage = onRescanStorage
+                        onPickSafFolder = { onAction(CatalogAction.PickSafFolder) },
+                        onOpenAddYouTube = { onAction(CatalogAction.OpenAddYouTubeDialog) },
+                        onRescanStorage = { onAction(CatalogAction.RescanStorage) }
                     )
                 } else {
                     LazyColumn(
@@ -338,9 +304,10 @@ fun TvCatalogScreen(
                                 row = row,
                                 settings = uiState.settings,
                                 thumbnailRevision = uiState.thumbnailRevision,
-                                onVideoClick = { video -> onVideoClick(video, row.videos) },
-                                onToggleFavorite = onToggleFavorite,
-                                onOpenVideoOptions = onOpenVideoOptions,
+                                onVideoClick = { video -> onAction(CatalogAction.OpenVideo(video, row.videos)) },
+                                onToggleFavorite = { onAction(CatalogAction.ToggleFavorite(it)) },
+                                onOpenVideoOptions = { onAction(CatalogAction.OpenVideoOptions(it)) },
+                                onRequestThumbnail = { video -> onAction(CatalogAction.ResolveVideoThumbnail(video)) },
                                 onPlaylistClick = {
                                     quickCollectionTarget = QuickCollectionTarget_Antigravity(
                                         title = row.title,
@@ -369,8 +336,8 @@ fun TvCatalogScreen(
                     savedPlaylists = uiState.snapshot.savedPlaylists,
                     allVideos = uiState.snapshot.allVideos,
                     initialTarget = quickCollectionTarget,
-                    onPlayVideo = onVideoClick,
-                    onAddYouTubeClick = onOpenAddYouTubeDialog,
+                    onPlayVideo = { video, playlist -> onAction(CatalogAction.OpenVideo(video, playlist)) },
+                    onAddYouTubeClick = { onAction(CatalogAction.OpenAddYouTubeDialog) },
                     onDismiss = {
                         showQuickChannelsPlaylistsDialog = false
                         quickCollectionTarget = null
@@ -640,6 +607,7 @@ fun TvCategoryRowSection(
     onVideoClick: (VideoItem) -> Unit,
     onToggleFavorite: (VideoItem) -> Unit,
     onOpenVideoOptions: (VideoItem) -> Unit,
+    onRequestThumbnail: (VideoItem) -> Unit = {},
     onPlaylistClick: (String) -> Unit = {},
     onChannelClick: (String) -> Unit = {}
 ) {
@@ -760,6 +728,7 @@ fun TvCategoryRowSection(
                     onOpenOptions = { onOpenVideoOptions(video) },
                     settings = settings,
                     thumbnailRevision = thumbnailRevision,
+                    onRequestThumbnail = { onRequestThumbnail(video) },
                     modifier = Modifier.width(if (LocalWindowLayoutInfo.current.isPhone) 200.dp else 260.dp)
                 )
             }

@@ -4,26 +4,41 @@ import android.app.Application
 import android.content.Intent
 import android.content.IntentFilter
 import android.hardware.usb.UsbManager
+import android.os.StrictMode
 import androidx.core.content.ContextCompat
 import coil.ImageLoader
 import coil.ImageLoaderFactory
 import coil.decode.VideoFrameDecoder
 import coil.disk.DiskCache
 import coil.memory.MemoryCache
-import com.joudjawadtube.player.data.local.AppDatabase
-import com.joudjawadtube.player.data.repository.VideoRepository
 import com.joudjawadtube.player.data.scanner.UsbMountReceiver
+import com.joudjawadtube.player.di.AppContainer_Antigravity
 
 class JoudJawadTubeApp : Application(), ImageLoaderFactory {
 
-    val database: AppDatabase by lazy { AppDatabase.getInstance(this) }
-    val repository: VideoRepository by lazy { VideoRepository(this, database.videoDao()) }
+    val appContainer: AppContainer_Antigravity by lazy { AppContainer_Antigravity(this) }
 
     private val dynamicUsbReceiver = UsbMountReceiver()
 
     override fun onCreate() {
         super.onCreate()
-        com.joudjawadtube.player.data.settings.AppSettingsRepository.getInstance(this)
+        if (BuildConfig.DEBUG) {
+            StrictMode.setThreadPolicy(
+                StrictMode.ThreadPolicy.Builder()
+                    .detectDiskReads()
+                    .detectNetwork()
+                    .penaltyLog()
+                    .build()
+            )
+            StrictMode.setVmPolicy(
+                StrictMode.VmPolicy.Builder()
+                    .detectLeakedSqlLiteObjects()
+                    .detectLeakedClosableObjects()
+                    .penaltyLog()
+                    .build()
+            )
+        }
+        appContainer.settingsRepository
         registerDynamicUsbMountListener()
     }
 

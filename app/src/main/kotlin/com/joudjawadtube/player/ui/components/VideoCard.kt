@@ -55,10 +55,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
-import com.joudjawadtube.player.data.local.AppDatabase
 import com.joudjawadtube.player.data.local.VideoItem
-import com.joudjawadtube.player.data.settings.AppSettingsRepository
 import com.joudjawadtube.player.data.settings.AppSettingsState
+import com.joudjawadtube.player.data.settings.ThumbnailMode
 import com.joudjawadtube.player.data.thumbnail.ThumbnailManager
 import com.joudjawadtube.player.ui.theme.SmartTubeCardBg
 import com.joudjawadtube.player.ui.theme.SmartTubeCardFocusedBg
@@ -78,8 +77,9 @@ fun VideoCard(
     onClick: () -> Unit,
     onToggleFavorite: () -> Unit,
     onOpenOptions: (() -> Unit)? = null,
-    settings: AppSettingsState? = null,
+    settings: AppSettingsState = AppSettingsState(),
     thumbnailRevision: Int = 0,
+    onRequestThumbnail: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     var isFocused by remember { mutableStateOf(false) }
@@ -90,41 +90,42 @@ fun VideoCard(
         label = "cardScale"
     )
     val context = LocalContext.current
-    val effectiveSettings = settings ?: remember(context) {
-        AppSettingsRepository.getInstance(context).settingsFlow.value
-    }
 
-    // Check fast local flash cache synchronously first (0ms), then resolve/generate asynchronously
-    var resolvedThumbFile by remember(
+    // Non-blocking in-memory cache lookup (0ms, zero disk I/O on UI thread)
+    val cachedThumbFile = remember(
         video.id,
         video.entity.customThumbnailPath,
-        effectiveSettings.thumbnailMode,
-        effectiveSettings.frameCapturePosition,
+        settings.thumbnailMode,
+        settings.frameCapturePosition,
         thumbnailRevision
     ) {
-        mutableStateOf<File?>(ThumbnailManager.getCachedThumbnailFile(context, video, effectiveSettings))
+        ThumbnailManager.getCachedThumbnailFile(context, video, settings)
     }
 
-    LaunchedEffect(
-        video.id,
-        video.entity.customThumbnailPath,
-        effectiveSettings.thumbnailMode,
-        effectiveSettings.frameCapturePosition,
-        thumbnailRevision
-    ) {
-        if (resolvedThumbFile == null) {
-            val dao = AppDatabase.getInstance(context).videoDao()
-            resolvedThumbFile = ThumbnailManager.resolveOrGenerateThumbnail(
-                context = context,
-                video = video,
-                settings = effectiveSettings,
-                videoDao = dao
-            )
+    LaunchedEffect(video.id, cachedThumbFile, thumbnailRevision) {
+        if (cachedThumbFile == null && !video.isYoutube && video.entity.thumbnailUrl.isBlank()) {
+            onRequestThumbnail?.invoke()
         }
     }
 
-    val imageModel = remember(resolvedThumbFile, video.entity.thumbnailUrl) {
-        val modelData: Any? = resolvedThumbFile ?: video.entity.thumbnailUrl.takeIf { it.isNotBlank() }
+    val imageModel = remember(
+        cachedThumbFile,
+        video.entity.customThumbnailPath,
+        video.entity.thumbnailUrl,
+        video.entity.uri,
+        video.entity.filePath,
+        video.isYoutube,
+        settings.thumbnailMode
+    ) {
+        val modelData: Any? = cachedThumbFile
+            ?: video.entity.customThumbnailPath.takeIf { it.isNotBlank() }?.let { File(it) }
+            ?: video.entity.thumbnailUrl.takeIf { it.isNotBlank() }
+            ?: if (!video.isYoutube && settings.thumbnailMode != ThumbnailMode.YOUTUBE_AND_SIDECAR_ONLY) {
+                video.entity.uri.takeIf { it.isNotBlank() }
+                    ?: video.entity.filePath.takeIf { it.isNotBlank() }?.let { File(it) }
+            } else {
+                null
+            }
         if (modelData != null) {
             ImageRequest.Builder(context)
                 .data(modelData)
@@ -148,7 +149,7 @@ fun VideoCard(
             .background(if (isFocused) SmartTubeCardFocusedBg else SmartTubeCardBg)
             .border(
                 width = if (isFocused) 2.5.dp else 1.dp,
-                color = if (isFocused) SmartTubeFocusBorder else Color.White.copy(alpha = 0.06f),
+                color = if (isFocused) SmartTubeFocusBorder else SmartTubeTextSecondary.copy(alpha = 0.14f),
                 shape = cardShape
             )
             .onFocusChanged { isFocused = it.isFocused }

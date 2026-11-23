@@ -30,7 +30,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -46,9 +45,11 @@ import androidx.core.content.ContextCompat
 import androidx.documentfile.provider.DocumentFile
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.joudjawadtube.player.data.local.VideoItem
 import com.joudjawadtube.player.data.repository.RelatedVideosResolver_Antigravity
 import com.joudjawadtube.player.data.settings.UiModePreference
+import com.joudjawadtube.player.ui.catalog.CatalogAction
 import com.joudjawadtube.player.ui.catalog.CatalogViewModel
 import com.joudjawadtube.player.ui.catalog.TabletCatalogScreen
 import com.joudjawadtube.player.ui.catalog.TvCatalogScreen
@@ -66,7 +67,9 @@ import com.joudjawadtube.player.ui.theme.JoudJawadTubeTheme
 
 class MainActivity : AppCompatActivity() {
 
-    private val viewModel: CatalogViewModel by viewModels()
+    private val viewModel: CatalogViewModel by viewModels {
+        (application as JoudJawadTubeApp).appContainer.catalogViewModelFactory
+    }
     private var pendingIncomingUri by mutableStateOf<Uri?>(null)
     private var pendingIncomingShareText by mutableStateOf<String?>(null)
     private var isInPipMode by mutableStateOf(false)
@@ -80,8 +83,8 @@ class MainActivity : AppCompatActivity() {
         val defaultIsTv = detectIsTelevision()
 
         setContent {
-            val uiState by viewModel.uiState.collectAsState()
-            val activePlaybackSession by viewModel.activePlaybackSession.collectAsState()
+            val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+            val activePlaybackSession by viewModel.activePlaybackSession.collectAsStateWithLifecycle()
             val baseDensity = LocalDensity.current
             val scaledDensity = remember(baseDensity, uiState.settings.uiFontScale) {
                 Density(
@@ -239,6 +242,29 @@ class MainActivity : AppCompatActivity() {
                         runWithParentalGate { viewModel.openFolderPickerDialog() }
                     }
 
+                    val handleCatalogAction: (CatalogAction) -> Unit = { action ->
+                        when (action) {
+                            is CatalogAction.SelectSection -> {
+                                if (action.section == SidebarSection.SETTINGS) {
+                                    runWithParentalGate { viewModel.onAction(action) }
+                                } else {
+                                    viewModel.onAction(action)
+                                }
+                            }
+                            CatalogAction.OpenAddYouTubeDialog,
+                            CatalogAction.PickSafFolder,
+                            is CatalogAction.DeletePlaylist,
+                            is CatalogAction.DeleteChannel,
+                            is CatalogAction.DownloadAndInstallUpdate,
+                            is CatalogAction.InstallDownloadedApk -> {
+                                runWithParentalGate { viewModel.onAction(action) }
+                            }
+                            CatalogAction.RequestReadPermission -> requestReadPermissionAction()
+                            CatalogAction.RequestAllFilesAccess -> requestAllFilesAccessAction()
+                            else -> viewModel.onAction(action)
+                        }
+                    }
+
                     // Hoisted lazy list / grid states for persistent scroll preservation across playback exits
                     val tvHomeListState = rememberSaveable(saver = LazyListState.Saver) { LazyListState() }
                     val tabletHomeListState = rememberSaveable(saver = LazyListState.Saver) { LazyListState() }
@@ -266,55 +292,7 @@ class MainActivity : AppCompatActivity() {
                                     lazyListState = tvHomeListState,
                                     hasReadVideoPermission = hasReadPermission,
                                     hasAllFilesAccess = hasAllFilesAccess,
-                                    onSelectSection = { section ->
-                                        if (section == SidebarSection.SETTINGS) {
-                                            runWithParentalGate { viewModel.selectSection(section) }
-                                        } else {
-                                            viewModel.selectSection(section)
-                                        }
-                                    },
-                                    onSelectTopCategory = { viewModel.selectTopCategory(it) },
-                                    onSearchQueryChange = { viewModel.updateSearchQuery(it) },
-                                    onSelectFolderFilter = { viewModel.selectFolderFilter(it) },
-                                    onVideoClick = { video, playlist ->
-                                        viewModel.openVideo(video, playlist)
-                                    },
-                                    onToggleFavorite = { viewModel.toggleFavorite(it) },
-                                    onOpenVideoOptions = { viewModel.openVideoOptions(it) },
-                                    onOpenAddYouTubeDialog = {
-                                        runWithParentalGate { viewModel.openAddYouTubeDialog() }
-                                    },
-                                    onDeletePlaylist = { playlistId ->
-                                        runWithParentalGate { viewModel.deleteYouTubePlaylist(playlistId) }
-                                    },
-                                    onDeleteChannel = { channelId ->
-                                        runWithParentalGate { viewModel.deleteYouTubeChannel(channelId) }
-                                    },
-                                    onChangeChannelCategory = { channelId, cat -> viewModel.updateChannelCategory(channelId, cat) },
-                                    onChangePlaylistCategory = { playlistId, cat -> viewModel.updatePlaylistCategory(playlistId, cat) },
-                                    onOpenKidsPlaylist = { plId, _ -> viewModel.openOrImportKidsPlaylist(plId, playImmediately = true) },
-                                    onSaveKidsPlaylist = { plId -> viewModel.openOrImportKidsPlaylist(plId, playImmediately = false) },
-                                    onAddBuiltInChannel = { ch -> viewModel.addBuiltInChannelToLibrary(ch) },
-                                    onRequestReadPermission = requestReadPermissionAction,
-                                    onRequestAllFilesAccess = requestAllFilesAccessAction,
-                                    onPickSafFolder = pickFolderAction,
-                                    onRescanStorage = { viewModel.rescanStorage() },
-                                    onUpdateSettings = { viewModel.updateSettings(it) },
-                                    onRegenerateAllThumbnails = { viewModel.regenerateAllThumbnails() },
-                                    onClearThumbnailCache = { viewModel.clearThumbnailCache() },
-                                    onRemoveSafFolder = { viewModel.removeSafFolder(it) },
-                                    onClearWatchHistory = { viewModel.clearWatchHistory() },
-                                    onClearFavorites = { viewModel.clearFavorites() },
-                                    onClearYouTubeLibrary = { viewModel.clearYouTubeLibrary() },
-                                    onResetSettings = { viewModel.resetSettingsToDefaults() },
-                                    onCheckForUpdates = { viewModel.checkForAppUpdates(isManual = true) },
-                                    onDownloadAndInstallUpdate = { info ->
-                                        runWithParentalGate { viewModel.downloadAndInstallUpdate(info) }
-                                    },
-                                    onInstallDownloadedApk = { apkFile ->
-                                        runWithParentalGate { viewModel.installDownloadedApk(apkFile) }
-                                    },
-                                    onDismissUpdateStatus = { viewModel.dismissUpdateStatus() }
+                                    onAction = handleCatalogAction
                                 )
                             } else {
                                 TabletCatalogScreen(
@@ -323,56 +301,7 @@ class MainActivity : AppCompatActivity() {
                                     lazyGridState = tabletGridState,
                                     hasReadVideoPermission = hasReadPermission,
                                     hasAllFilesAccess = hasAllFilesAccess,
-                                    onSelectSection = { section ->
-                                        if (section == SidebarSection.SETTINGS) {
-                                            runWithParentalGate { viewModel.selectSection(section) }
-                                        } else {
-                                            viewModel.selectSection(section)
-                                        }
-                                    },
-                                    onSelectTopCategory = { viewModel.selectTopCategory(it) },
-                                    onSearchQueryChange = { viewModel.updateSearchQuery(it) },
-                                    onSelectFolderFilter = { viewModel.selectFolderFilter(it) },
-                                    onVideoClick = { video, playlist ->
-                                        viewModel.openVideo(video, playlist)
-                                    },
-                                    onToggleFavorite = { viewModel.toggleFavorite(it) },
-                                    onOpenVideoOptions = { viewModel.openVideoOptions(it) },
-                                    onOpenAddYouTubeDialog = {
-                                        runWithParentalGate { viewModel.openAddYouTubeDialog() }
-                                    },
-                                    onDeletePlaylist = { playlistId ->
-                                        runWithParentalGate { viewModel.deleteYouTubePlaylist(playlistId) }
-                                    },
-                                    onDeleteChannel = { channelId ->
-                                        runWithParentalGate { viewModel.deleteYouTubeChannel(channelId) }
-                                    },
-                                    onChangeChannelCategory = { channelId, cat -> viewModel.updateChannelCategory(channelId, cat) },
-                                    onChangePlaylistCategory = { playlistId, cat -> viewModel.updatePlaylistCategory(playlistId, cat) },
-                                    onOpenKidsPlaylist = { plId, _ -> viewModel.openOrImportKidsPlaylist(plId, playImmediately = true) },
-                                    onSaveKidsPlaylist = { plId -> viewModel.openOrImportKidsPlaylist(plId, playImmediately = false) },
-                                    onAddBuiltInChannel = { ch -> viewModel.addBuiltInChannelToLibrary(ch) },
-                                    onRequestReadPermission = requestReadPermissionAction,
-                                    onRequestAllFilesAccess = requestAllFilesAccessAction,
-                                    onPickSafFolder = pickFolderAction,
-                                    onRescanStorage = { viewModel.rescanStorage() },
-                                    onToggleTabletGridMode = { viewModel.toggleTabletGridMode() },
-                                    onUpdateSettings = { viewModel.updateSettings(it) },
-                                    onRegenerateAllThumbnails = { viewModel.regenerateAllThumbnails() },
-                                    onClearThumbnailCache = { viewModel.clearThumbnailCache() },
-                                    onRemoveSafFolder = { viewModel.removeSafFolder(it) },
-                                    onClearWatchHistory = { viewModel.clearWatchHistory() },
-                                    onClearFavorites = { viewModel.clearFavorites() },
-                                    onClearYouTubeLibrary = { viewModel.clearYouTubeLibrary() },
-                                    onResetSettings = { viewModel.resetSettingsToDefaults() },
-                                    onCheckForUpdates = { viewModel.checkForAppUpdates(isManual = true) },
-                                    onDownloadAndInstallUpdate = { info ->
-                                        runWithParentalGate { viewModel.downloadAndInstallUpdate(info) }
-                                    },
-                                    onInstallDownloadedApk = { apkFile ->
-                                        runWithParentalGate { viewModel.installDownloadedApk(apkFile) }
-                                    },
-                                    onDismissUpdateStatus = { viewModel.dismissUpdateStatus() }
+                                    onAction = handleCatalogAction
                                 )
                             }
                         }

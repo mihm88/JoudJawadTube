@@ -42,7 +42,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -62,6 +61,7 @@ import com.joudjawadtube.player.ui.theme.SmartTubeTextSecondary
 
 @Composable
 fun KidsPicksScreen_Antigravity(
+    channels: List<KidsChannelItem> = emptyList(),
     savedPlaylistIds: Set<String>,
     savedChannelIds: Set<String> = emptySet(),
     appLanguage: AppLanguage = AppLanguage.FOLLOW_SYSTEM,
@@ -71,11 +71,7 @@ fun KidsPicksScreen_Antigravity(
     onRemoveChannelFromLibrary: (channelId: String) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
-    val context = LocalContext.current
     val isArabicUi = KidsCatalogRepository_Antigravity.isArabicLocale(appLanguage)
-    val channels = remember(appLanguage) {
-        KidsCatalogRepository_Antigravity.loadKidsChannels(context, appLanguage)
-    }
     val arabicCount = remember(channels) { channels.count { it.lang == "ar" } }
     val englishCount = remember(channels) { channels.count { it.lang == "en" } }
     var selectedLangFilter by remember { mutableStateOf<String?>("all") } // "all", "ar", "en"

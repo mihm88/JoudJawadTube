@@ -5,15 +5,28 @@
 -keep @androidx.room.Entity class * { *; }
 -keep @androidx.room.Dao class * { *; }
 
-# Keep Media3 reflection classes
--keep class androidx.media3.** { *; }
+# Keep Media3 reflection / service / decoder entry points (tightened)
+-keep class androidx.media3.exoplayer.video.VideoDecoderGLSurfaceView { <init>(...); }
+-keep class androidx.media3.ui.PlayerView { <init>(...); }
+-keep class * extends androidx.media3.session.MediaSessionService
+-keepclassmembers class * implements androidx.media3.exoplayer.Renderer {
+    <init>(...);
+}
+-keepclassmembers class * implements androidx.media3.extractor.Extractor {
+    <init>(...);
+}
+-keepclassmembers class * implements androidx.media3.datasource.DataSource$Factory {
+    <init>(...);
+}
+-dontwarn androidx.media3.**
 
-# Keep Coil classes
--keep class coil.** { *; }
-
-# Keep JSON models & reflection objects
--keepclassmembers class * {
-    @com.google.gson.annotations.SerializedName <fields>;
+# Keep Coil reflection / decoder entry points (tightened)
+-keep class coil.decode.VideoFrameDecoder$Factory { <init>(...); }
+-keepclassmembers class * implements coil.decode.Decoder$Factory {
+    <init>(...);
+}
+-keepclassmembers class * implements coil.fetch.Fetcher$Factory {
+    <init>(...);
 }
 
 # Keep line numbers for crash reporting
