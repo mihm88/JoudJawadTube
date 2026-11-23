@@ -23,7 +23,10 @@ data class JoudColors(
     val overlayDark: Color,
     val isDark: Boolean,
     val isLiquidGlass: Boolean = false,
-    val glassBorderHighlight: Color = Color.White.copy(alpha = 0.22f)
+    val glassBorderHighlight: Color = Color.White.copy(alpha = 0.22f),
+    val modalSurface: Color = surface,
+    val modalCardBg: Color = cardBg,
+    val modalScrim: Color = Color(0xB304060E)
 )
 
 val DarkJoudColors = JoudColors(
@@ -40,7 +43,10 @@ val DarkJoudColors = JoudColors(
     textPrimary = Color(0xFFF5F8FA),
     textSecondary = Color(0xFF94A3B8),
     overlayDark = Color(0xCC060812),
-    isDark = true
+    isDark = true,
+    modalSurface = Color(0xFF14182B),
+    modalCardBg = Color(0xFF1E243D),
+    modalScrim = Color(0xB304060E)
 )
 
 val LightJoudColors = JoudColors(
@@ -57,15 +63,18 @@ val LightJoudColors = JoudColors(
     textPrimary = Color(0xFF0F172A),
     textSecondary = Color(0xFF475569),
     overlayDark = Color(0xCC060812),
-    isDark = false
+    isDark = false,
+    modalSurface = Color(0xFFFFFFFF),
+    modalCardBg = Color(0xFFEAF2F7),
+    modalScrim = Color(0x990F172A)
 )
 
 val LiquidGlassJoudColors = JoudColors(
     background = Color(0xFF070D1F),
-    sidebarBg = Color(0x66121D38),
-    surface = Color(0x5C152240),
-    cardBg = Color(0x541B2B4F),
-    cardFocusedBg = Color(0x88263F70),
+    sidebarBg = Color(0x8A121D38),
+    surface = Color(0x82152240),
+    cardBg = Color(0x751B2B4F),
+    cardFocusedBg = Color(0xA6263F70),
     red = Color(0xFF22D3EE),
     redDark = Color(0xFF0891B2),
     focusBorder = Color(0xFF7DD3FC),
@@ -73,10 +82,13 @@ val LiquidGlassJoudColors = JoudColors(
     gold4K = Color(0xFFFCD34D),
     textPrimary = Color(0xFFF8FAFC),
     textSecondary = Color(0xFFCBD5E1),
-    overlayDark = Color(0xB8060B18),
+    overlayDark = Color(0xC7060B18),
     isDark = true,
     isLiquidGlass = true,
-    glassBorderHighlight = Color(0x70E0F2FE)
+    glassBorderHighlight = Color(0x8CE0F2FE),
+    modalSurface = Color(0xEB0B1429),
+    modalCardBg = Color(0xD9172748),
+    modalScrim = Color(0xBD030712)
 )
 
 val LocalJoudColors = staticCompositionLocalOf { DarkJoudColors }
@@ -119,3 +131,12 @@ val SmartTubeTextSecondary: Color
 
 val SmartTubeOverlayDark: Color
     @Composable @ReadOnlyComposable get() = LocalJoudColors.current.overlayDark
+
+val SmartTubeModalSurface: Color
+    @Composable @ReadOnlyComposable get() = LocalJoudColors.current.modalSurface
+
+val SmartTubeModalCardBg: Color
+    @Composable @ReadOnlyComposable get() = LocalJoudColors.current.modalCardBg
+
+val SmartTubeModalScrim: Color
+    @Composable @ReadOnlyComposable get() = LocalJoudColors.current.modalScrim

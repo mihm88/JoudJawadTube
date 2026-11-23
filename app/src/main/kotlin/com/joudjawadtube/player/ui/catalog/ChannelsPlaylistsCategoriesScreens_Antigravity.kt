@@ -64,6 +64,7 @@ import com.joudjawadtube.player.data.local.SavedPlaylistEntity
 import com.joudjawadtube.player.data.local.VideoItem
 import com.joudjawadtube.player.ui.components.LocalWindowLayoutInfo
 import com.joudjawadtube.player.ui.components.VideoCard
+import com.joudjawadtube.player.ui.theme.LiquidGlassModalBackdropEffect_Antigravity
 import com.joudjawadtube.player.ui.theme.SmartTubeCardBg
 import com.joudjawadtube.player.ui.theme.SmartTubeCardFocusedBg
 import com.joudjawadtube.player.ui.theme.SmartTubeFocusBorder
@@ -73,6 +74,7 @@ import com.joudjawadtube.player.ui.theme.SmartTubeSidebarBg
 import com.joudjawadtube.player.ui.theme.SmartTubeTextPrimary
 import com.joudjawadtube.player.ui.theme.SmartTubeTextSecondary
 import com.joudjawadtube.player.ui.theme.SmartTubeUsbCyan
+import com.joudjawadtube.player.ui.theme.liquidGlassModalSurface
 
 val STANDARD_CATEGORIES_ANTIGRAVITY = listOf(
     "General",
@@ -1168,13 +1170,12 @@ fun ChangeCategoryDialog_Antigravity(
     var isCustomActive by remember { mutableStateOf(false) }
 
     Dialog(onDismissRequest = onDismiss) {
+        LiquidGlassModalBackdropEffect_Antigravity()
         Column(
             modifier = Modifier
                 .fillMaxWidth(0.94f)
                 .widthIn(max = 440.dp)
-                .clip(RoundedCornerShape(16.dp))
-                .background(SmartTubeSidebarBg)
-                .border(1.5.dp, Color.White.copy(alpha = 0.12f), RoundedCornerShape(16.dp))
+                .liquidGlassModalSurface(RoundedCornerShape(16.dp))
                 .padding(20.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
@@ -1325,13 +1326,15 @@ private fun DeleteConfirmDialog(
     onDismiss: () -> Unit
 ) {
     Dialog(onDismissRequest = onDismiss) {
+        LiquidGlassModalBackdropEffect_Antigravity()
         Column(
             modifier = Modifier
                 .fillMaxWidth(0.92f)
                 .widthIn(max = 400.dp)
-                .clip(RoundedCornerShape(16.dp))
-                .background(SmartTubeSidebarBg)
-                .border(1.5.dp, SmartTubeRed.copy(alpha = 0.3f), RoundedCornerShape(16.dp))
+                .liquidGlassModalSurface(
+                    shape = RoundedCornerShape(16.dp),
+                    fallbackBorderColor = SmartTubeRed.copy(alpha = 0.3f)
+                )
                 .padding(20.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {

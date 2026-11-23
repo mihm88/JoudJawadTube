@@ -55,12 +55,14 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
+import com.joudjawadtube.player.ui.theme.LiquidGlassModalBackdropEffect_Antigravity
 import com.joudjawadtube.player.ui.theme.SmartTubeCardBg
 import com.joudjawadtube.player.ui.theme.SmartTubeCardFocusedBg
 import com.joudjawadtube.player.ui.theme.SmartTubeFocusBorder
 import com.joudjawadtube.player.ui.theme.SmartTubeRed
 import com.joudjawadtube.player.ui.theme.SmartTubeTextPrimary
 import com.joudjawadtube.player.ui.theme.SmartTubeTextSecondary
+import com.joudjawadtube.player.ui.theme.liquidGlassModalSurface
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -82,13 +84,14 @@ fun ConfirmDestructiveDialog_Antigravity(
     }
 
     Dialog(onDismissRequest = onDismiss) {
+        LiquidGlassModalBackdropEffect_Antigravity()
         Surface(
             shape = RoundedCornerShape(20.dp),
-            color = Color(0xFF161922),
+            color = Color.Transparent,
             modifier = Modifier
                 .fillMaxWidth(0.92f)
                 .widthIn(max = 480.dp)
-                .border(1.dp, Color.White.copy(alpha = 0.12f), RoundedCornerShape(20.dp))
+                .liquidGlassModalSurface(RoundedCornerShape(20.dp))
         ) {
             Column(
                 modifier = Modifier.padding(24.dp),

@@ -135,12 +135,13 @@ import com.joudjawadtube.player.playback.JoudPlaybackBridge_Antigravity
 import com.joudjawadtube.player.playback.JoudPlaybackService_Antigravity
 import com.joudjawadtube.player.ui.catalog.PlaybackSession
 import com.joudjawadtube.player.ui.components.ParentalGateDialog_Antigravity
-import com.joudjawadtube.player.ui.theme.SmartTubeCardBg
 import com.joudjawadtube.player.ui.theme.SmartTubeFocusBorder
+import com.joudjawadtube.player.ui.theme.SmartTubeModalCardBg
+import com.joudjawadtube.player.ui.theme.SmartTubeModalSurface
 import com.joudjawadtube.player.ui.theme.SmartTubeRed
-import com.joudjawadtube.player.ui.theme.SmartTubeSurface
 import com.joudjawadtube.player.ui.theme.SmartTubeTextPrimary
 import com.joudjawadtube.player.ui.theme.SmartTubeTextSecondary
+import com.joudjawadtube.player.ui.theme.liquidGlassModalSurface
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -1417,8 +1418,8 @@ fun PlaybackScreen(
         if (showUnlockedBanner && !isInPictureInPictureMode) {
             Surface(
                 shape = RoundedCornerShape(999.dp),
-                color = SmartTubeSurface.copy(alpha = 0.92f),
-                border = BorderStroke(1.dp, SmartTubeFocusBorder.copy(alpha = 0.45f)),
+                color = SmartTubeModalSurface,
+                border = BorderStroke(1.2.dp, SmartTubeFocusBorder.copy(alpha = 0.55f)),
                 modifier = Modifier
                     .align(Alignment.TopCenter)
                     .systemBarsPadding()
@@ -1532,11 +1533,14 @@ private fun PlaybackErrorOverlay(
     ) {
         Surface(
             shape = RoundedCornerShape(20.dp),
-            color = SmartTubeSurface,
-            border = BorderStroke(1.dp, SmartTubeFocusBorder.copy(alpha = 0.25f)),
+            color = Color.Transparent,
             modifier = Modifier
                 .fillMaxWidth(0.9f)
                 .widthIn(max = 520.dp)
+                .liquidGlassModalSurface(
+                    shape = RoundedCornerShape(20.dp),
+                    fallbackBorderColor = SmartTubeFocusBorder.copy(alpha = 0.25f)
+                )
         ) {
             Column(
                 modifier = Modifier.padding(28.dp),
@@ -1605,7 +1609,7 @@ private fun PlaybackErrorOverlay(
                         onClick = onBack,
                         shape = RoundedCornerShape(12.dp),
                         colors = ButtonDefaults.outlinedButtonColors(
-                            containerColor = SmartTubeCardBg,
+                            containerColor = SmartTubeModalCardBg,
                             contentColor = SmartTubeTextPrimary
                         ),
                         border = BorderStroke(
@@ -1778,11 +1782,14 @@ private fun WatchTimerTimesUpOverlay(
     ) {
         Surface(
             shape = RoundedCornerShape(20.dp),
-            color = SmartTubeSurface,
-            border = BorderStroke(1.dp, SmartTubeFocusBorder.copy(alpha = 0.3f)),
+            color = Color.Transparent,
             modifier = Modifier
                 .fillMaxWidth(0.9f)
                 .widthIn(max = 520.dp)
+                .liquidGlassModalSurface(
+                    shape = RoundedCornerShape(20.dp),
+                    fallbackBorderColor = SmartTubeFocusBorder.copy(alpha = 0.3f)
+                )
         ) {
             Column(
                 modifier = Modifier.padding(28.dp),
@@ -1838,7 +1845,7 @@ private fun WatchTimerTimesUpOverlay(
                         onClick = onBack,
                         shape = RoundedCornerShape(12.dp),
                         colors = ButtonDefaults.outlinedButtonColors(
-                            containerColor = SmartTubeCardBg,
+                            containerColor = SmartTubeModalCardBg,
                             contentColor = SmartTubeTextPrimary
                         ),
                         border = BorderStroke(

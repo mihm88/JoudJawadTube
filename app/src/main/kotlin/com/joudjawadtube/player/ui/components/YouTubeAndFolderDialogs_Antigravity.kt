@@ -68,6 +68,7 @@ import com.joudjawadtube.player.R
 import com.joudjawadtube.player.data.local.VideoItem
 import com.joudjawadtube.player.data.scanner.LocalVideoScanner
 import com.joudjawadtube.player.data.scanner.StorageVolumeHelper
+import com.joudjawadtube.player.ui.theme.LiquidGlassModalBackdropEffect_Antigravity
 import com.joudjawadtube.player.ui.theme.SmartTubeCardBg
 import com.joudjawadtube.player.ui.theme.SmartTubeCardFocusedBg
 import com.joudjawadtube.player.ui.theme.SmartTubeFocusBorder
@@ -76,6 +77,7 @@ import com.joudjawadtube.player.ui.theme.SmartTubeSidebarBg
 import com.joudjawadtube.player.ui.theme.SmartTubeTextPrimary
 import com.joudjawadtube.player.ui.theme.SmartTubeTextSecondary
 import com.joudjawadtube.player.ui.theme.SmartTubeUsbCyan
+import com.joudjawadtube.player.ui.theme.liquidGlassModalSurface
 import java.io.File
 import java.util.Locale
 
@@ -94,13 +96,12 @@ fun AddYouTubeLinkDialog(
     var inputFocused by remember { mutableStateOf(false) }
 
     Dialog(onDismissRequest = { if (!isLoading) onDismiss() }) {
+        LiquidGlassModalBackdropEffect_Antigravity()
         Column(
             modifier = Modifier
                 .fillMaxWidth(0.92f)
                 .widthIn(max = 560.dp)
-                .clip(RoundedCornerShape(16.dp))
-                .background(SmartTubeSidebarBg)
-                .border(1.5.dp, Color.White.copy(alpha = 0.14f), RoundedCornerShape(16.dp))
+                .liquidGlassModalSurface(RoundedCornerShape(16.dp))
                 .padding(22.dp)
         ) {
             Row(
@@ -319,13 +320,12 @@ fun TvFolderPickerDialog(
     }
 
     Dialog(onDismissRequest = onDismiss) {
+        LiquidGlassModalBackdropEffect_Antigravity()
         Column(
             modifier = Modifier
                 .fillMaxWidth(0.92f)
                 .widthIn(max = 580.dp)
-                .clip(RoundedCornerShape(16.dp))
-                .background(SmartTubeSidebarBg)
-                .border(1.5.dp, Color.White.copy(alpha = 0.14f), RoundedCornerShape(16.dp))
+                .liquidGlassModalSurface(RoundedCornerShape(16.dp))
                 .padding(20.dp)
         ) {
             Row(
@@ -540,13 +540,12 @@ fun VideoOptionsDialog(
     onDismiss: () -> Unit
 ) {
     Dialog(onDismissRequest = onDismiss) {
+        LiquidGlassModalBackdropEffect_Antigravity()
         Column(
             modifier = Modifier
                 .fillMaxWidth(0.92f)
                 .widthIn(max = 500.dp)
-                .clip(RoundedCornerShape(16.dp))
-                .background(SmartTubeSidebarBg)
-                .border(1.5.dp, Color.White.copy(alpha = 0.14f), RoundedCornerShape(16.dp))
+                .liquidGlassModalSurface(RoundedCornerShape(16.dp))
                 .padding(20.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {

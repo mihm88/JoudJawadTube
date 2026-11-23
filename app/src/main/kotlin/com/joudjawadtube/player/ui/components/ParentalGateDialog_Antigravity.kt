@@ -40,14 +40,16 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import com.joudjawadtube.player.R
-import com.joudjawadtube.player.ui.theme.SmartTubeCardBg
+import com.joudjawadtube.player.ui.theme.LiquidGlassModalBackdropEffect_Antigravity
 import com.joudjawadtube.player.ui.theme.SmartTubeCardFocusedBg
 import com.joudjawadtube.player.ui.theme.SmartTubeFocusBorder
+import com.joudjawadtube.player.ui.theme.SmartTubeModalCardBg
 import com.joudjawadtube.player.ui.theme.SmartTubeRed
-import com.joudjawadtube.player.ui.theme.SmartTubeSurface
 import com.joudjawadtube.player.ui.theme.SmartTubeTextPrimary
 import com.joudjawadtube.player.ui.theme.SmartTubeTextSecondary
 import com.joudjawadtube.player.ui.theme.SmartTubeUsbCyan
+import com.joudjawadtube.player.ui.theme.liquidGlassBorder
+import com.joudjawadtube.player.ui.theme.liquidGlassModalSurface
 import kotlin.random.Random
 
 /**
@@ -118,18 +120,13 @@ fun ParentalGateDialog_Antigravity(
         onDismissRequest = onDismiss,
         properties = DialogProperties(usePlatformDefaultWidth = false)
     ) {
+        LiquidGlassModalBackdropEffect_Antigravity()
         Column(
             modifier = Modifier
                 .padding(horizontal = 24.dp, vertical = 16.dp)
                 .widthIn(min = 280.dp, max = 440.dp)
                 .fillMaxWidth()
-                .clip(RoundedCornerShape(18.dp))
-                .background(SmartTubeSurface)
-                .border(
-                    width = 1.dp,
-                    color = SmartTubeTextPrimary.copy(alpha = 0.14f),
-                    shape = RoundedCornerShape(18.dp)
-                )
+                .liquidGlassModalSurface(RoundedCornerShape(18.dp))
                 .padding(22.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
@@ -239,11 +236,14 @@ private fun ParentalGateAnswerButton(
         modifier = modifier
             .heightIn(min = 56.dp)
             .clip(RoundedCornerShape(12.dp))
-            .background(if (isFocused) SmartTubeCardFocusedBg else SmartTubeCardBg)
-            .border(
-                width = if (isFocused) 2.5.dp else 1.dp,
-                color = if (isFocused) SmartTubeFocusBorder else SmartTubeTextPrimary.copy(alpha = 0.14f),
-                shape = RoundedCornerShape(12.dp)
+            .background(if (isFocused) SmartTubeCardFocusedBg else SmartTubeModalCardBg)
+            .liquidGlassBorder(
+                shape = RoundedCornerShape(12.dp),
+                isFocused = isFocused,
+                focusedColor = SmartTubeFocusBorder,
+                fallbackColor = SmartTubeTextPrimary.copy(alpha = 0.14f),
+                defaultWidth = 1.dp,
+                focusedWidth = 2.5.dp
             )
             .onFocusChanged { isFocused = it.isFocused }
             .clickable { onClick() }
@@ -270,11 +270,14 @@ private fun ParentalGateCancelButton(
             .fillMaxWidth()
             .heightIn(min = 52.dp)
             .clip(RoundedCornerShape(12.dp))
-            .background(if (isFocused) SmartTubeCardFocusedBg else SmartTubeCardBg.copy(alpha = 0.7f))
-            .border(
-                width = if (isFocused) 2.dp else 1.dp,
-                color = if (isFocused) SmartTubeFocusBorder else SmartTubeTextPrimary.copy(alpha = 0.12f),
-                shape = RoundedCornerShape(12.dp)
+            .background(if (isFocused) SmartTubeCardFocusedBg else SmartTubeModalCardBg.copy(alpha = 0.85f))
+            .liquidGlassBorder(
+                shape = RoundedCornerShape(12.dp),
+                isFocused = isFocused,
+                focusedColor = SmartTubeFocusBorder,
+                fallbackColor = SmartTubeTextPrimary.copy(alpha = 0.12f),
+                defaultWidth = 1.dp,
+                focusedWidth = 2.dp
             )
             .onFocusChanged { isFocused = it.isFocused }
             .clickable { onClick() }

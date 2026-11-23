@@ -72,6 +72,7 @@ import com.joudjawadtube.player.data.local.VideoItem
 import com.joudjawadtube.player.data.settings.AppSettingsRepository
 import com.joudjawadtube.player.data.thumbnail.ThumbnailManager
 import com.joudjawadtube.player.ui.catalog.DestructiveAction
+import com.joudjawadtube.player.ui.theme.LiquidGlassModalBackdropEffect_Antigravity
 import com.joudjawadtube.player.ui.theme.SmartTubeCardBg
 import com.joudjawadtube.player.ui.theme.SmartTubeCardFocusedBg
 import com.joudjawadtube.player.ui.theme.SmartTubeFocusBorder
@@ -80,6 +81,7 @@ import com.joudjawadtube.player.ui.theme.SmartTubeRed
 import com.joudjawadtube.player.ui.theme.SmartTubeSidebarBg
 import com.joudjawadtube.player.ui.theme.SmartTubeTextPrimary
 import com.joudjawadtube.player.ui.theme.SmartTubeTextSecondary
+import com.joudjawadtube.player.ui.theme.liquidGlassModalSurface
 
 data class QuickCollectionTarget_Antigravity(
     val title: String,
@@ -128,14 +130,13 @@ fun QuickChannelsPlaylistsDialog_Antigravity(
         onDismissRequest = onDismiss,
         properties = DialogProperties(usePlatformDefaultWidth = false)
     ) {
+        LiquidGlassModalBackdropEffect_Antigravity()
         Column(
             modifier = Modifier
                 .fillMaxWidth(if (isCompact) 0.96f else 0.90f)
                 .fillMaxHeight(if (isCompact) 0.90f else 0.86f)
                 .widthIn(max = 980.dp)
-                .clip(RoundedCornerShape(18.dp))
-                .background(SmartTubeSidebarBg)
-                .border(1.5.dp, Color.White.copy(alpha = 0.14f), RoundedCornerShape(18.dp))
+                .liquidGlassModalSurface(RoundedCornerShape(18.dp))
                 .padding(if (isCompact) 14.dp else 22.dp)
         ) {
             val currentTarget = openedTarget
@@ -421,14 +422,13 @@ fun ManageLibraryAndDataDialog_Antigravity(
         onDismissRequest = onDismiss,
         properties = DialogProperties(usePlatformDefaultWidth = false)
     ) {
+        LiquidGlassModalBackdropEffect_Antigravity()
         Column(
             modifier = Modifier
                 .fillMaxWidth(if (isCompact) 0.96f else 0.86f)
                 .fillMaxHeight(if (isCompact) 0.88f else 0.82f)
                 .widthIn(max = 860.dp)
-                .clip(RoundedCornerShape(18.dp))
-                .background(SmartTubeSidebarBg)
-                .border(1.5.dp, Color.White.copy(alpha = 0.14f), RoundedCornerShape(18.dp))
+                .liquidGlassModalSurface(RoundedCornerShape(18.dp))
                 .padding(if (isCompact) 14.dp else 20.dp)
         ) {
             Row(

@@ -59,6 +59,7 @@ import androidx.media3.common.util.UnstableApi
 import androidx.media3.ui.AspectRatioFrameLayout
 import com.joudjawadtube.player.R
 import com.joudjawadtube.player.data.settings.RepeatMode
+import com.joudjawadtube.player.ui.theme.LiquidGlassModalBackdropEffect_Antigravity
 import com.joudjawadtube.player.ui.theme.SmartTubeCardBg
 import com.joudjawadtube.player.ui.theme.SmartTubeCardFocusedBg
 import com.joudjawadtube.player.ui.theme.SmartTubeFocusBorder
@@ -66,6 +67,7 @@ import com.joudjawadtube.player.ui.theme.SmartTubeRed
 import com.joudjawadtube.player.ui.theme.SmartTubeSidebarBg
 import com.joudjawadtube.player.ui.theme.SmartTubeTextPrimary
 import com.joudjawadtube.player.ui.theme.SmartTubeTextSecondary
+import com.joudjawadtube.player.ui.theme.liquidGlassModalSurface
 import java.util.Locale
 
 enum class PlayerDialogTab {
@@ -153,13 +155,12 @@ fun TrackSelectorDialog(
     }
 
     Dialog(onDismissRequest = onDismiss) {
+        LiquidGlassModalBackdropEffect_Antigravity()
         Column(
             modifier = Modifier
                 .fillMaxWidth(0.95f)
                 .widthIn(max = 560.dp)
-                .clip(RoundedCornerShape(16.dp))
-                .background(SmartTubeSidebarBg)
-                .border(1.5.dp, Color.White.copy(alpha = 0.14f), RoundedCornerShape(16.dp))
+                .liquidGlassModalSurface(RoundedCornerShape(16.dp))
                 .padding(20.dp)
         ) {
             // Header + Back / Close

@@ -70,6 +70,7 @@ import com.joudjawadtube.player.data.settings.SidebarMode
 import com.joudjawadtube.player.ui.theme.LocalJoudColors
 import com.joudjawadtube.player.ui.theme.SmartTubeCardFocusedBg
 import com.joudjawadtube.player.ui.theme.SmartTubeFocusBorder
+import com.joudjawadtube.player.ui.theme.SmartTubeModalSurface
 import com.joudjawadtube.player.ui.theme.SmartTubeRed
 import com.joudjawadtube.player.ui.theme.SmartTubeSidebarBg
 import com.joudjawadtube.player.ui.theme.SmartTubeTextPrimary
@@ -134,6 +135,7 @@ fun SmartTubeSidebar(
             .fillMaxHeight()
             .zIndex(if (isFloatingOverlay) 30f else 1f)
     ) {
+        val colors = LocalJoudColors.current
         Column(
             modifier = Modifier
                 .wrapContentWidth(align = Alignment.Start, unbounded = true)
@@ -143,14 +145,17 @@ fun SmartTubeSidebar(
                     if (isFloatingOverlay) {
                         Modifier
                             .shadow(elevation = 24.dp)
-                            .border(width = 1.dp, color = Color.White.copy(alpha = 0.18f))
-                    } else if (LocalJoudColors.current.isLiquidGlass) {
-                        Modifier.border(width = 1.dp, color = LocalJoudColors.current.glassBorderHighlight.copy(alpha = 0.45f))
+                            .border(
+                                width = if (colors.isLiquidGlass) 1.5.dp else 1.dp,
+                                color = if (colors.isLiquidGlass) colors.glassBorderHighlight else Color.White.copy(alpha = 0.18f)
+                            )
+                    } else if (colors.isLiquidGlass) {
+                        Modifier.border(width = 1.dp, color = colors.glassBorderHighlight.copy(alpha = 0.55f))
                     } else {
                         Modifier
                     }
                 )
-                .background(SmartTubeSidebarBg)
+                .background(if (isFloatingOverlay && colors.isLiquidGlass) SmartTubeModalSurface else SmartTubeSidebarBg)
                 .onFocusChanged { if (!it.hasFocus) menuOpen = false }
                 .padding(vertical = 10.dp, horizontal = 10.dp),
             verticalArrangement = Arrangement.SpaceBetween

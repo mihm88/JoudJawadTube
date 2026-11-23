@@ -1,6 +1,7 @@
 package com.joudjawadtube.player.ui.components
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
@@ -35,6 +36,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
@@ -43,10 +45,13 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.joudjawadtube.player.R
+import com.joudjawadtube.player.ui.theme.LiquidGlassModalBackdropEffect_Antigravity
 import com.joudjawadtube.player.ui.theme.LocalJoudColors
+import com.joudjawadtube.player.ui.theme.SmartTubeModalCardBg
+import com.joudjawadtube.player.ui.theme.SmartTubeModalScrim
+import com.joudjawadtube.player.ui.theme.SmartTubeModalSurface
 import com.joudjawadtube.player.ui.theme.SmartTubeRed
 import com.joudjawadtube.player.ui.theme.SmartTubeSidebarBg
-import com.joudjawadtube.player.ui.theme.SmartTubeSurface
 import com.joudjawadtube.player.ui.theme.SmartTubeTextPrimary
 import com.joudjawadtube.player.ui.theme.SmartTubeTextSecondary
 
@@ -76,16 +81,16 @@ fun CompactBottomNav_Antigravity(
     var showMoreSheet by remember { mutableStateOf(false) }
     val isMoreSelected = selectedSection in secondarySections || showMoreSheet
 
+    val colors = LocalJoudColors.current
     Column(
         modifier = modifier
             .fillMaxWidth()
-            .background(SmartTubeSidebarBg)
+            .background(if (colors.isLiquidGlass) SmartTubeModalSurface else SmartTubeSidebarBg)
     ) {
-        val colors = LocalJoudColors.current
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(1.dp)
+                .height(if (colors.isLiquidGlass) 1.2.dp else 1.dp)
                 .background(
                     if (colors.isLiquidGlass) colors.glassBorderHighlight else SmartTubeTextSecondary.copy(alpha = 0.16f)
                 )
@@ -135,15 +140,67 @@ fun CompactBottomNav_Antigravity(
 
     if (showMoreSheet) {
         val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+        val sheetShape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)
         ModalBottomSheet(
             onDismissRequest = { showMoreSheet = false },
             sheetState = sheetState,
-            containerColor = SmartTubeSurface,
-            contentColor = SmartTubeTextPrimary
+            shape = sheetShape,
+            containerColor = SmartTubeModalSurface,
+            contentColor = SmartTubeTextPrimary,
+            scrimColor = SmartTubeModalScrim,
+            dragHandle = {
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    if (colors.isLiquidGlass) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(1.5.dp)
+                                .background(
+                                    Brush.horizontalGradient(
+                                        colors = listOf(
+                                            Color(0x337DD3FC),
+                                            Color(0xB8E0F2FE),
+                                            Color(0x337DD3FC)
+                                        )
+                                    )
+                                )
+                        )
+                    }
+                    Box(
+                        modifier = Modifier
+                            .padding(top = 12.dp, bottom = 8.dp)
+                            .width(42.dp)
+                            .height(4.dp)
+                            .clip(RoundedCornerShape(999.dp))
+                            .background(
+                                if (colors.isLiquidGlass) Color(0x99E0F2FE)
+                                else SmartTubeTextSecondary.copy(alpha = 0.4f)
+                            )
+                    )
+                }
+            }
         ) {
+            LiquidGlassModalBackdropEffect_Antigravity()
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
+                    .then(
+                        if (colors.isLiquidGlass) {
+                            Modifier.background(
+                                Brush.verticalGradient(
+                                    colors = listOf(
+                                        Color(0x1EE0F2FE),
+                                        Color.Transparent
+                                    )
+                                )
+                            )
+                        } else {
+                            Modifier
+                        }
+                    )
                     .navigationBarsPadding()
                     .verticalScroll(rememberScrollState())
                     .padding(horizontal = 16.dp, vertical = 8.dp),
@@ -156,7 +213,9 @@ fun CompactBottomNav_Antigravity(
                     fontWeight = FontWeight.ExtraBold,
                     modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
                 )
-                HorizontalDivider(color = SmartTubeTextSecondary.copy(alpha = 0.16f))
+                HorizontalDivider(
+                    color = if (colors.isLiquidGlass) Color(0x33E0F2FE) else SmartTubeTextSecondary.copy(alpha = 0.16f)
+                )
                 secondarySections.forEach { section ->
                     val isActive = selectedSection == section
                     val rowBadge = when (section) {
@@ -170,7 +229,22 @@ fun CompactBottomNav_Antigravity(
                             .heightIn(min = 52.dp)
                             .clip(RoundedCornerShape(12.dp))
                             .background(
-                                if (isActive) SmartTubeRed.copy(alpha = 0.14f) else Color.Transparent
+                                when {
+                                    isActive -> SmartTubeRed.copy(alpha = 0.18f)
+                                    colors.isLiquidGlass -> SmartTubeModalCardBg.copy(alpha = 0.55f)
+                                    else -> Color.Transparent
+                                }
+                            )
+                            .then(
+                                if (colors.isLiquidGlass) {
+                                    Modifier.border(
+                                        width = 1.dp,
+                                        color = if (isActive) SmartTubeRed.copy(alpha = 0.55f) else Color(0x28E0F2FE),
+                                        shape = RoundedCornerShape(12.dp)
+                                    )
+                                } else {
+                                    Modifier
+                                }
                             )
                             .clickable {
                                 showMoreSheet = false

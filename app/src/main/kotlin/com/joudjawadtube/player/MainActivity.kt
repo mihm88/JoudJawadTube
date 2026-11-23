@@ -275,6 +275,7 @@ class MainActivity : AppCompatActivity() {
                     val useTvLayout = layoutInfo.isTv
 
                     LiquidGlassRootContainer(
+                        enableModalBackdropBlur = activePlaybackSession == null,
                         modifier = Modifier
                             .fillMaxSize()
                             .then(
