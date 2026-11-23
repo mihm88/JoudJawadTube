@@ -25,7 +25,9 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flowOn
+import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.sync.withPermit
 import java.util.Random
 import java.util.UUID
@@ -71,6 +73,8 @@ class VideoRepository(
 
     private val _mountedVolumes = MutableStateFlow<List<MountedVolumeInfo>>(emptyList())
     val mountedVolumes: StateFlow<List<MountedVolumeInfo>> = _mountedVolumes.asStateFlow()
+
+    private val syncMutex = Mutex()
 
     // Session-stable PRNG seed created once per app launch so recommendations stay stable while navigating
     // but reshuffle freshly each time the app process starts.
@@ -385,24 +389,28 @@ class VideoRepository(
         )
     }
 
-    suspend fun syncSavedChannels(onlyUnsyncedOrStale: Boolean = false) = coroutineScope {
-        val channels = videoDao.getSavedChannels()
-        if (channels.isEmpty()) return@coroutineScope
-        val now = System.currentTimeMillis()
-        val staleThresholdMs = 30 * 60 * 1000L
-        val semaphore = Semaphore(4)
+    suspend fun syncSavedChannels(onlyUnsyncedOrStale: Boolean = false) {
+        syncMutex.withLock {
+            coroutineScope {
+                val channels = videoDao.getSavedChannels()
+                if (channels.isEmpty()) return@coroutineScope
+                val now = System.currentTimeMillis()
+                val staleThresholdMs = 30 * 60 * 1000L
+                val semaphore = Semaphore(4)
 
-        channels.map { channel ->
-            async(Dispatchers.IO) {
-                val hasVideos = videoDao.getVideosByPlaylistId(channel.uploadsPlaylistId).isNotEmpty()
-                val isStale = (now - channel.lastSyncedAt) > staleThresholdMs || channel.lastSyncedAt == 0L
-                if (!onlyUnsyncedOrStale || !hasVideos || isStale) {
-                    semaphore.withPermit {
-                        syncChannel(channel)
+                channels.map { channel ->
+                    async(Dispatchers.IO) {
+                        val hasVideos = videoDao.getVideosByPlaylistId(channel.uploadsPlaylistId).isNotEmpty()
+                        val isStale = (now - channel.lastSyncedAt) > staleThresholdMs || channel.lastSyncedAt == 0L
+                        if (!onlyUnsyncedOrStale || !hasVideos || isStale) {
+                            semaphore.withPermit {
+                                syncChannel(channel)
+                            }
+                        }
                     }
-                }
+                }.awaitAll()
             }
-        }.awaitAll()
+        }
     }
 
     private suspend fun syncChannel(channel: SavedChannelEntity) {
@@ -552,8 +560,9 @@ class VideoRepository(
                 }
                 videoDao.insertVideos(entities)
 
+                val progressMap = loadProgressMap(entities.map { it.videoKey })
                 val items = entities.map { ent ->
-                    VideoItem(ent, videoDao.getProgress(ent.videoKey))
+                    VideoItem(ent, progressMap[ent.videoKey])
                 }
                 val startItem = parsed.initialVideoId?.let { initId ->
                     items.firstOrNull { it.youtubeVideoId == initId }
@@ -685,8 +694,9 @@ class VideoRepository(
         }
         videoDao.insertVideos(entities)
 
+        val progressMap = loadProgressMap(entities.map { it.videoKey })
         val items = entities.map { ent ->
-            VideoItem(ent, videoDao.getProgress(ent.videoKey))
+            VideoItem(ent, progressMap[ent.videoKey])
         }
 
         return Result.success(
@@ -742,8 +752,16 @@ class VideoRepository(
         videoDao.clearAllFavorites()
     }
 
-    suspend fun clearFavorites() {
-        videoDao.clearAllFavorites()
+    private suspend fun loadProgressMap(keys: List<String>): Map<String, PlaybackProgressEntity> {
+        if (keys.isEmpty()) return emptyMap()
+        val map = HashMap<String, PlaybackProgressEntity>(keys.size)
+        for (chunk in keys.distinct().chunked(500)) {
+            val rows = videoDao.getProgressForKeys(chunk)
+            for (row in rows) {
+                map[row.videoKey] = row
+            }
+        }
+        return map
     }
 
     suspend fun getVideoItemById(videoId: String): VideoItem? {
@@ -754,8 +772,9 @@ class VideoRepository(
 
     suspend fun getFolderPlaylist(folderPath: String): List<VideoItem> {
         val entities = videoDao.getVideosByFolder(folderPath)
+        val progressMap = loadProgressMap(entities.map { it.videoKey })
         return entities.map { entity ->
-            VideoItem(entity, videoDao.getProgress(entity.videoKey))
+            VideoItem(entity, progressMap[entity.videoKey])
         }
     }
 

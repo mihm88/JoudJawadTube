@@ -120,25 +120,6 @@
             </intent-filter>
         </activity>
 
-        <!-- Broadcast receiver for external USB OTG / SD card mount & unmount events -->
-        <receiver
-            android:name=".data.scanner.UsbMountReceiver"
-            android:enabled="true"
-            android:exported="true">
-            <intent-filter>
-                <action android:name="android.intent.action.MEDIA_MOUNTED" />
-                <action android:name="android.intent.action.MEDIA_UNMOUNTED" />
-                <action android:name="android.intent.action.MEDIA_EJECT" />
-                <action android:name="android.intent.action.MEDIA_REMOVED" />
-                <action android:name="android.intent.action.MEDIA_BAD_REMOVAL" />
-                <data android:scheme="file" />
-            </intent-filter>
-            <intent-filter>
-                <action android:name="android.hardware.usb.action.USB_DEVICE_ATTACHED" />
-                <action android:name="android.hardware.usb.action.USB_DEVICE_DETACHED" />
-            </intent-filter>
-        </receiver>
-
         <!-- AndroidX FileProvider for secure APK update installation -->
         <provider
             android:name="androidx.core.content.FileProvider"

@@ -466,7 +466,7 @@ private fun TvTopHeaderBar(
                         modifier = Modifier.size(13.dp)
                     )
                     Text(
-                        text = "Scanning...",
+                        text = stringResource(R.string.status_scanning),
                         color = SmartTubeTextSecondary,
                         fontSize = 11.sp,
                         maxLines = 1
@@ -498,10 +498,11 @@ fun HeaderInteractivePill(
     val borderColor = when {
         isFocused -> SmartTubeFocusBorder
         accentColor != null -> accentColor.copy(alpha = 0.5f)
-        else -> Color.White.copy(alpha = 0.08f)
+        else -> SmartTubeTextSecondary.copy(alpha = 0.2f)
     }
     val textColor = when {
-        isFocused || isPrimary -> Color.White
+        isPrimary -> Color.White
+        isFocused -> SmartTubeTextPrimary
         accentColor != null -> accentColor
         else -> SmartTubeTextPrimary
     }
@@ -576,7 +577,7 @@ fun FolderFilterChipRow(
     ) {
         item {
             FilterChipItem(
-                label = "All Folders",
+                label = stringResource(R.string.filter_all_folders),
                 isSelected = selectedFolder == null,
                 onClick = { onSelectFolder(null) }
             )
@@ -611,7 +612,7 @@ fun FilterChipItem(
             .background(bgColor)
             .border(
                 width = if (isFocused) 2.dp else 1.dp,
-                color = if (isFocused) SmartTubeFocusBorder else Color.White.copy(alpha = 0.08f),
+                color = if (isFocused) SmartTubeFocusBorder else SmartTubeTextSecondary.copy(alpha = 0.2f),
                 shape = RoundedCornerShape(17.dp)
             )
             .onFocusChanged { isFocused = it.isFocused }
@@ -621,7 +622,7 @@ fun FilterChipItem(
     ) {
         Text(
             text = label,
-            color = Color.White,
+            color = if (isSelected) Color.White else SmartTubeTextPrimary,
             fontSize = 12.sp,
             lineHeight = 15.sp,
             fontWeight = if (isSelected || isFocused) FontWeight.Bold else FontWeight.Medium,
@@ -644,6 +645,25 @@ fun TvCategoryRowSection(
 ) {
     val isClickable = !row.playlistId.isNullOrBlank() || !row.channelId.isNullOrBlank()
     var isHeaderFocused by remember { mutableStateOf(false) }
+
+    val (displayTitle, displaySubtitle) = when (row.id) {
+        "continue_watching", "section_history" ->
+            stringResource(R.string.row_continue_watching_title) to
+                stringResource(R.string.row_continue_watching_sub, row.videos.size)
+        "recommended_for_you" ->
+            stringResource(R.string.row_recommended_title) to
+                stringResource(R.string.row_recommended_sub, row.videos.size)
+        "yt_saved_videos" ->
+            stringResource(R.string.row_saved_youtube_title) to
+                stringResource(R.string.row_saved_youtube_sub, row.videos.size)
+        "favorites", "section_favorites" ->
+            stringResource(R.string.row_favorites_title) to
+                stringResource(R.string.row_favorites_sub, row.videos.size)
+        "section_4k" ->
+            stringResource(R.string.row_4k_title) to
+                stringResource(R.string.row_4k_sub, row.videos.size)
+        else -> row.title to row.subtitle
+    }
 
     Column(modifier = Modifier.fillMaxWidth()) {
         Row(
@@ -691,8 +711,8 @@ fun TvCategoryRowSection(
                     )
                 }
                 Text(
-                    text = row.title,
-                    color = if (isHeaderFocused) Color.White else SmartTubeTextPrimary,
+                    text = displayTitle,
+                    color = SmartTubeTextPrimary,
                     fontSize = 17.sp,
                     lineHeight = 21.sp,
                     fontWeight = FontWeight.Bold,
@@ -701,7 +721,7 @@ fun TvCategoryRowSection(
                     overflow = TextOverflow.Ellipsis
                 )
                 Text(
-                    text = row.subtitle,
+                    text = displaySubtitle,
                     color = when {
                         row.isYoutubeCategory -> SmartTubeRed
                         row.isUsbCategory -> SmartTubeUsbCyan
@@ -768,7 +788,7 @@ fun EmptyCatalogState(
                 .widthIn(max = 540.dp)
                 .clip(RoundedCornerShape(16.dp))
                 .background(SmartTubeCardBg)
-                .border(1.dp, Color.White.copy(alpha = 0.08f), RoundedCornerShape(16.dp))
+                .border(1.dp, SmartTubeTextSecondary.copy(alpha = 0.18f), RoundedCornerShape(16.dp))
                 .padding(30.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
@@ -785,14 +805,14 @@ fun EmptyCatalogState(
             Spacer(modifier = Modifier.height(14.dp))
             Text(
                 text = when {
-                    isScanning -> "Scanning Local Storage & USB Drives..."
-                    searchQuery.isNotBlank() -> "No videos match \"$searchQuery\""
-                    selectedSection in setOf(SidebarSection.CHANNELS, SidebarSection.PLAYLISTS, SidebarSection.CATEGORIES) -> "No Saved Content in This Section Yet"
-                    selectedSection == SidebarSection.USB_DRIVES -> "No USB Drive Videos Found"
-                    selectedSection == SidebarSection.CONTINUE_WATCHING -> "No Playback History Yet"
-                    selectedSection == SidebarSection.FAVORITES -> "No Favorite Videos Saved"
-                    selectedSection == SidebarSection.FOUR_K -> "No 4K / UHD Videos Found"
-                    else -> "No Local Videos Found Yet"
+                    isScanning -> stringResource(R.string.empty_scanning_title)
+                    searchQuery.isNotBlank() -> stringResource(R.string.empty_search_title, searchQuery)
+                    selectedSection in setOf(SidebarSection.CHANNELS, SidebarSection.PLAYLISTS, SidebarSection.CATEGORIES) -> stringResource(R.string.empty_saved_section_title)
+                    selectedSection == SidebarSection.USB_DRIVES -> stringResource(R.string.empty_usb_videos_title)
+                    selectedSection == SidebarSection.CONTINUE_WATCHING -> stringResource(R.string.empty_history_title)
+                    selectedSection == SidebarSection.FAVORITES -> stringResource(R.string.empty_favorites_title)
+                    selectedSection == SidebarSection.FOUR_K -> stringResource(R.string.empty_four_k_title)
+                    else -> stringResource(R.string.empty_local_title)
                 },
                 color = SmartTubeTextPrimary,
                 fontSize = 19.sp,
@@ -802,10 +822,10 @@ fun EmptyCatalogState(
             Spacer(modifier = Modifier.height(8.dp))
             Text(
                 text = when {
-                    isScanning -> "Searching internal storage, mounted OTG USB drives, and sidecar subtitles (.srt, .vtt, .ass)..."
-                    selectedSection in setOf(SidebarSection.CHANNELS, SidebarSection.PLAYLISTS, SidebarSection.CATEGORIES) -> "Paste any channel, playlist or video link to save it and enjoy in-app playback."
-                    selectedSection == SidebarSection.USB_DRIVES -> "Plug in a USB flash drive or external hard drive, or browse a USB directory manually."
-                    else -> "Place video files (.mp4, .mkv, .webm, .avi) on your device/USB drive, add a folder, or paste a video link."
+                    isScanning -> stringResource(R.string.empty_scanning_desc)
+                    selectedSection in setOf(SidebarSection.CHANNELS, SidebarSection.PLAYLISTS, SidebarSection.CATEGORIES) -> stringResource(R.string.empty_saved_section_desc)
+                    selectedSection == SidebarSection.USB_DRIVES -> stringResource(R.string.empty_usb_videos_desc)
+                    else -> stringResource(R.string.empty_local_desc)
                 },
                 color = SmartTubeTextSecondary,
                 fontSize = 13.sp,
@@ -815,19 +835,19 @@ fun EmptyCatalogState(
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 ActionPillButton(
                     icon = Icons.Default.AddLink,
-                    text = "+ Add YouTube Link",
+                    text = stringResource(R.string.action_add_youtube),
                     isPrimary = selectedSection in setOf(SidebarSection.CHANNELS, SidebarSection.PLAYLISTS, SidebarSection.CATEGORIES),
                     onClick = onOpenAddYouTube
                 )
                 ActionPillButton(
                     icon = Icons.Default.FolderOpen,
-                    text = "Add Video Folder",
+                    text = stringResource(R.string.action_add_folder),
                     isPrimary = selectedSection !in setOf(SidebarSection.CHANNELS, SidebarSection.PLAYLISTS, SidebarSection.CATEGORIES),
                     onClick = onPickSafFolder
                 )
                 ActionPillButton(
                     icon = Icons.Default.Refresh,
-                    text = "Rescan USB",
+                    text = stringResource(R.string.action_rescan_usb),
                     isPrimary = false,
                     onClick = onRescanStorage
                 )

@@ -7,6 +7,7 @@ import org.json.JSONObject
 import java.io.BufferedReader
 import java.io.InputStreamReader
 import java.util.Locale
+import java.util.concurrent.ConcurrentHashMap
 
 data class KidsPlaylistItem(
     val id: String,
@@ -33,7 +34,7 @@ data class KidsChannelItem(
 
 object KidsCatalogRepository_Antigravity {
 
-    private val cachedByLocale = mutableMapOf<String, List<KidsChannelItem>>()
+    private val cachedByLocale = ConcurrentHashMap<String, List<KidsChannelItem>>()
 
     fun isArabicLocale(appLanguage: AppLanguage = AppLanguage.FOLLOW_SYSTEM): Boolean {
         return when (appLanguage) {

@@ -216,7 +216,7 @@ fun TabletCatalogScreen(
                             if (includeGridToggle) {
                                 HeaderInteractivePill(
                                     icon = if (uiState.tabletUseGridMode) Icons.Default.ViewAgenda else Icons.Default.GridView,
-                                    text = if (uiState.tabletUseGridMode) "Rows" else "Grid",
+                                    text = stringResource(if (uiState.tabletUseGridMode) R.string.action_view_rows else R.string.action_view_grid),
                                     onClick = onToggleTabletGridMode
                                 )
                             }
@@ -257,27 +257,27 @@ fun TabletCatalogScreen(
 
                                 Box(
                                     modifier = Modifier
-                                        .size(38.dp)
-                                        .clip(RoundedCornerShape(19.dp))
+                                        .size(48.dp)
+                                        .clip(RoundedCornerShape(24.dp))
                                         .background(SmartTubeCardBg)
-                                        .border(1.dp, Color.White.copy(alpha = 0.08f), RoundedCornerShape(19.dp))
+                                        .border(1.dp, SmartTubeTextSecondary.copy(alpha = 0.2f), RoundedCornerShape(24.dp))
                                         .clickable { onOpenAddYouTubeDialog() },
                                     contentAlignment = Alignment.Center
                                 ) {
                                     Icon(
                                         imageVector = Icons.Default.AddLink,
-                                        contentDescription = "Add YouTube",
+                                        contentDescription = stringResource(R.string.action_add_youtube),
                                         tint = SmartTubeRed,
-                                        modifier = Modifier.size(18.dp)
+                                        modifier = Modifier.size(20.dp)
                                     )
                                 }
 
                                 Box(
                                     modifier = Modifier
-                                        .size(38.dp)
-                                        .clip(RoundedCornerShape(19.dp))
+                                        .size(48.dp)
+                                        .clip(RoundedCornerShape(24.dp))
                                         .background(SmartTubeCardBg)
-                                        .border(1.dp, Color.White.copy(alpha = 0.08f), RoundedCornerShape(19.dp))
+                                        .border(1.dp, SmartTubeTextSecondary.copy(alpha = 0.2f), RoundedCornerShape(24.dp))
                                         .clickable { onPickSafFolder() },
                                     contentAlignment = Alignment.Center
                                 ) {
@@ -285,7 +285,7 @@ fun TabletCatalogScreen(
                                         imageVector = Icons.Default.CreateNewFolder,
                                         contentDescription = stringResource(R.string.action_add_folder),
                                         tint = SmartTubeUsbCyan,
-                                        modifier = Modifier.size(18.dp)
+                                        modifier = Modifier.size(20.dp)
                                     )
                                 }
                             }
@@ -297,7 +297,7 @@ fun TabletCatalogScreen(
                             ) {
                                 HeaderInteractivePill(
                                     icon = if (uiState.tabletUseGridMode) Icons.Default.ViewAgenda else Icons.Default.GridView,
-                                    text = if (uiState.tabletUseGridMode) "Rows" else "Grid",
+                                    text = stringResource(if (uiState.tabletUseGridMode) R.string.action_view_rows else R.string.action_view_grid),
                                     onClick = onToggleTabletGridMode
                                 )
                                 CategoryChipsRow(

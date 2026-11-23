@@ -18,10 +18,16 @@ import android.webkit.WebViewClient
 import android.widget.FrameLayout
 import androidx.activity.compose.BackHandler
 import androidx.annotation.OptIn
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.focusable
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.waitForUpOrCancellation
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -31,6 +37,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.systemBarsPadding
@@ -40,9 +47,11 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
+import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.rounded.ErrorOutline
 import androidx.compose.material.icons.rounded.PictureInPictureAlt
 import androidx.compose.material.icons.rounded.Refresh
+import androidx.compose.material.icons.rounded.Timer
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -54,6 +63,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableFloatStateOf
@@ -76,6 +86,7 @@ import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
@@ -116,6 +127,7 @@ import com.joudjawadtube.player.data.repository.RelatedTabMode
 import com.joudjawadtube.player.data.settings.AppSettingsState
 import com.joudjawadtube.player.data.settings.RepeatMode
 import com.joudjawadtube.player.data.settings.ResumeMode
+import com.joudjawadtube.player.data.settings.WatchTimerManager_Antigravity
 import com.joudjawadtube.player.data.youtube.QualitySelectorHelper_Antigravity
 import com.joudjawadtube.player.data.youtube.ResolvedYouTubeStream
 import com.joudjawadtube.player.data.youtube.YouTubeChunkedHttpDataSource_Antigravity
@@ -123,12 +135,14 @@ import com.joudjawadtube.player.data.youtube.YouTubeService
 import com.joudjawadtube.player.playback.JoudPlaybackBridge_Antigravity
 import com.joudjawadtube.player.playback.JoudPlaybackService_Antigravity
 import com.joudjawadtube.player.ui.catalog.PlaybackSession
+import com.joudjawadtube.player.ui.components.ParentalGateDialog_Antigravity
 import com.joudjawadtube.player.ui.theme.SmartTubeCardBg
 import com.joudjawadtube.player.ui.theme.SmartTubeFocusBorder
 import com.joudjawadtube.player.ui.theme.SmartTubeRed
 import com.joudjawadtube.player.ui.theme.SmartTubeSurface
 import com.joudjawadtube.player.ui.theme.SmartTubeTextPrimary
 import com.joudjawadtube.player.ui.theme.SmartTubeTextSecondary
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.first
@@ -142,6 +156,7 @@ import kotlinx.coroutines.withTimeoutOrNull
 fun PlaybackScreen(
     session: PlaybackSession,
     settings: AppSettingsState = AppSettingsState(),
+    isOnline: Boolean = true,
     isInPictureInPictureMode: Boolean = false,
     onEnterPictureInPicture: (() -> Unit)? = null,
     onSaveProgress: (videoKey: String, positionMs: Long, durationMs: Long) -> Unit,
@@ -175,6 +190,14 @@ fun PlaybackScreen(
     var playbackErrorResId by remember(video.id) { mutableStateOf<Int?>(null) }
     var playbackErrorDetail by remember(video.id) { mutableStateOf<String?>(null) }
     var retryNonce by remember(video.id) { mutableIntStateOf(0) }
+    var wasOfflineDuringPlaybackError by remember(video.id) { mutableStateOf(false) }
+
+    var isScreenLocked by remember { mutableStateOf(false) }
+    var showUnlockedBanner by remember { mutableStateOf(false) }
+    var showExtendParentalGate by remember { mutableStateOf(false) }
+
+    val watchTimerManager = WatchTimerManager_Antigravity.shared
+    val isTimeUp by watchTimerManager.isTimeUp.collectAsState()
 
     val coroutineScope = rememberCoroutineScope()
     var hasAttemptedStreamRefresh by remember(video.id) { mutableStateOf(false) }
@@ -191,23 +214,31 @@ fun PlaybackScreen(
     val latestAllowWebViewFallback by rememberUpdatedState(settings.allowWebViewFallback)
     val latestAllowGeneralFallback by rememberUpdatedState(settings.allowGeneralFallbackForSavedChannels)
     val latestSubtitlesEnabledByDefault by rememberUpdatedState(settings.subtitlesEnabledByDefault)
+    val latestIsOnline by rememberUpdatedState(isOnline)
 
     val handleYouTubePlaybackFailure: (ResolvedYouTubeStream?, String?) -> Unit = remember {
         { resolved, detail ->
-            val canUseWebView = latestAllowWebViewFallback &&
-                YouTubeService.SAFE_VIDEO_ID_REGEX.matches(latestVideo.youtubeVideoId)
-            if (canUseWebView) {
-                playbackErrorResId = null
-                playbackErrorDetail = null
-                useWebViewYouTubeFallback = true
-            } else {
+            if (!latestIsOnline) {
                 useWebViewYouTubeFallback = false
-                playbackErrorResId = if (resolved?.restrictionReason == "KIDS_RESTRICTED") {
-                    R.string.player_error_kids_restricted
-                } else {
-                    R.string.player_error_youtube
-                }
+                playbackErrorResId = R.string.player_error_offline
                 playbackErrorDetail = detail
+                wasOfflineDuringPlaybackError = true
+            } else {
+                val canUseWebView = latestAllowWebViewFallback &&
+                    YouTubeService.SAFE_VIDEO_ID_REGEX.matches(latestVideo.youtubeVideoId)
+                if (canUseWebView) {
+                    playbackErrorResId = null
+                    playbackErrorDetail = null
+                    useWebViewYouTubeFallback = true
+                } else {
+                    useWebViewYouTubeFallback = false
+                    playbackErrorResId = if (resolved?.restrictionReason == "KIDS_RESTRICTED") {
+                        R.string.player_error_kids_restricted
+                    } else {
+                        R.string.player_error_youtube
+                    }
+                    playbackErrorDetail = detail
+                }
             }
         }
     }
@@ -352,6 +383,7 @@ fun PlaybackScreen(
         val exoPlayer = activeExoPlayer ?: return@LaunchedEffect
         playbackErrorResId = null
         playbackErrorDetail = null
+        wasOfflineDuringPlaybackError = false
         useWebViewYouTubeFallback = false
         hasAttemptedStreamRefresh = false
         isRefreshingExpiredStream = false
@@ -786,6 +818,65 @@ fun PlaybackScreen(
             .build()
     }
 
+    // T09 Auto-Reconnect: automatically refresh/retry YouTube playback when connectivity returns
+    LaunchedEffect(isOnline, playbackErrorResId, video.id) {
+        if (video.isYoutube && playbackErrorResId != null) {
+            if (!isOnline) {
+                wasOfflineDuringPlaybackError = true
+            } else if (wasOfflineDuringPlaybackError) {
+                wasOfflineDuringPlaybackError = false
+                playbackErrorResId = null
+                playbackErrorDetail = null
+                val currentPos = activeExoPlayer?.currentPosition?.coerceAtLeast(0L) ?: 0L
+                if (currentPos > 3_000L && resolvedYouTubeStream != null) {
+                    refreshAndResumeYouTubeStream(currentPos) { fresh ->
+                        handleYouTubePlaybackFailure(fresh, null)
+                    }
+                } else {
+                    retryNonce++
+                }
+            }
+        }
+    }
+
+    // T12 Watch Timer: sync configured limit, tick every second while playing, and pause on time-up
+    LaunchedEffect(settings.watchTimeLimitMinutes) {
+        watchTimerManager.setLimitMinutes(settings.watchTimeLimitMinutes)
+    }
+
+    LaunchedEffect(isPlaying, settings.watchTimeLimitMinutes, useWebViewYouTubeFallback, isTimeUp) {
+        if (settings.watchTimeLimitMinutes > 0 && !isTimeUp) {
+            while (isActive) {
+                delay(1_000L)
+                watchTimerManager.onPlaybackTick(deltaSeconds = 1L, isPlaying = isPlaying)
+            }
+        }
+    }
+
+    LaunchedEffect(isTimeUp) {
+        if (isTimeUp) {
+            hudVisible = false
+            relatedRowVisible = false
+            activeDialogTab = null
+            if (useWebViewYouTubeFallback) {
+                isPlaying = false
+                webViewRef?.evaluateJavascript(
+                    "if(window.player && player.pauseVideo){ player.pauseVideo(); }",
+                    null
+                )
+            } else {
+                activeExoPlayer?.pause()
+            }
+        }
+    }
+
+    LaunchedEffect(showUnlockedBanner) {
+        if (showUnlockedBanner) {
+            delay(2_200L)
+            showUnlockedBanner = false
+        }
+    }
+
     val applyQualitySelection: (String) -> Unit = remember(activeExoPlayer, video, resolvedYouTubeStream, prepareYouTubeStreamSource) {
         { newQuality ->
             currentQuality = newQuality
@@ -819,30 +910,35 @@ fun PlaybackScreen(
         useWebViewYouTubeFallback,
         isPlaying,
         activeExoPlayer,
+        isTimeUp,
         refreshAndResumeYouTubeStream
     ) {
         {
-            val exoPlayer = activeExoPlayer
-            if (useWebViewYouTubeFallback) {
-                isPlaying = !isPlaying
-                val js = if (isPlaying) "player.playVideo();" else "player.pauseVideo();"
-                webViewRef?.evaluateJavascript(js, null)
-            } else if (exoPlayer != null) {
-                if (exoPlayer.isPlaying) {
-                    exoPlayer.pause()
-                } else {
-                    val activeVideo = latestVideo
-                    val resolved = latestResolvedStream
-                    val needsStreamRenewal = activeVideo.isYoutube &&
-                        activeVideo.youtubeVideoId.isNotBlank() &&
-                        resolved?.isExpired(safetyMarginSec = 120L) == true
-
-                    if (needsStreamRenewal) {
-                        refreshAndResumeYouTubeStream(exoPlayer.currentPosition.coerceAtLeast(0L)) { fresh ->
-                            handleYouTubePlaybackFailure(fresh, null)
-                        }
+            if (isTimeUp) {
+                // Keep paused until parent extends watch time
+            } else {
+                val exoPlayer = activeExoPlayer
+                if (useWebViewYouTubeFallback) {
+                    isPlaying = !isPlaying
+                    val js = if (isPlaying) "player.playVideo();" else "player.pauseVideo();"
+                    webViewRef?.evaluateJavascript(js, null)
+                } else if (exoPlayer != null) {
+                    if (exoPlayer.isPlaying) {
+                        exoPlayer.pause()
                     } else {
-                        exoPlayer.play()
+                        val activeVideo = latestVideo
+                        val resolved = latestResolvedStream
+                        val needsStreamRenewal = activeVideo.isYoutube &&
+                            activeVideo.youtubeVideoId.isNotBlank() &&
+                            resolved?.isExpired(safetyMarginSec = 120L) == true
+
+                        if (needsStreamRenewal) {
+                            refreshAndResumeYouTubeStream(exoPlayer.currentPosition.coerceAtLeast(0L)) { fresh ->
+                                handleYouTubePlaybackFailure(fresh, null)
+                            }
+                        } else {
+                            exoPlayer.play()
+                        }
                     }
                 }
             }
@@ -877,8 +973,16 @@ fun PlaybackScreen(
         onBack()
     }
 
-    BackHandler {
-        if (activeDialogTab != null) {
+    BackHandler(enabled = isScreenLocked && !isTimeUp) {
+        // Consume Back while Kid Screen Lock is active so accidental taps/presses cannot exit playback
+    }
+
+    BackHandler(enabled = !isScreenLocked || isTimeUp) {
+        if (showExtendParentalGate) {
+            showExtendParentalGate = false
+        } else if (isTimeUp) {
+            exitPlayback()
+        } else if (activeDialogTab != null) {
             activeDialogTab = null
             interactionSignal.tryEmit(Unit)
         } else if (hudVisible && !isInPictureInPictureMode) {
@@ -901,7 +1005,15 @@ fun PlaybackScreen(
             .focusRequester(playerRootFocusRequester)
             .focusable()
             .onPreviewKeyEvent { event ->
-                if (event.type == KeyEventType.KeyDown && activeDialogTab == null) {
+                if (isTimeUp) {
+                    false
+                } else if (isScreenLocked) {
+                    // Allow D-Pad Center/Enter through to the corner Lock pill for 2.5s hold-to-unlock
+                    when (event.key) {
+                        Key.DirectionCenter, Key.Enter, Key.NumPadEnter -> false
+                        else -> true
+                    }
+                } else if (event.type == KeyEventType.KeyDown && activeDialogTab == null) {
                     when (event.key) {
                         Key.Back, Key.Escape -> {
                             if (relatedRowVisible) {
@@ -984,6 +1096,7 @@ fun PlaybackScreen(
                 }
             }
             .clickable(
+                enabled = !isScreenLocked && !isTimeUp,
                 interactionSource = remember { MutableInteractionSource() },
                 indication = null
             ) {
@@ -1134,7 +1247,13 @@ fun PlaybackScreen(
         }
 
         val activeErrorResId = playbackErrorResId
-        if (!isInPictureInPictureMode && activeErrorResId != null && !isResolvingYouTube && !isRefreshingExpiredStream) {
+        if (!isInPictureInPictureMode &&
+            !isScreenLocked &&
+            !isTimeUp &&
+            activeErrorResId != null &&
+            !isResolvingYouTube &&
+            !isRefreshingExpiredStream
+        ) {
             PlaybackErrorOverlay(
                 errorResId = activeErrorResId,
                 errorDetail = playbackErrorDetail,
@@ -1146,6 +1265,8 @@ fun PlaybackScreen(
         if (onEnterPictureInPicture != null &&
             hudVisible &&
             !isInPictureInPictureMode &&
+            !isScreenLocked &&
+            !isTimeUp &&
             !useWebViewYouTubeFallback &&
             activeDialogTab == null &&
             !relatedRowVisible &&
@@ -1160,7 +1281,7 @@ fun PlaybackScreen(
                     .align(Alignment.TopEnd)
                     .systemBarsPadding()
                     .padding(16.dp)
-                    .size(44.dp)
+                    .size(48.dp)
                     .clip(CircleShape)
                     .background(Color.Black.copy(alpha = 0.55f))
             ) {
@@ -1193,7 +1314,7 @@ fun PlaybackScreen(
         }
 
         SmartTubePlayerHud(
-            visible = hudVisible && !isInPictureInPictureMode,
+            visible = hudVisible && !isInPictureInPictureMode && !isScreenLocked && !isTimeUp,
             video = video,
             isPlaying = isPlaying,
             positionProvider = { if (useWebViewYouTubeFallback) 0L else activeExoPlayer?.currentPosition ?: 0L },
@@ -1249,13 +1370,19 @@ fun PlaybackScreen(
                     ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
                 }
             },
+            onLockScreen = {
+                isScreenLocked = true
+                hudVisible = false
+                relatedRowVisible = false
+                activeDialogTab = null
+            },
             onBack = exitPlayback,
             onUserInteraction = {
                 interactionSignal.tryEmit(Unit)
             }
         )
 
-        if (!isInPictureInPictureMode) {
+        if (!isInPictureInPictureMode && !isScreenLocked && !isTimeUp) {
             activeDialogTab?.let { tab ->
                 activeExoPlayer?.let { exoPlayer ->
                     TrackSelectorDialog(
@@ -1285,6 +1412,65 @@ fun PlaybackScreen(
                     )
                 }
             }
+        }
+
+        if (isScreenLocked && !isInPictureInPictureMode && !isTimeUp) {
+            KidScreenLockOverlay(
+                onUnlocked = {
+                    isScreenLocked = false
+                    showUnlockedBanner = true
+                    hudVisible = true
+                    interactionSignal.tryEmit(Unit)
+                }
+            )
+        }
+
+        if (showUnlockedBanner && !isInPictureInPictureMode) {
+            Surface(
+                shape = RoundedCornerShape(999.dp),
+                color = SmartTubeSurface.copy(alpha = 0.92f),
+                border = BorderStroke(1.dp, SmartTubeFocusBorder.copy(alpha = 0.45f)),
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .systemBarsPadding()
+                    .padding(top = 18.dp)
+            ) {
+                Text(
+                    text = stringResource(R.string.kid_lock_unlocked),
+                    color = SmartTubeTextPrimary,
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp)
+                )
+            }
+        }
+
+        if (isTimeUp && !isInPictureInPictureMode) {
+            WatchTimerTimesUpOverlay(
+                onExtendClick = { showExtendParentalGate = true },
+                onBack = exitPlayback
+            )
+        }
+
+        if (showExtendParentalGate) {
+            ParentalGateDialog_Antigravity(
+                onSuccess = {
+                    showExtendParentalGate = false
+                    watchTimerManager.extendByMinutes(15)
+                    if (useWebViewYouTubeFallback) {
+                        isPlaying = true
+                        webViewRef?.evaluateJavascript(
+                            "if(window.player && player.playVideo){ player.playVideo(); }",
+                            null
+                        )
+                    } else {
+                        activeExoPlayer?.play()
+                    }
+                },
+                onDismiss = {
+                    showExtendParentalGate = false
+                }
+            )
         }
     }
 }
@@ -1445,6 +1631,233 @@ private fun PlaybackErrorOverlay(
                         Text(
                             text = stringResource(R.string.player_back),
                             fontSize = 15.sp,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun KidScreenLockOverlay(
+    onUnlocked: () -> Unit
+) {
+    val scope = rememberCoroutineScope()
+    val holdProgress = remember { Animatable(0f) }
+    var holdJob by remember { mutableStateOf<Job?>(null) }
+    var isHolding by remember { mutableStateOf(false) }
+    var isFocused by remember { mutableStateOf(false) }
+    val pillFocusRequester = remember { FocusRequester() }
+
+    LaunchedEffect(Unit) {
+        runCatching { pillFocusRequester.requestFocus() }
+    }
+
+    fun startHold() {
+        if (isHolding) return
+        isHolding = true
+        holdJob?.cancel()
+        holdJob = scope.launch {
+            holdProgress.snapTo(0f)
+            holdProgress.animateTo(
+                targetValue = 1f,
+                animationSpec = tween(durationMillis = 2500, easing = LinearEasing)
+            )
+            isHolding = false
+            onUnlocked()
+        }
+    }
+
+    fun cancelHold() {
+        if (!isHolding) return
+        isHolding = false
+        holdJob?.cancel()
+        holdJob = null
+        scope.launch {
+            holdProgress.snapTo(0f)
+        }
+    }
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .systemBarsPadding()
+            .padding(16.dp)
+    ) {
+        Surface(
+            shape = RoundedCornerShape(999.dp),
+            color = Color.Black.copy(alpha = 0.65f),
+            border = BorderStroke(
+                width = if (isFocused || isHolding) 2.dp else 1.dp,
+                color = if (isFocused || isHolding) SmartTubeFocusBorder else Color.White.copy(alpha = 0.28f)
+            ),
+            modifier = Modifier
+                .align(Alignment.TopStart)
+                .heightIn(min = 48.dp)
+                .focusRequester(pillFocusRequester)
+                .onFocusChanged { isFocused = it.isFocused }
+                .focusable()
+                .onPreviewKeyEvent { event ->
+                    when (event.key) {
+                        Key.DirectionCenter, Key.Enter, Key.NumPadEnter -> {
+                            when (event.type) {
+                                KeyEventType.KeyDown -> {
+                                    startHold()
+                                    true
+                                }
+                                KeyEventType.KeyUp -> {
+                                    cancelHold()
+                                    true
+                                }
+                                else -> true
+                            }
+                        }
+                        else -> false
+                    }
+                }
+                .pointerInput(Unit) {
+                    awaitEachGesture {
+                        awaitFirstDown(requireUnconsumed = false)
+                        startHold()
+                        waitForUpOrCancellation()
+                        cancelHold()
+                    }
+                }
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp)
+            ) {
+                Box(
+                    contentAlignment = Alignment.Center,
+                    modifier = Modifier.size(24.dp)
+                ) {
+                    if (isHolding) {
+                        CircularProgressIndicator(
+                            progress = { holdProgress.value },
+                            color = SmartTubeFocusBorder,
+                            trackColor = Color.White.copy(alpha = 0.25f),
+                            strokeWidth = 2.5.dp,
+                            modifier = Modifier.size(24.dp)
+                        )
+                    }
+                    Icon(
+                        imageVector = Icons.Default.Lock,
+                        contentDescription = stringResource(R.string.kid_lock_label),
+                        tint = Color.White,
+                        modifier = Modifier.size(16.dp)
+                    )
+                }
+                Text(
+                    text = stringResource(R.string.kid_lock_hold_to_unlock),
+                    color = Color.White,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.SemiBold
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun WatchTimerTimesUpOverlay(
+    onExtendClick: () -> Unit,
+    onBack: () -> Unit
+) {
+    val extendFocusRequester = remember { FocusRequester() }
+    var extendFocused by remember { mutableStateOf(false) }
+    var backFocused by remember { mutableStateOf(false) }
+
+    LaunchedEffect(Unit) {
+        runCatching { extendFocusRequester.requestFocus() }
+    }
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color.Black.copy(alpha = 0.88f)),
+        contentAlignment = Alignment.Center
+    ) {
+        Surface(
+            shape = RoundedCornerShape(20.dp),
+            color = SmartTubeSurface,
+            border = BorderStroke(1.dp, SmartTubeFocusBorder.copy(alpha = 0.3f)),
+            modifier = Modifier
+                .fillMaxWidth(0.9f)
+                .widthIn(max = 520.dp)
+        ) {
+            Column(
+                modifier = Modifier.padding(28.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Rounded.Timer,
+                    contentDescription = null,
+                    tint = SmartTubeRed,
+                    modifier = Modifier.size(52.dp)
+                )
+                Text(
+                    text = stringResource(R.string.watch_timer_times_up_title),
+                    color = SmartTubeTextPrimary,
+                    fontSize = 20.sp,
+                    fontWeight = FontWeight.Bold,
+                    textAlign = TextAlign.Center
+                )
+                Text(
+                    text = stringResource(R.string.watch_timer_times_up_message),
+                    color = SmartTubeTextSecondary,
+                    fontSize = 15.sp,
+                    textAlign = TextAlign.Center
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Button(
+                        onClick = onExtendClick,
+                        shape = RoundedCornerShape(12.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = SmartTubeRed,
+                            contentColor = Color.White
+                        ),
+                        border = if (extendFocused) BorderStroke(2.dp, SmartTubeFocusBorder) else null,
+                        modifier = Modifier
+                            .weight(1.25f)
+                            .height(56.dp)
+                            .focusRequester(extendFocusRequester)
+                            .onFocusChanged { extendFocused = it.isFocused }
+                    ) {
+                        Text(
+                            text = stringResource(R.string.watch_timer_extend_parent),
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Bold,
+                            textAlign = TextAlign.Center
+                        )
+                    }
+                    OutlinedButton(
+                        onClick = onBack,
+                        shape = RoundedCornerShape(12.dp),
+                        colors = ButtonDefaults.outlinedButtonColors(
+                            containerColor = SmartTubeCardBg,
+                            contentColor = SmartTubeTextPrimary
+                        ),
+                        border = BorderStroke(
+                            width = if (backFocused) 2.dp else 1.dp,
+                            color = if (backFocused) SmartTubeFocusBorder else SmartTubeTextSecondary.copy(alpha = 0.35f)
+                        ),
+                        modifier = Modifier
+                            .weight(0.85f)
+                            .height(56.dp)
+                            .onFocusChanged { backFocused = it.isFocused }
+                    ) {
+                        Text(
+                            text = stringResource(R.string.player_back),
+                            fontSize = 14.sp,
                             fontWeight = FontWeight.SemiBold
                         )
                     }

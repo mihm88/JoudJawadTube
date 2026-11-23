@@ -382,6 +382,7 @@ class MainActivity : AppCompatActivity() {
                             PlaybackScreen(
                                 session = currentSession,
                                 settings = uiState.settings,
+                                isOnline = uiState.isOnline,
                                 isInPictureInPictureMode = isInPipMode,
                                 onEnterPictureInPicture = if (
                                     Build.VERSION.SDK_INT >= Build.VERSION_CODES.O &&

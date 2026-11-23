@@ -31,6 +31,7 @@ import com.joudjawadtube.player.data.updater.UpdateState_Antigravity
 import com.joudjawadtube.player.data.youtube.YouTubeService
 import com.joudjawadtube.player.ui.components.SidebarSection
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -38,11 +39,13 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
 data class PlaybackSession(
@@ -105,6 +108,7 @@ private data class DialogAndThumbState(
     val isTvModeOverride: Boolean? = null
 )
 
+@OptIn(FlowPreview::class)
 class CatalogViewModel(application: Application) : AndroidViewModel(application) {
 
     private val appUpdater = AppUpdater_Antigravity(application)
@@ -366,7 +370,7 @@ class CatalogViewModel(application: Application) : AndroidViewModel(application)
     )
 
     init {
-        viewModelScope.launch {
+        viewModelScope.launch(Dispatchers.IO) {
             val currentSettings = settingsRepository.settingsFlow.value
             repository.refreshVolumesOnly(currentSettings.hideBootUsbPartitions)
             // Seed the 21 bilingual built-in channels (respecting any user removals) first
@@ -376,7 +380,7 @@ class CatalogViewModel(application: Application) : AndroidViewModel(application)
                     appLanguage = currentSettings.appLanguage
                 )
             }
-            val existingCount = database.videoDao().getAllVideosOnce().size
+            val existingCount = database.videoDao().getVideoCount()
             if (currentSettings.autoScanOnStartup || existingCount == 0) {
                 repository.refreshStorageAndScan(currentSettings.hideBootUsbPartitions)
             }
@@ -420,16 +424,18 @@ class CatalogViewModel(application: Application) : AndroidViewModel(application)
         }
 
         viewModelScope.launch {
-            UsbMountReceiver.usbEvents.collectLatest { event ->
-                if (event != null) {
-                    val currentSettings = settingsRepository.settingsFlow.value
-                    if (currentSettings.autoScanOnUsbMount || event.action == "MANUAL_RESCAN") {
-                        repository.refreshStorageAndScan(currentSettings.hideBootUsbPartitions)
-                    } else {
-                        repository.refreshVolumesOnly(currentSettings.hideBootUsbPartitions)
+            UsbMountReceiver.usbEvents
+                .debounce(1_500L)
+                .collectLatest { event ->
+                    if (event != null) {
+                        val currentSettings = settingsRepository.settingsFlow.value
+                        if (currentSettings.autoScanOnUsbMount || event.action == "MANUAL_RESCAN") {
+                            repository.refreshStorageAndScan(currentSettings.hideBootUsbPartitions)
+                        } else {
+                            repository.refreshVolumesOnly(currentSettings.hideBootUsbPartitions)
+                        }
                     }
                 }
-            }
         }
 
         viewModelScope.launch {
@@ -440,7 +446,7 @@ class CatalogViewModel(application: Application) : AndroidViewModel(application)
 
     fun checkForAppUpdates(isManual: Boolean = false) {
         viewModelScope.launch {
-            _dialogState.value = _dialogState.value.copy(updateState = UpdateState_Antigravity.Checking)
+            _dialogState.update { it.copy(updateState = UpdateState_Antigravity.Checking) }
             val currentVersion = runCatching {
                 val pInfo = getApplication<Application>().packageManager.getPackageInfo(getApplication<Application>().packageName, 0)
                 pInfo.versionName ?: "1.0.0"
@@ -449,27 +455,27 @@ class CatalogViewModel(application: Application) : AndroidViewModel(application)
             val result = appUpdater.checkForUpdate(currentVersion)
             result.onSuccess { info ->
                 if (info == null) {
-                    _dialogState.value = _dialogState.value.copy(
-                        updateState = UpdateState_Antigravity.UpToDate(currentVersion)
-                    )
+                    _dialogState.update {
+                        it.copy(updateState = UpdateState_Antigravity.UpToDate(currentVersion))
+                    }
                 } else if (info.isNewer) {
-                    _dialogState.value = _dialogState.value.copy(
-                        updateState = UpdateState_Antigravity.UpdateAvailable(info)
-                    )
+                    _dialogState.update {
+                        it.copy(updateState = UpdateState_Antigravity.UpdateAvailable(info))
+                    }
                 } else {
-                    _dialogState.value = _dialogState.value.copy(
-                        updateState = UpdateState_Antigravity.UpToDate(currentVersion)
-                    )
+                    _dialogState.update {
+                        it.copy(updateState = UpdateState_Antigravity.UpToDate(currentVersion))
+                    }
                 }
             }.onFailure { err ->
                 if (isManual) {
-                    _dialogState.value = _dialogState.value.copy(
-                        updateState = UpdateState_Antigravity.Error(err.message ?: "Failed to check for updates")
-                    )
+                    _dialogState.update {
+                        it.copy(updateState = UpdateState_Antigravity.Error(err.message ?: "Failed to check for updates"))
+                    }
                 } else {
-                    _dialogState.value = _dialogState.value.copy(
-                        updateState = UpdateState_Antigravity.Idle
-                    )
+                    _dialogState.update {
+                        it.copy(updateState = UpdateState_Antigravity.Idle)
+                    }
                 }
             }
         }
@@ -477,28 +483,28 @@ class CatalogViewModel(application: Application) : AndroidViewModel(application)
 
     fun downloadAndInstallUpdate(info: UpdateInfo_Antigravity) {
         viewModelScope.launch {
-            _dialogState.value = _dialogState.value.copy(
-                updateState = UpdateState_Antigravity.Downloading(0, 0, info.fileSize)
-            )
+            _dialogState.update {
+                it.copy(updateState = UpdateState_Antigravity.Downloading(0, 0, info.fileSize))
+            }
             val result = appUpdater.downloadApk(info) { percent, downloaded, total ->
-                _dialogState.value = _dialogState.value.copy(
-                    updateState = UpdateState_Antigravity.Downloading(percent, downloaded, total)
-                )
+                _dialogState.update {
+                    it.copy(updateState = UpdateState_Antigravity.Downloading(percent, downloaded, total))
+                }
             }
             result.onSuccess { apkFile ->
-                _dialogState.value = _dialogState.value.copy(
-                    updateState = UpdateState_Antigravity.ReadyToInstall(apkFile, info)
-                )
+                _dialogState.update {
+                    it.copy(updateState = UpdateState_Antigravity.ReadyToInstall(apkFile, info))
+                }
                 appUpdater.installApk(apkFile).onFailure { err ->
                     val msg = err.message ?: "Failed to launch installer"
-                    _dialogState.value = _dialogState.value.copy(
-                        updateState = UpdateState_Antigravity.Error(msg)
-                    )
+                    _dialogState.update {
+                        it.copy(updateState = UpdateState_Antigravity.Error(msg))
+                    }
                 }
             }.onFailure { err ->
-                _dialogState.value = _dialogState.value.copy(
-                    updateState = UpdateState_Antigravity.Error("Download failed: ${err.message}")
-                )
+                _dialogState.update {
+                    it.copy(updateState = UpdateState_Antigravity.Error("Download failed: ${err.message}"))
+                }
             }
         }
     }
@@ -506,14 +512,14 @@ class CatalogViewModel(application: Application) : AndroidViewModel(application)
     fun installDownloadedApk(apkFile: java.io.File) {
         appUpdater.installApk(apkFile).onFailure { err ->
             val msg = err.message ?: "Failed to launch installer"
-            _dialogState.value = _dialogState.value.copy(
-                updateState = UpdateState_Antigravity.Error(msg)
-            )
+            _dialogState.update {
+                it.copy(updateState = UpdateState_Antigravity.Error(msg))
+            }
         }
     }
 
     fun dismissUpdateStatus() {
-        _dialogState.value = _dialogState.value.copy(updateState = UpdateState_Antigravity.Idle)
+        _dialogState.update { it.copy(updateState = UpdateState_Antigravity.Idle) }
     }
 
     fun rescanStorage() {
@@ -551,7 +557,7 @@ class CatalogViewModel(application: Application) : AndroidViewModel(application)
             UiModePreference.AUTO -> _dialogState.value.isTvModeOverride ?: defaultIsTv
         }
         val nextIsTv = !currentEffective
-        _dialogState.value = _dialogState.value.copy(isTvModeOverride = nextIsTv)
+        _dialogState.update { it.copy(isTvModeOverride = nextIsTv) }
         settingsRepository.update {
             it.copy(uiModePreference = if (nextIsTv) UiModePreference.FORCE_TV else UiModePreference.FORCE_TABLET)
         }
@@ -566,7 +572,7 @@ class CatalogViewModel(application: Application) : AndroidViewModel(application)
     }
 
     fun resetSettingsToDefaults() {
-        _dialogState.value = _dialogState.value.copy(isTvModeOverride = null)
+        _dialogState.update { it.copy(isTvModeOverride = null) }
         settingsRepository.resetToDefaults()
         viewModelScope.launch {
             repository.seedAndSyncBuiltInChannels(
@@ -578,72 +584,82 @@ class CatalogViewModel(application: Application) : AndroidViewModel(application)
 
     // YouTube Link Dialog & Import
     fun openAddYouTubeDialog() {
-        _dialogState.value = _dialogState.value.copy(
-            showAddYouTubeDialog = true,
-            youtubeErrorMessage = null,
-            youtubeStatusMessage = null
-        )
+        _dialogState.update {
+            it.copy(
+                showAddYouTubeDialog = true,
+                youtubeErrorMessage = null,
+                youtubeStatusMessage = null
+            )
+        }
     }
 
     fun closeAddYouTubeDialog() {
-        _dialogState.value = _dialogState.value.copy(
-            showAddYouTubeDialog = false,
-            isImportingYouTube = false,
-            youtubeErrorMessage = null,
-            youtubeStatusMessage = null
-        )
+        _dialogState.update {
+            it.copy(
+                showAddYouTubeDialog = false,
+                isImportingYouTube = false,
+                youtubeErrorMessage = null,
+                youtubeStatusMessage = null
+            )
+        }
     }
 
     fun importYouTubeLink(rawInput: String, playImmediately: Boolean) {
         viewModelScope.launch {
-            _dialogState.value = _dialogState.value.copy(
-                isImportingYouTube = true,
-                youtubeErrorMessage = null,
-                youtubeStatusMessage = null
-            )
+            _dialogState.update {
+                it.copy(
+                    isImportingYouTube = true,
+                    youtubeErrorMessage = null,
+                    youtubeStatusMessage = null
+                )
+            }
             val result = repository.importYouTubeUrl(rawInput)
             result.onSuccess { imported ->
                 val chFolder = imported.firstVideo.entity.folderPath
                 if (chFolder.startsWith("youtube_channel_")) {
                     settingsRepository.restoreBuiltInChannel(chFolder.removePrefix("youtube_channel_"))
                 }
-                _dialogState.value = _dialogState.value.copy(
-                    isImportingYouTube = false,
-                    showAddYouTubeDialog = false,
-                    youtubeErrorMessage = null,
-                    youtubeStatusMessage = imported.summaryMessage,
-                    thumbnailRevision = _dialogState.value.thumbnailRevision + 1
-                )
+                _dialogState.update {
+                    it.copy(
+                        isImportingYouTube = false,
+                        showAddYouTubeDialog = false,
+                        youtubeErrorMessage = null,
+                        youtubeStatusMessage = imported.summaryMessage,
+                        thumbnailRevision = it.thumbnailRevision + 1
+                    )
+                }
                 if (playImmediately) {
                     openVideo(imported.firstVideo, imported.playlist)
                 } else {
                     _selectedSection.value = SidebarSection.PLAYLISTS
                 }
             }.onFailure { err ->
-                _dialogState.value = _dialogState.value.copy(
-                    isImportingYouTube = false,
-                    youtubeErrorMessage = err.message ?: "Failed to import YouTube link."
-                )
+                _dialogState.update {
+                    it.copy(
+                        isImportingYouTube = false,
+                        youtubeErrorMessage = err.message ?: "Failed to import YouTube link."
+                    )
+                }
             }
         }
     }
 
     // In-App TV Folder Picker Dialog
     fun openFolderPickerDialog() {
-        _dialogState.value = _dialogState.value.copy(showFolderPickerDialog = true)
+        _dialogState.update { it.copy(showFolderPickerDialog = true) }
     }
 
     fun closeFolderPickerDialog() {
-        _dialogState.value = _dialogState.value.copy(showFolderPickerDialog = false)
+        _dialogState.update { it.copy(showFolderPickerDialog = false) }
     }
 
     // Video Options & Thumbnail Controls
     fun openVideoOptions(video: VideoItem) {
-        _dialogState.value = _dialogState.value.copy(selectedVideoForOptions = video)
+        _dialogState.update { it.copy(selectedVideoForOptions = video) }
     }
 
     fun closeVideoOptions() {
-        _dialogState.value = _dialogState.value.copy(selectedVideoForOptions = null)
+        _dialogState.update { it.copy(selectedVideoForOptions = null) }
     }
 
     fun forceYouTubeThumbnailForVideo(video: VideoItem) {
@@ -657,9 +673,9 @@ class CatalogViewModel(application: Application) : AndroidViewModel(application)
                 videoDao = database.videoDao(),
                 forceRefresh = true
             )
-            _dialogState.value = _dialogState.value.copy(
-                thumbnailRevision = _dialogState.value.thumbnailRevision + 1
-            )
+            _dialogState.update {
+                it.copy(thumbnailRevision = it.thumbnailRevision + 1)
+            }
         }
     }
 
@@ -677,9 +693,9 @@ class CatalogViewModel(application: Application) : AndroidViewModel(application)
                 positionMs = targetMs,
                 videoDao = database.videoDao()
             )
-            _dialogState.value = _dialogState.value.copy(
-                thumbnailRevision = _dialogState.value.thumbnailRevision + 1
-            )
+            _dialogState.update {
+                it.copy(thumbnailRevision = it.thumbnailRevision + 1)
+            }
         }
     }
 
@@ -689,10 +705,12 @@ class CatalogViewModel(application: Application) : AndroidViewModel(application)
             val ctx = getApplication<Application>().applicationContext
             val settings = settingsRepository.settingsFlow.value
             val allVideos = uiState.value.snapshot.allVideos
-            _dialogState.value = _dialogState.value.copy(
-                isGeneratingThumbnails = true,
-                thumbnailStatusMessage = "Generating thumbnails (0/${allVideos.size})..."
-            )
+            _dialogState.update {
+                it.copy(
+                    isGeneratingThumbnails = true,
+                    thumbnailStatusMessage = "Generating thumbnails (0/${allVideos.size})..."
+                )
+            }
             var done = 0
             for (video in allVideos) {
                 ThumbnailManager.resolveOrGenerateThumbnail(
@@ -703,16 +721,20 @@ class CatalogViewModel(application: Application) : AndroidViewModel(application)
                     forceRefresh = true
                 )
                 done++
-                _dialogState.value = _dialogState.value.copy(
-                    thumbnailStatusMessage = "Generated $done/${allVideos.size} thumbnails (YouTube first -> Auto Frame)...",
-                    thumbnailRevision = _dialogState.value.thumbnailRevision + 1
+                _dialogState.update {
+                    it.copy(
+                        thumbnailStatusMessage = "Generated $done/${allVideos.size} thumbnails (YouTube first -> Auto Frame)...",
+                        thumbnailRevision = it.thumbnailRevision + 1
+                    )
+                }
+            }
+            _dialogState.update {
+                it.copy(
+                    isGeneratingThumbnails = false,
+                    thumbnailStatusMessage = "Completed all $done thumbnails!",
+                    thumbnailRevision = it.thumbnailRevision + 1
                 )
             }
-            _dialogState.value = _dialogState.value.copy(
-                isGeneratingThumbnails = false,
-                thumbnailStatusMessage = "Completed all $done thumbnails!",
-                thumbnailRevision = _dialogState.value.thumbnailRevision + 1
-            )
         }
     }
 
@@ -720,10 +742,12 @@ class CatalogViewModel(application: Application) : AndroidViewModel(application)
         viewModelScope.launch {
             val ctx = getApplication<Application>().applicationContext
             ThumbnailManager.clearThumbnailCache(ctx)
-            _dialogState.value = _dialogState.value.copy(
-                thumbnailStatusMessage = "Thumbnail disk cache cleared.",
-                thumbnailRevision = _dialogState.value.thumbnailRevision + 1
-            )
+            _dialogState.update {
+                it.copy(
+                    thumbnailStatusMessage = "Thumbnail disk cache cleared.",
+                    thumbnailRevision = it.thumbnailRevision + 1
+                )
+            }
         }
     }
 
@@ -754,37 +778,45 @@ class CatalogViewModel(application: Application) : AndroidViewModel(application)
     fun addBuiltInChannelToLibrary(channel: KidsChannelItem) {
         viewModelScope.launch {
             settingsRepository.restoreBuiltInChannel(channel.channelId)
-            _dialogState.value = _dialogState.value.copy(
-                isImportingYouTube = true,
-                youtubeStatusMessage = "Adding ${channel.channelName}..."
-            )
+            _dialogState.update {
+                it.copy(
+                    isImportingYouTube = true,
+                    youtubeStatusMessage = "Adding ${channel.channelName}..."
+                )
+            }
             repository.addBuiltInChannelToLibrary(channel)
-            _dialogState.value = _dialogState.value.copy(
-                isImportingYouTube = false,
-                youtubeStatusMessage = "${channel.channelName} added to Library"
-            )
+            _dialogState.update {
+                it.copy(
+                    isImportingYouTube = false,
+                    youtubeStatusMessage = "${channel.channelName} added to Library"
+                )
+            }
         }
     }
 
     fun openOrImportKidsPlaylist(playlistId: String, playImmediately: Boolean = true) {
         viewModelScope.launch {
-            _dialogState.value = _dialogState.value.copy(
-                isImportingYouTube = true,
-                youtubeStatusMessage = "Loading Kids Playlist..."
-            )
+            _dialogState.update {
+                it.copy(
+                    isImportingYouTube = true,
+                    youtubeStatusMessage = "Loading Kids Playlist..."
+                )
+            }
             val res = repository.importYouTubeUrl("https://www.youtube.com/playlist?list=$playlistId")
-            _dialogState.value = _dialogState.value.copy(
-                isImportingYouTube = false,
-                youtubeStatusMessage = null
-            )
+            _dialogState.update {
+                it.copy(
+                    isImportingYouTube = false,
+                    youtubeStatusMessage = null
+                )
+            }
             res.onSuccess { imported ->
                 if (playImmediately) {
                     openVideo(imported.firstVideo, imported.playlist)
                 }
             }.onFailure { err ->
-                _dialogState.value = _dialogState.value.copy(
-                    youtubeErrorMessage = err.message ?: "Could not open kids playlist"
-                )
+                _dialogState.update {
+                    it.copy(youtubeErrorMessage = err.message ?: "Could not open kids playlist")
+                }
             }
         }
     }

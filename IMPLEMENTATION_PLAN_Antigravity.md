@@ -112,14 +112,14 @@ Master engineering checklist covering Tasks **T01–T18** across **Phases 0–3*
   - **Verification**:
     - `.\gradlew.bat :app:compileDebugKotlin`
 
-- [ ] **T12 — Activity Lifecycle, Background Audio & PiP Polish**
+- [x] **T12 — Activity Lifecycle, Background Audio & PiP Polish** *(Wave 2 lifecycle/PiP + Wave 3 `WatchTimerManager_Antigravity`, `WatchTimerManagerTest_Antigravity`, Kid Screen Lock, Watch Timer overlay, and `isOnline` auto-reconnect complete)*
   - **Goal**: Update `MainActivity` lifecycle and Picture-in-Picture transitions so playback continues in the background when `backgroundPlaybackEnabled` is `true` and pauses cleanly when `false`.
   - **Target Files**:
     - `app/src/main/kotlin/com/joudjawadtube/player/MainActivity.kt`
   - **Verification**:
     - `.\gradlew.bat :app:compileDebugKotlin`
 
-- [ ] **T13 — Catalog, Channels & Offline UI Wiring**
+- [x] **T13 — Catalog, Channels & Offline UI Wiring** *(Wave 3 Kids-first 4-tab `CompactBottomNav_Antigravity`, 48dp touch targets, RTL HUD fix, Light Mode theme tokens, and 302/302 EN/AR localization complete)*
   - **Goal**: Wire `OfflineBanner_Antigravity`, parental-gated channel/playlist/reset actions, and non-blocking thumbnail loading across TV, Tablet/Phone, and Kids Picks screens.
   - **Target Files**:
     - `app/src/main/kotlin/com/joudjawadtube/player/ui/catalog/CatalogViewModel.kt`
@@ -134,7 +134,7 @@ Master engineering checklist covering Tasks **T01–T18** across **Phases 0–3*
 
 ## Phase 3 — Persistence, Scanner Reliability & Release Verification
 
-- [ ] **T14 — Room Database Integrity & Migration Verification**
+- [x] **T14 — Room Database Integrity & Migration Verification** *(Wave 3 chunked `getProgressForKeys`, `syncMutex`, `ConcurrentHashMap`, `CatalogViewModel` `_dialogState.update` + IO init + USB debounce, and duplicate `UsbMountReceiver` removal complete)*
   - **Goal**: Audit `AppDatabase`, DAOs, and repositories to guarantee zero user data loss from DB v4 across schema upgrades and ensure all queries run off the main thread.
   - **Target Files**:
     - `app/src/main/kotlin/com/joudjawadtube/player/data/local/AppDatabase.kt`
@@ -152,7 +152,7 @@ Master engineering checklist covering Tasks **T01–T18** across **Phases 0–3*
   - **Verification**:
     - `.\gradlew.bat :app:compileDebugKotlin :app:testDebugUnitTest`
 
-- [ ] **T16 — Unit & Regression Test Suite Expansion**
+- [x] **T16 — Unit & Regression Test Suite Expansion** *(Wave 3 Room schema export `4.json`, `MIGRATION_1_2`, non-destructive migration path, and `WatchTimerManagerTest_Antigravity` complete)*
   - **Goal**: Cover new settings defaults/persistence, parental gate validation, watch timer countdowns, YouTube fallback flags, and security checks with deterministic JUnit tests.
   - **Target Files**:
     - `app/src/test/kotlin/com/joudjawadtube/player/`

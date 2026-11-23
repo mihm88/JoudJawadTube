@@ -95,10 +95,12 @@ import com.joudjawadtube.player.ui.components.DeviceFormFactor
 import com.joudjawadtube.player.ui.components.LocalWindowLayoutInfo
 import com.joudjawadtube.player.ui.components.ManageLibraryAndDataDialog_Antigravity
 import kotlinx.coroutines.launch
+import com.joudjawadtube.player.ui.theme.LocalJoudColors
 import com.joudjawadtube.player.ui.theme.SmartTubeCardBg
 import com.joudjawadtube.player.ui.theme.SmartTubeCardFocusedBg
 import com.joudjawadtube.player.ui.theme.SmartTubeFocusBorder
 import com.joudjawadtube.player.ui.theme.SmartTubeRed
+import com.joudjawadtube.player.ui.theme.SmartTubeSurface
 import com.joudjawadtube.player.ui.theme.SmartTubeTextPrimary
 import com.joudjawadtube.player.ui.theme.SmartTubeTextSecondary
 import com.joudjawadtube.player.ui.theme.SmartTubeUsbCyan
@@ -143,10 +145,11 @@ fun SettingsScreen(
     val context = LocalContext.current
     val layoutInfo = LocalWindowLayoutInfo.current
     val isCompact = layoutInfo.isCompact
+    val isDark = LocalJoudColors.current.isDark
     val detectedModeLabel = when (layoutInfo.detectedFormFactor) {
-        DeviceFormFactor.TV -> "Android TV"
-        DeviceFormFactor.TABLET -> "Tablet"
-        DeviceFormFactor.PHONE -> "Phone"
+        DeviceFormFactor.TV -> stringResource(R.string.settings_device_tv)
+        DeviceFormFactor.TABLET -> stringResource(R.string.settings_device_tablet)
+        DeviceFormFactor.PHONE -> stringResource(R.string.settings_device_phone)
     }
     var pendingDestructiveAction by remember { mutableStateOf<DestructiveAction?>(null) }
     var showManageLibraryDataDialog by remember { mutableStateOf(false) }
@@ -158,9 +161,9 @@ fun SettingsScreen(
     }
 
     val resizeLabel = when (settings.defaultResizeMode) {
-        AspectRatioFrameLayout.RESIZE_MODE_ZOOM -> "Zoom (Crop to Fill)"
-        AspectRatioFrameLayout.RESIZE_MODE_FILL -> "Stretch (Full Screen)"
-        else -> "Fit (Original Aspect)"
+        AspectRatioFrameLayout.RESIZE_MODE_ZOOM -> stringResource(R.string.player_aspect_zoom)
+        AspectRatioFrameLayout.RESIZE_MODE_FILL -> stringResource(R.string.player_aspect_stretch)
+        else -> stringResource(R.string.player_aspect_fit)
     }
 
     LazyColumn(
@@ -175,7 +178,7 @@ fun SettingsScreen(
                 .fillMaxWidth()
                 .clip(RoundedCornerShape(14.dp))
                 .background(SmartTubeCardBg)
-                .border(1.dp, Color.White.copy(alpha = 0.08f), RoundedCornerShape(14.dp))
+                .border(1.dp, SmartTubeTextSecondary.copy(alpha = 0.16f), RoundedCornerShape(14.dp))
                 .padding(if (isCompact) 14.dp else 18.dp)
 
             @Composable
@@ -201,14 +204,19 @@ fun SettingsScreen(
                     }
                     Column {
                         Text(
-                            text = "Settings & Full Control",
+                            text = stringResource(R.string.settings_header_title),
                             color = SmartTubeTextPrimary,
                             fontSize = if (isCompact) 17.sp else 19.sp,
                             lineHeight = 23.sp,
                             fontWeight = FontWeight.ExtraBold
                         )
                         Text(
-                            text = "$totalVideoCount Videos in Catalog • $usbDriveCount USB Connected • ${savedPlaylists.size} YouTube Playlists",
+                            text = stringResource(
+                                R.string.settings_header_summary,
+                                totalVideoCount,
+                                usbDriveCount,
+                                savedPlaylists.size
+                            ),
                             color = SmartTubeTextSecondary,
                             fontSize = 12.sp,
                             lineHeight = 16.sp
@@ -225,13 +233,13 @@ fun SettingsScreen(
                 ) {
                     ActionPillButton(
                         icon = Icons.Default.AddLink,
-                        text = "+ YouTube Link",
+                        text = stringResource(R.string.action_add_youtube),
                         isPrimary = true,
                         onClick = onAddYouTubeLink
                     )
                     ActionPillButton(
                         icon = Icons.Default.Refresh,
-                        text = if (isScanning) "Scanning..." else "Rescan Storage",
+                        text = if (isScanning) stringResource(R.string.status_scanning) else stringResource(R.string.settings_rescan_storage),
                         isPrimary = false,
                         onClick = onRescanStorage
                     )
@@ -398,13 +406,13 @@ fun SettingsScreen(
         // Section 1: Thumbnails & Performance
         item(key = "settings_thumbnails") {
             SettingsCategoryCard(
-                title = "1. Thumbnail Generation & Priority",
+                title = stringResource(R.string.settings_section_thumbnails),
                 subtitle = thumbnailStatusMessage
-                    ?: "Priority: Official YouTube HD Thumbnail first, automatic video frame extraction if unavailable"
+                    ?: stringResource(R.string.settings_thumbnails_sub)
             ) {
                 SettingsCycleOptionRow(
                     icon = Icons.Default.Image,
-                    title = "Thumbnail Source Priority",
+                    title = stringResource(R.string.settings_thumbnail_source_title),
                     subtitle = settings.thumbnailMode.description,
                     valueLabel = settings.thumbnailMode.label,
                     onClick = {
@@ -416,8 +424,8 @@ fun SettingsScreen(
 
                 SettingsCycleOptionRow(
                     icon = Icons.Default.PlayArrow,
-                    title = "Automatic Video Frame Timestamp (Fallback)",
-                    subtitle = "Timestamp used when generating thumbnail directly from a local/USB video file",
+                    title = stringResource(R.string.settings_frame_timestamp_title),
+                    subtitle = stringResource(R.string.settings_frame_timestamp_sub),
                     valueLabel = settings.frameCapturePosition.label,
                     onClick = {
                         val positions = FrameCapturePosition.entries
@@ -428,9 +436,9 @@ fun SettingsScreen(
 
                 SettingsCycleOptionRow(
                     icon = Icons.Default.Refresh,
-                    title = if (isGeneratingThumbnails) "Generating Thumbnails in Background..." else "Generate / Refresh All Thumbnails Now",
-                    subtitle = "Fetches YouTube thumbnails first for all $totalVideoCount videos and falls back to automatic frame capture",
-                    valueLabel = if (isGeneratingThumbnails) "Running..." else "Run Now",
+                    title = if (isGeneratingThumbnails) stringResource(R.string.settings_regen_thumbs_running) else stringResource(R.string.settings_regen_thumbs_title),
+                    subtitle = stringResource(R.string.settings_regen_thumbs_sub, totalVideoCount),
+                    valueLabel = if (isGeneratingThumbnails) stringResource(R.string.settings_running) else stringResource(R.string.settings_run_now),
                     isAccent = true,
                     onClick = onRegenerateAllThumbnails
                 )
@@ -438,9 +446,9 @@ fun SettingsScreen(
                 val formattedCache = FormatUtils.formatFileSize(cacheSizeBytes).ifBlank { "0 MB" }
                 SettingsCycleOptionRow(
                     icon = Icons.Default.Delete,
-                    title = "Clear Persistent Thumbnail Disk Cache",
-                    subtitle = "Currently storing $formattedCache of fast-loading 16:9 thumbnails on internal flash",
-                    valueLabel = "Clear ($formattedCache)",
+                    title = stringResource(R.string.settings_clear_thumb_cache_title),
+                    subtitle = stringResource(R.string.settings_clear_thumb_cache_sub, formattedCache),
+                    valueLabel = stringResource(R.string.settings_clear_cache_btn, formattedCache),
                     onClick = {
                         onClearThumbnailCache()
                         cacheSizeBytes = 0L
@@ -452,14 +460,14 @@ fun SettingsScreen(
         // Section 2: Player & Playback Controls
         item(key = "settings_playback") {
             SettingsCategoryCard(
-                title = "2. Video Player & Playback",
-                subtitle = "Configure default speed, seek interval, aspect ratio, auto-play, and subtitles"
+                title = stringResource(R.string.settings_section_playback_numbered),
+                subtitle = stringResource(R.string.settings_playback_sub)
             ) {
                 val speeds = listOf(0.5f, 0.75f, 1.0f, 1.25f, 1.5f, 2.0f)
                 SettingsCycleOptionRow(
                     icon = Icons.Default.Speed,
-                    title = "Default Playback Speed",
-                    subtitle = "Initial playback speed when opening any video",
+                    title = stringResource(R.string.settings_default_speed_title),
+                    subtitle = stringResource(R.string.settings_default_speed_sub),
                     valueLabel = "${settings.defaultPlaybackSpeed}x",
                     onClick = {
                         val idx = speeds.indexOfFirst { kotlin.math.abs(it - settings.defaultPlaybackSpeed) < 0.01f }
@@ -470,8 +478,8 @@ fun SettingsScreen(
 
                 SettingsCycleOptionRow(
                     icon = Icons.Default.AspectRatio,
-                    title = "Default Aspect Ratio / Resize Mode",
-                    subtitle = "Default video scaling inside the player",
+                    title = stringResource(R.string.settings_default_aspect_title),
+                    subtitle = stringResource(R.string.settings_default_aspect_sub),
                     valueLabel = resizeLabel,
                     onClick = {
                         val nextMode = when (settings.defaultResizeMode) {
@@ -486,9 +494,9 @@ fun SettingsScreen(
                 val seekSteps = listOf(5, 10, 15, 30, 60)
                 SettingsCycleOptionRow(
                     icon = Icons.Default.History,
-                    title = "D-Pad Left / Right Seek Interval",
-                    subtitle = "Seconds to jump when pressing Rewind / Fast-Forward or Left / Right",
-                    valueLabel = "${settings.seekIntervalSec} Seconds",
+                    title = stringResource(R.string.settings_seek_interval_title),
+                    subtitle = stringResource(R.string.settings_seek_interval_sub),
+                    valueLabel = stringResource(R.string.settings_seek_seconds, settings.seekIntervalSec),
                     onClick = {
                         val idx = seekSteps.indexOf(settings.seekIntervalSec)
                         val next = seekSteps[(idx + 1).coerceAtLeast(0) % seekSteps.size]
@@ -498,9 +506,9 @@ fun SettingsScreen(
 
                 SettingsCycleOptionRow(
                     icon = Icons.Default.PlayArrow,
-                    title = "Auto-Play Next Video in Folder / Playlist",
-                    subtitle = "Automatically play the next episode when the current video finishes",
-                    valueLabel = if (settings.autoPlayNext) "Enabled" else "Disabled",
+                    title = stringResource(R.string.settings_auto_play_next),
+                    subtitle = stringResource(R.string.settings_auto_play_next_sub),
+                    valueLabel = if (settings.autoPlayNext) stringResource(R.string.settings_enabled) else stringResource(R.string.settings_disabled),
                     isAccent = settings.autoPlayNext,
                     onClick = {
                         onUpdateSettings { it.copy(autoPlayNext = !it.autoPlayNext) }
@@ -509,8 +517,8 @@ fun SettingsScreen(
 
                 SettingsCycleOptionRow(
                     icon = Icons.Default.History,
-                    title = "Resume Playback Behavior",
-                    subtitle = "Whether to resume from your saved position or start from 00:00",
+                    title = stringResource(R.string.settings_resume_mode),
+                    subtitle = stringResource(R.string.settings_resume_mode_sub),
                     valueLabel = settings.resumeMode.label,
                     onClick = {
                         val modes = ResumeMode.entries
@@ -521,9 +529,9 @@ fun SettingsScreen(
 
                 SettingsCycleOptionRow(
                     icon = Icons.Default.ClosedCaption,
-                    title = "Subtitles Enabled by Default",
-                    subtitle = "Automatically enable external (.srt/.vtt/.ass) or YouTube subtitles when available",
-                    valueLabel = if (settings.subtitlesEnabledByDefault) "Enabled" else "Disabled",
+                    title = stringResource(R.string.settings_subtitles_default),
+                    subtitle = stringResource(R.string.settings_subtitles_default_sub),
+                    valueLabel = if (settings.subtitlesEnabledByDefault) stringResource(R.string.settings_enabled) else stringResource(R.string.settings_disabled),
                     isAccent = settings.subtitlesEnabledByDefault,
                     onClick = {
                         onUpdateSettings { it.copy(subtitlesEnabledByDefault = !it.subtitlesEnabledByDefault) }
@@ -535,13 +543,13 @@ fun SettingsScreen(
         // Section 3: UI, Layout & Fonts
         item(key = "settings_ui") {
             SettingsCategoryCard(
-                title = "3. Interface, Layout & Font Fitting",
-                subtitle = "Customize TV, Tablet & Phone layout, sidebar behavior, and button/font scale"
+                title = stringResource(R.string.settings_section_ui_numbered),
+                subtitle = stringResource(R.string.settings_ui_sub)
             ) {
                 SettingsCycleOptionRow(
                     icon = Icons.Default.Tv,
-                    title = "Interface Layout Mode",
-                    subtitle = "Auto-detected device: $detectedModeLabel (TV / Tablet / Phone)",
+                    title = stringResource(R.string.settings_ui_mode),
+                    subtitle = stringResource(R.string.settings_ui_mode_detected_sub, detectedModeLabel),
                     valueLabel = settings.uiModePreference.label,
                     onClick = {
                         val modes = UiModePreference.entries
@@ -552,8 +560,8 @@ fun SettingsScreen(
 
                 SettingsCycleOptionRow(
                     icon = Icons.Default.Settings,
-                    title = "Sidebar Navigation Behavior",
-                    subtitle = "Menu starts collapsed as icons and expands over content only when pressing the Menu button",
+                    title = stringResource(R.string.settings_sidebar_mode),
+                    subtitle = stringResource(R.string.settings_sidebar_mode_sub),
                     valueLabel = settings.sidebarMode.label,
                     onClick = {
                         val modes = SidebarMode.entries
@@ -564,8 +572,8 @@ fun SettingsScreen(
 
                 SettingsCycleOptionRow(
                     icon = Icons.Default.AspectRatio,
-                    title = "Button & Text Scale",
-                    subtitle = "Adjust text and button density across the app",
+                    title = stringResource(R.string.settings_font_scale),
+                    subtitle = stringResource(R.string.settings_font_scale_sub),
                     valueLabel = settings.uiFontScale.label,
                     onClick = {
                         val scales = UiFontScale.entries
@@ -579,14 +587,14 @@ fun SettingsScreen(
         // Section 4: Storage, USB & Saved Folders
         item(key = "settings_storage") {
             SettingsCategoryCard(
-                title = "4. Storage, USB Drives & Custom Folders",
-                subtitle = "Control automatic scanning and manage custom USB/local folders"
+                title = stringResource(R.string.settings_section_storage_numbered),
+                subtitle = stringResource(R.string.settings_storage_sub)
             ) {
                 SettingsCycleOptionRow(
                     icon = Icons.Default.Storage,
-                    title = "Auto-Scan Storage on App Startup",
-                    subtitle = "Automatically scan internal storage and USB drives when opening the app",
-                    valueLabel = if (settings.autoScanOnStartup) "Enabled" else "Disabled",
+                    title = stringResource(R.string.settings_auto_scan_startup),
+                    subtitle = stringResource(R.string.settings_auto_scan_startup_sub),
+                    valueLabel = if (settings.autoScanOnStartup) stringResource(R.string.settings_enabled) else stringResource(R.string.settings_disabled),
                     isAccent = settings.autoScanOnStartup,
                     onClick = {
                         onUpdateSettings { it.copy(autoScanOnStartup = !it.autoScanOnStartup) }
@@ -595,9 +603,9 @@ fun SettingsScreen(
 
                 SettingsCycleOptionRow(
                     icon = Icons.Default.Usb,
-                    title = "Auto-Scan When USB Drive Plugged / Unplugged",
-                    subtitle = "Automatically refresh catalog when a USB drive is connected",
-                    valueLabel = if (settings.autoScanOnUsbMount) "Enabled" else "Disabled",
+                    title = stringResource(R.string.settings_auto_scan_usb),
+                    subtitle = stringResource(R.string.settings_auto_scan_usb_sub),
+                    valueLabel = if (settings.autoScanOnUsbMount) stringResource(R.string.settings_enabled) else stringResource(R.string.settings_disabled),
                     isAccent = settings.autoScanOnUsbMount,
                     onClick = {
                         onUpdateSettings { it.copy(autoScanOnUsbMount = !it.autoScanOnUsbMount) }
@@ -606,9 +614,9 @@ fun SettingsScreen(
 
                 SettingsCycleOptionRow(
                     icon = Icons.Default.Usb,
-                    title = "Hide Boot / EFI USB Partitions (e.g., VTOYEFI)",
-                    subtitle = "Ignores non-media system boot partitions on multi-partition USB drives",
-                    valueLabel = if (settings.hideBootUsbPartitions) "Hidden" else "Shown",
+                    title = stringResource(R.string.settings_hide_boot_partitions),
+                    subtitle = stringResource(R.string.settings_hide_boot_partitions_sub),
+                    valueLabel = if (settings.hideBootUsbPartitions) stringResource(R.string.settings_hidden) else stringResource(R.string.settings_shown),
                     isAccent = settings.hideBootUsbPartitions,
                     onClick = {
                         onUpdateSettings { it.copy(hideBootUsbPartitions = !it.hideBootUsbPartitions) }
@@ -618,17 +626,17 @@ fun SettingsScreen(
 
                 SettingsCycleOptionRow(
                     icon = Icons.Default.FolderOpen,
-                    title = "Add Video Folder (TV & USB Folder Browser)",
-                    subtitle = "Browse internal storage or USB drives and add a specific folder",
-                    valueLabel = "Browse Folders",
+                    title = stringResource(R.string.settings_add_folder_title),
+                    subtitle = stringResource(R.string.settings_add_folder_sub),
+                    valueLabel = stringResource(R.string.settings_browse_folders),
                     isAccent = true,
                     onClick = onAddFolder
                 )
 
                 if (safFolders.isNotEmpty()) {
-                    HorizontalDivider(color = Color.White.copy(alpha = 0.08f))
+                    HorizontalDivider(color = SmartTubeTextSecondary.copy(alpha = 0.16f))
                     Text(
-                        text = "Saved Custom Folders (${safFolders.size})",
+                        text = stringResource(R.string.settings_saved_folders_count, safFolders.size),
                         color = SmartTubeTextSecondary,
                         fontSize = 12.sp,
                         fontWeight = FontWeight.Bold,
@@ -639,7 +647,7 @@ fun SettingsScreen(
                             icon = Icons.Default.FolderOpen,
                             title = folder.displayName,
                             subtitle = folder.uriString,
-                            valueLabel = "Remove",
+                            valueLabel = stringResource(R.string.settings_remove),
                             onClick = { onRemoveSafFolder(folder.uriString) }
                         )
                     }
@@ -650,8 +658,8 @@ fun SettingsScreen(
         // Section 5: YouTube Playlists, History & Data Reset (Single button opening modal manager)
         item(key = "settings_data") {
             SettingsCategoryCard(
-                title = "5. Saved YouTube Playlists, History & Reset",
-                subtitle = "Manage saved YouTube channels, playlists, watch progress, favorites, and app defaults"
+                title = stringResource(R.string.settings_section_data_numbered),
+                subtitle = stringResource(R.string.settings_data_sub)
             ) {
                 SettingsCycleOptionRow(
                     icon = Icons.Default.AddLink,
@@ -691,14 +699,18 @@ fun SettingsScreen(
                     .onFocusChanged { updatesCardHasFocus = it.hasFocus }
             ) {
                 SettingsCategoryCard(
-                    title = "6. App Updates & GitHub Sync",
-                    subtitle = "Check for newer releases published on GitHub repository (mihm88/JoudJawadTube) and install directly"
+                    title = stringResource(R.string.settings_section_updater_numbered),
+                    subtitle = stringResource(R.string.settings_updater_sub)
                 ) {
                     SettingsCycleOptionRow(
                         icon = Icons.Default.SystemUpdate,
-                        title = "Installed Version: v$versionName",
-                        subtitle = "Repository: github.com/mihm88/JoudJawadTube",
-                        valueLabel = if (updateState is UpdateState_Antigravity.Checking) "Checking..." else "Check for Updates",
+                        title = stringResource(R.string.settings_installed_version, versionName),
+                        subtitle = stringResource(R.string.settings_repo_sub),
+                        valueLabel = if (updateState is UpdateState_Antigravity.Checking) {
+                            stringResource(R.string.settings_checking_short)
+                        } else {
+                            stringResource(R.string.settings_check_updates)
+                        },
                         isAccent = true,
                         onClick = {
                             coroutineScope.launch {
@@ -709,6 +721,15 @@ fun SettingsScreen(
                         }
                     )
 
+                    val successBg = if (isDark) Color(0xFF16321F) else Color(0xFFE8F5E9)
+                    val successText = if (isDark) Color(0xFFE8F5E9) else Color(0xFF1B5E20)
+                    val successIcon = if (isDark) Color(0xFF4CAF50) else Color(0xFF2E7D32)
+                    val warnBg = if (isDark) Color(0xFF261D10) else Color(0xFFFFF3E0)
+                    val warnBorder = if (isDark) Color(0xFFFF9800).copy(alpha = 0.5f) else Color(0xFFEF6C00).copy(alpha = 0.5f)
+                    val warnIcon = if (isDark) Color(0xFFFF9800) else Color(0xFFE65100)
+                    val errBg = if (isDark) Color(0xFF331414) else Color(0xFFFFEBEE)
+                    val errText = if (isDark) Color(0xFFFFCDD2) else Color(0xFFB71C1C)
+
                     when (updateState) {
                         is UpdateState_Antigravity.Idle -> { /* Idle */ }
                         is UpdateState_Antigravity.Checking -> {
@@ -716,12 +737,12 @@ fun SettingsScreen(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .clip(RoundedCornerShape(8.dp))
-                                    .background(Color(0xFF202020))
+                                    .background(SmartTubeSurface)
                                     .padding(12.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Text(
-                                    text = "Connecting to GitHub Releases API to check for updates...",
+                                    text = stringResource(R.string.settings_checking_updates),
                                     color = SmartTubeTextSecondary,
                                     fontSize = 13.sp
                                 )
@@ -732,15 +753,15 @@ fun SettingsScreen(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .clip(RoundedCornerShape(8.dp))
-                                    .background(Color(0xFF16321F))
+                                    .background(successBg)
                                     .padding(12.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Icon(Icons.Default.CheckCircle, contentDescription = null, tint = Color(0xFF4CAF50), modifier = Modifier.size(20.dp))
+                                Icon(Icons.Default.CheckCircle, contentDescription = null, tint = successIcon, modifier = Modifier.size(20.dp))
                                 Spacer(modifier = Modifier.width(10.dp))
                                 Text(
-                                    text = "You are on the latest version (${updateState.currentVersion}). No new updates found.",
-                                    color = Color(0xFFE8F5E9),
+                                    text = stringResource(R.string.settings_up_to_date_version, updateState.currentVersion),
+                                    color = successText,
                                     fontSize = 13.sp,
                                     fontWeight = FontWeight.Medium
                                 )
@@ -752,18 +773,18 @@ fun SettingsScreen(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .clip(RoundedCornerShape(10.dp))
-                                    .background(Color(0xFF261D10))
-                                    .border(1.dp, Color(0xFFFF9800).copy(alpha = 0.5f), RoundedCornerShape(10.dp))
+                                    .background(warnBg)
+                                    .border(1.dp, warnBorder, RoundedCornerShape(10.dp))
                                     .padding(14.dp),
                                 verticalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Icon(Icons.Default.CloudDownload, contentDescription = null, tint = Color(0xFFFF9800), modifier = Modifier.size(22.dp))
+                                    Icon(Icons.Default.CloudDownload, contentDescription = null, tint = warnIcon, modifier = Modifier.size(22.dp))
                                     Spacer(modifier = Modifier.width(10.dp))
                                     Column {
                                         Text(
-                                            text = "New Update Available: ${info.tagName} (${info.releaseTitle})",
-                                            color = Color.White,
+                                            text = stringResource(R.string.settings_update_available_detail, info.tagName, info.releaseTitle),
+                                            color = SmartTubeTextPrimary,
                                             fontSize = 15.sp,
                                             fontWeight = FontWeight.Bold
                                         )
@@ -790,7 +811,7 @@ fun SettingsScreen(
                                 ) {
                                     ActionPillButton(
                                         icon = Icons.Default.CloudDownload,
-                                        text = "Download & Install Update",
+                                        text = stringResource(R.string.settings_download_update),
                                         isPrimary = true,
                                         onClick = { onDownloadAndInstallUpdate(info) }
                                     )
@@ -802,14 +823,14 @@ fun SettingsScreen(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .clip(RoundedCornerShape(8.dp))
-                                    .background(Color(0xFF202020))
+                                    .background(SmartTubeSurface)
                                     .padding(14.dp),
                                 verticalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
-                                val downloadedMb = updateState.downloadedBytes / (1024f * 1024f)
-                                val totalMb = updateState.totalBytes / (1024f * 1024f)
+                                val downloadedMb = String.format(java.util.Locale.US, "%.1f", updateState.downloadedBytes / (1024f * 1024f))
+                                val totalMb = String.format(java.util.Locale.US, "%.1f", updateState.totalBytes / (1024f * 1024f))
                                 Text(
-                                    text = "Downloading update: ${updateState.progressPercent}% (${String.format(java.util.Locale.US, "%.1f", downloadedMb)} MB / ${String.format(java.util.Locale.US, "%.1f", totalMb)} MB)",
+                                    text = stringResource(R.string.settings_downloading_update, updateState.progressPercent, downloadedMb, totalMb),
                                     color = SmartTubeTextPrimary,
                                     fontSize = 13.sp,
                                     fontWeight = FontWeight.SemiBold
@@ -818,7 +839,7 @@ fun SettingsScreen(
                                     progress = { updateState.progressPercent / 100f },
                                     modifier = Modifier.fillMaxWidth().height(8.dp).clip(RoundedCornerShape(4.dp)),
                                     color = SmartTubeRed,
-                                    trackColor = Color.DarkGray
+                                    trackColor = SmartTubeTextSecondary.copy(alpha = 0.25f)
                                 )
                             }
                         }
@@ -827,20 +848,22 @@ fun SettingsScreen(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .clip(RoundedCornerShape(8.dp))
-                                    .background(Color(0xFF16321F))
+                                    .background(successBg)
                                     .padding(12.dp),
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.SpaceBetween
                             ) {
                                 Text(
-                                    text = "Download complete! Opening package installer...",
-                                    color = Color(0xFFE8F5E9),
+                                    text = stringResource(R.string.settings_download_complete_msg),
+                                    color = successText,
                                     fontSize = 13.sp,
-                                    fontWeight = FontWeight.Medium
+                                    fontWeight = FontWeight.Medium,
+                                    modifier = Modifier.weight(1f)
                                 )
+                                Spacer(modifier = Modifier.width(8.dp))
                                 ActionPillButton(
                                     icon = Icons.Default.SystemUpdate,
-                                    text = "Launch Installer",
+                                    text = stringResource(R.string.settings_launch_installer),
                                     isPrimary = true,
                                     onClick = { onInstallDownloadedApk(updateState.apkFile) }
                                 )
@@ -851,21 +874,22 @@ fun SettingsScreen(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .clip(RoundedCornerShape(8.dp))
-                                    .background(Color(0xFF331414))
+                                    .background(errBg)
                                     .border(1.dp, SmartTubeRed.copy(alpha = 0.5f), RoundedCornerShape(8.dp))
                                     .padding(12.dp),
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.SpaceBetween
                             ) {
                                 Text(
-                                    text = "Update Error: ${updateState.message}",
-                                    color = Color(0xFFFFCDD2),
+                                    text = stringResource(R.string.settings_update_error, updateState.message),
+                                    color = errText,
                                     fontSize = 12.sp,
                                     modifier = Modifier.weight(1f)
                                 )
+                                Spacer(modifier = Modifier.width(8.dp))
                                 ActionPillButton(
                                     icon = Icons.Default.Refresh,
-                                    text = "Dismiss",
+                                    text = stringResource(R.string.action_dismiss),
                                     isPrimary = false,
                                     onClick = onDismissUpdateStatus
                                 )
@@ -919,7 +943,7 @@ private fun SettingsCategoryCard(
             .fillMaxWidth()
             .clip(RoundedCornerShape(14.dp))
             .background(SmartTubeCardBg)
-            .border(1.dp, Color.White.copy(alpha = 0.08f), RoundedCornerShape(14.dp))
+            .border(1.dp, SmartTubeTextSecondary.copy(alpha = 0.16f), RoundedCornerShape(14.dp))
             .padding(18.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
@@ -939,7 +963,7 @@ private fun SettingsCategoryCard(
                 lineHeight = 16.sp
             )
         }
-        HorizontalDivider(color = Color.White.copy(alpha = 0.08f))
+        HorizontalDivider(color = SmartTubeTextSecondary.copy(alpha = 0.16f))
         content()
     }
 }
@@ -956,7 +980,7 @@ private fun SettingsCycleOptionRow(
     var isFocused by remember { mutableStateOf(false) }
     val bgColor = when {
         isFocused -> SmartTubeCardFocusedBg
-        else -> Color(0xFF191919)
+        else -> SmartTubeSurface
     }
 
     Row(
@@ -966,7 +990,7 @@ private fun SettingsCycleOptionRow(
             .background(bgColor)
             .border(
                 width = if (isFocused) 2.dp else 1.dp,
-                color = if (isFocused) SmartTubeFocusBorder else Color.White.copy(alpha = 0.06f),
+                color = if (isFocused) SmartTubeFocusBorder else SmartTubeTextSecondary.copy(alpha = 0.14f),
                 shape = RoundedCornerShape(10.dp)
             )
             .onFocusChanged { isFocused = it.isFocused }
@@ -1018,12 +1042,16 @@ private fun SettingsCycleOptionRow(
                     when {
                         isFocused -> SmartTubeRed
                         isAccent -> SmartTubeUsbCyan.copy(alpha = 0.16f)
-                        else -> Color(0xFF2C2C2C)
+                        else -> SmartTubeCardBg
                     }
                 )
                 .border(
                     width = 1.dp,
-                    color = if (isAccent && !isFocused) SmartTubeUsbCyan.copy(alpha = 0.5f) else Color.Transparent,
+                    color = when {
+                        isAccent && !isFocused -> SmartTubeUsbCyan.copy(alpha = 0.5f)
+                        !isFocused -> SmartTubeTextSecondary.copy(alpha = 0.2f)
+                        else -> Color.Transparent
+                    },
                     shape = RoundedCornerShape(8.dp)
                 )
                 .padding(horizontal = 12.dp, vertical = 6.dp),
@@ -1031,7 +1059,11 @@ private fun SettingsCycleOptionRow(
         ) {
             Text(
                 text = valueLabel,
-                color = if (isAccent && !isFocused) SmartTubeUsbCyan else Color.White,
+                color = when {
+                    isFocused -> Color.White
+                    isAccent -> SmartTubeUsbCyan
+                    else -> SmartTubeTextPrimary
+                },
                 fontSize = 12.sp,
                 lineHeight = 15.sp,
                 fontWeight = FontWeight.Bold,

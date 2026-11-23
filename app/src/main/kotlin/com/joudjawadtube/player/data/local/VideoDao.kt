@@ -16,6 +16,9 @@ interface VideoDao {
     @Query("SELECT * FROM videos")
     suspend fun getAllVideosOnce(): List<VideoEntity>
 
+    @Query("SELECT COUNT(*) FROM videos")
+    suspend fun getVideoCount(): Int
+
     @Query("SELECT * FROM videos WHERE id = :videoId LIMIT 1")
     suspend fun getVideoById(videoId: String): VideoEntity?
 
@@ -90,6 +93,9 @@ interface VideoDao {
 
     @Query("SELECT * FROM playback_progress WHERE videoKey = :videoKey LIMIT 1")
     suspend fun getProgress(videoKey: String): PlaybackProgressEntity?
+
+    @Query("SELECT * FROM playback_progress WHERE videoKey IN (:keys)")
+    suspend fun getProgressForKeys(keys: List<String>): List<PlaybackProgressEntity>
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsertProgress(progress: PlaybackProgressEntity)

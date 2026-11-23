@@ -33,6 +33,7 @@ import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.Forward10
 import androidx.compose.material.icons.filled.Hd
 import androidx.compose.material.icons.filled.KeyboardArrowUp
+import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.OndemandVideo
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
@@ -124,6 +125,7 @@ fun SmartTubePlayerHud(
     onToggleFavorite: () -> Unit,
     onOpenPlayerOptions: () -> Unit = {},
     onToggleOrientation: (() -> Unit)? = null,
+    onLockScreen: (() -> Unit)? = null,
     onBack: () -> Unit,
     onUserInteraction: () -> Unit
 ) {
@@ -146,22 +148,21 @@ fun SmartTubePlayerHud(
         enter = fadeIn(),
         exit = fadeOut()
     ) {
-        CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(
-                        Brush.verticalGradient(
-                            colors = listOf(
-                                Color.Black.copy(alpha = 0.84f),
-                                Color.Transparent,
-                                Color.Transparent,
-                                Color.Black.copy(alpha = 0.92f)
-                            )
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(
+                    Brush.verticalGradient(
+                        colors = listOf(
+                            Color.Black.copy(alpha = 0.84f),
+                            Color.Transparent,
+                            Color.Transparent,
+                            Color.Black.copy(alpha = 0.92f)
                         )
                     )
-                    .systemBarsPadding()
-            ) {
+                )
+                .systemBarsPadding()
+        ) {
             // Top OSD Header
             Row(
                 modifier = Modifier
@@ -282,15 +283,17 @@ fun SmartTubePlayerHud(
                         .align(Alignment.BottomCenter)
                         .padding(horizontal = horizontalPad, vertical = verticalPad)
                 ) {
-                    // Isolated Timeline Bar (recomposes at 500ms without recomposing outer HUD)
-                    PlayerTimelineBar(
-                        positionProvider = positionProvider,
-                        durationMs = durationMs,
-                        seekStepMs = seekStepMs,
-                        onSeekTo = onSeekTo,
-                        onSeekRelative = onSeekRelative,
-                        onUserInteraction = onUserInteraction
-                    )
+                    // Isolated Timeline Bar (recomposes at 500ms without recomposing outer HUD; kept LTR for seekbar)
+                    CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
+                        PlayerTimelineBar(
+                            positionProvider = positionProvider,
+                            durationMs = durationMs,
+                            seekStepMs = seekStepMs,
+                            onSeekTo = onSeekTo,
+                            onSeekRelative = onSeekRelative,
+                            onUserInteraction = onUserInteraction
+                        )
+                    }
 
                     Spacer(modifier = Modifier.height(10.dp))
 
@@ -370,6 +373,14 @@ fun SmartTubePlayerHud(
                             onClick = onToggleFavorite,
                             onUserInteraction = onUserInteraction
                         )
+                        if (onLockScreen != null) {
+                            HudControlPill(
+                                icon = Icons.Default.Lock,
+                                label = stringResource(R.string.kid_lock_label),
+                                onClick = onLockScreen,
+                                onUserInteraction = onUserInteraction
+                            )
+                        }
                         HudControlPill(
                             icon = Icons.Default.Tune,
                             label = stringResource(R.string.player_options),
@@ -459,6 +470,15 @@ fun SmartTubePlayerHud(
                                 onUserInteraction = onUserInteraction
                             )
 
+                            if (onLockScreen != null) {
+                                HudControlPill(
+                                    icon = Icons.Default.Lock,
+                                    label = stringResource(R.string.kid_lock_label),
+                                    onClick = onLockScreen,
+                                    onUserInteraction = onUserInteraction
+                                )
+                            }
+
                             HudControlPill(
                                 icon = Icons.Default.Tune,
                                 label = stringResource(R.string.player_options),
@@ -536,7 +556,6 @@ fun SmartTubePlayerHud(
             )
         }
     }
-}
 }
 
 /**
@@ -674,7 +693,7 @@ private fun HudControlPill(
 
     Row(
         modifier = modifier
-            .height(38.dp)
+            .height(if (isPrimary) 52.dp else 48.dp)
             .clip(CircleShape)
             .background(bgColor)
             .border(
