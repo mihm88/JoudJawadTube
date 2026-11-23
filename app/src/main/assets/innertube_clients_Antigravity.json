@@ -1,0 +1,71 @@
+{
+  "version": 1,
+  "clients": {
+    "IOS_KIDS": {
+      "clientName": "IOS_KIDS",
+      "clientVersion": "9.40.0",
+      "userAgent": "com.google.ios.youtubekids/9.40.0 (iPad14,1; U; CPU iOS 18_1_0 like Mac OS X;)",
+      "clientNameHeaderId": "6",
+      "extraClientFields": {
+        "deviceMake": "Apple",
+        "deviceModel": "iPad14,1",
+        "osName": "iOS",
+        "osVersion": "18.1.0.22B83"
+      }
+    },
+    "ANDROID_KIDS": {
+      "clientName": "ANDROID_KIDS",
+      "clientVersion": "9.40.00",
+      "userAgent": "com.google.android.apps.youtube.kids/9.40.00 (Linux; U; Android 14) gzip",
+      "clientNameHeaderId": null,
+      "extraClientFields": {
+        "androidSdkVersion": 34,
+        "osName": "Android",
+        "osVersion": "14"
+      }
+    },
+    "ANDROID": {
+      "clientName": "ANDROID",
+      "clientVersion": "20.10.38",
+      "userAgent": "com.google.android.youtube/20.10.38 (Linux; U; Android 14) gzip",
+      "clientNameHeaderId": "3",
+      "extraClientFields": {
+        "androidSdkVersion": 34,
+        "osName": "Android",
+        "osVersion": "14"
+      }
+    },
+    "IOS": {
+      "clientName": "IOS",
+      "clientVersion": "20.10.4",
+      "userAgent": "com.google.ios.youtube/20.10.4 (iPhone16,2; U; CPU iOS 18_3_1 like Mac OS X;)",
+      "clientNameHeaderId": "5",
+      "extraClientFields": {
+        "deviceMake": "Apple",
+        "deviceModel": "iPhone16,2",
+        "osName": "iOS",
+        "osVersion": "18.3.1.22D72"
+      }
+    },
+    "ANDROID_VR": {
+      "clientName": "ANDROID_VR",
+      "clientVersion": "1.62.27",
+      "userAgent": "com.google.android.apps.youtube.vr.oculus/1.62.27 (Linux; U; Android 12L; eureka-user Build/SQ3A.220605.009.A1) gzip",
+      "clientNameHeaderId": "28",
+      "extraClientFields": {
+        "deviceMake": "Oculus",
+        "deviceModel": "Quest 3",
+        "androidSdkVersion": 32,
+        "osName": "Android",
+        "osVersion": "12L"
+      }
+    },
+    "WEB": {
+      "clientName": "WEB",
+      "clientVersion": "2.20240726.00.00",
+      "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+      "clientNameHeaderId": null,
+      "extraClientFields": {}
+    }
+  }
+}

@@ -1,22 +1,15 @@
 package com.joudjawadtube.player.data.youtube
 
+import android.content.Context
 import com.joudjawadtube.player.data.local.SidecarSubtitle
 import com.joudjawadtube.player.data.local.YouTubeIdExtractor
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.async
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import org.json.JSONArray
 import org.json.JSONObject
-import java.io.BufferedReader
-import java.io.InputStreamReader
-import java.io.OutputStreamWriter
-import java.net.HttpURLConnection
-import java.net.URL
 import java.net.URLEncoder
-import java.util.concurrent.ConcurrentHashMap
 
 data class YouTubeVideoMetadata(
     val videoId: String,
@@ -176,90 +169,61 @@ sealed class ParsedYouTubeInput {
 
 object YouTubeService {
 
-    val SAFE_VIDEO_ID_REGEX = Regex("""^[a-zA-Z0-9_-]{11}$""")
+    val SAFE_VIDEO_ID_REGEX: Regex
+        get() = YouTubeUrlParser_Antigravity.SAFE_VIDEO_ID_REGEX
 
-    private val VIDEO_ID_REGEX = Regex("""(?:v=|youtu\.be/|shorts/|embed/|/v/)([a-zA-Z0-9_-]{11})""")
-    private val PLAYLIST_ID_REGEX = Regex("""[?&]list=([a-zA-Z0-9_-]+)""")
-    private val RAW_VIDEO_ID_REGEX = SAFE_VIDEO_ID_REGEX
-    private val RAW_PLAYLIST_ID_REGEX = Regex("""^(?:PL|UU|FL|OLAK5uy_|RD)[a-zA-Z0-9_-]{10,}$""")
+    private const val INNERTUBE_PLAYER_URL = "https://www.youtube.com/youtubei/v1/player?prettyPrint=false"
+    private const val INNERTUBE_BROWSE_URL = "https://www.youtube.com/youtubei/v1/browse?prettyPrint=false"
+    private const val INNERTUBE_NEXT_URL = "https://www.youtube.com/youtubei/v1/next?prettyPrint=false"
+    private const val INNERTUBE_SEARCH_URL = "https://www.youtube.com/youtubei/v1/search?prettyPrint=false"
+    private const val INNERTUBE_RESOLVE_URL = "https://www.youtube.com/youtubei/v1/navigation/resolve_url?prettyPrint=false"
+    private const val INNERTUBE_VISITOR_URL = "https://www.youtube.com/youtubei/v1/visitor_id?prettyPrint=false"
 
-    fun parseInput(rawInput: String): ParsedYouTubeInput {
-        val text = rawInput.trim()
-        if (text.isBlank()) {
-            return ParsedYouTubeInput.Invalid("Please enter or paste a YouTube video or playlist link.")
+    internal const val MAX_STREAM_CACHE_SIZE = 50
+    private const val STREAM_CACHE_TTL_MS = 15 * 60 * 1000L // 15 minutes
+    private const val VISITOR_DATA_TTL_MS = 30 * 60 * 1000L // 30 minutes
+
+    private data class CachedStreamEntry(
+        val stream: ResolvedYouTubeStream,
+        val cachedAtMs: Long,
+        val fromGeneralFallback: Boolean = false
+    )
+
+    private val streamCacheLock = Any()
+    private val streamCache = object : LinkedHashMap<String, CachedStreamEntry>(
+        MAX_STREAM_CACHE_SIZE,
+        0.75f,
+        true
+    ) {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, CachedStreamEntry>?): Boolean {
+            return size > MAX_STREAM_CACHE_SIZE
         }
-
-        // Extract first URL if shared text has title + URL
-        val urlToken = Regex("""https?://\S+""").find(text)?.value ?: text
-
-        val listMatch = PLAYLIST_ID_REGEX.find(urlToken)?.groupValues?.getOrNull(1)
-        val videoMatch = VIDEO_ID_REGEX.find(urlToken)?.groupValues?.getOrNull(1)
-
-        if (!listMatch.isNullOrBlank() && (urlToken.contains("/playlist") || videoMatch == null)) {
-            return ParsedYouTubeInput.Playlist(
-                playlistId = listMatch,
-                initialVideoId = videoMatch,
-                originalUrl = "https://www.youtube.com/playlist?list=$listMatch"
-            )
-        }
-
-        if (!listMatch.isNullOrBlank() && !videoMatch.isNullOrBlank()) {
-            // Link has both v= and list= -> import playlist and also identify initial video
-            return ParsedYouTubeInput.Playlist(
-                playlistId = listMatch,
-                initialVideoId = videoMatch,
-                originalUrl = "https://www.youtube.com/playlist?list=$listMatch"
-            )
-        }
-
-        if (!videoMatch.isNullOrBlank()) {
-            return ParsedYouTubeInput.SingleVideo(
-                videoId = videoMatch,
-                originalUrl = "https://www.youtube.com/watch?v=$videoMatch"
-            )
-        }
-
-        if (RAW_PLAYLIST_ID_REGEX.matches(urlToken)) {
-            return ParsedYouTubeInput.Playlist(
-                playlistId = urlToken,
-                initialVideoId = null,
-                originalUrl = "https://www.youtube.com/playlist?list=$urlToken"
-            )
-        }
-
-        if (RAW_VIDEO_ID_REGEX.matches(urlToken)) {
-            return ParsedYouTubeInput.SingleVideo(
-                videoId = urlToken,
-                originalUrl = "https://www.youtube.com/watch?v=$urlToken"
-            )
-        }
-
-        val channelMatch = Regex("""(?:https?://(?:www\.)?youtube\.com/)?(@[a-zA-Z0-9_.-]+|channel/[a-zA-Z0-9_-]+|c/[a-zA-Z0-9_.-]+|user/[a-zA-Z0-9_.-]+)""").find(urlToken)
-        if (channelMatch != null && !urlToken.contains("/watch") && !urlToken.contains("/playlist")) {
-            val q = channelMatch.groupValues[1]
-            val fullUrl = if (urlToken.startsWith("http")) urlToken else "https://www.youtube.com/$q"
-            return ParsedYouTubeInput.Channel(
-                channelQuery = q,
-                originalUrl = fullUrl
-            )
-        }
-
-        if (urlToken.startsWith("@")) {
-            return ParsedYouTubeInput.Channel(
-                channelQuery = urlToken,
-                originalUrl = "https://www.youtube.com/$urlToken"
-            )
-        }
-
-        if (urlToken.startsWith("UC") && urlToken.length >= 24 && !urlToken.contains("/")) {
-            return ParsedYouTubeInput.Channel(
-                channelQuery = urlToken,
-                originalUrl = "https://www.youtube.com/channel/$urlToken"
-            )
-        }
-
-        return ParsedYouTubeInput.Invalid("Could not recognize a valid YouTube video, playlist, or channel URL.")
     }
+
+    @Volatile
+    private var cachedVisitorData: String? = null
+
+    @Volatile
+    private var visitorDataFetchedAtMs: Long = 0L
+
+    fun initialize(context: Context) {
+        InnerTubeClientConfig_Antigravity.initialize(context)
+    }
+
+    fun parseInput(rawInput: String): ParsedYouTubeInput =
+        YouTubeUrlParser_Antigravity.parseInput(rawInput)
+
+    fun extractExpireEpochSec(url: String?): Long? =
+        YouTubeUrlParser_Antigravity.extractExpireEpochSec(url)
+
+    fun isStreamUrlExpired(
+        url: String?,
+        safetyMarginSec: Long = 120L,
+        nowEpochSec: Long = System.currentTimeMillis() / 1000L
+    ): Boolean = YouTubeUrlParser_Antigravity.isStreamUrlExpired(url, safetyMarginSec, nowEpochSec)
+
+    fun cleanTitleForYouTubeSearch(rawTitle: String): String =
+        YouTubeUrlParser_Antigravity.cleanTitleForYouTubeSearch(rawTitle)
 
     /**
      * Fetches single video metadata (title, channel, duration, HD thumbnail).
@@ -267,12 +231,11 @@ object YouTubeService {
     suspend fun fetchVideoDetails(videoId: String): YouTubeVideoMetadata? = withContext(Dispatchers.IO) {
         if (!SAFE_VIDEO_ID_REGEX.matches(videoId)) return@withContext null
 
+        val webProfile = InnerTubeClientConfig_Antigravity.getClient("WEB")
         // 1. Try InnerTube player for full duration & dimensions
         val playerJson = callInnerTubePlayer(
             videoId = videoId,
-            clientName = "WEB",
-            clientVersion = "2.20240726.00.00",
-            userAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+            profile = webProfile
         )
         val videoDetails = playerJson?.optJSONObject("videoDetails")
         if (videoDetails != null) {
@@ -295,7 +258,7 @@ object YouTubeService {
             val oembedUrl = "https://www.youtube.com/oembed?url=" +
                 URLEncoder.encode("https://www.youtube.com/watch?v=$videoId", "UTF-8") +
                 "&format=json"
-            val raw = httpGet(oembedUrl)
+            val raw = InnerTubeHttpClient_Antigravity.getString(oembedUrl)
             if (!raw.isNullOrBlank()) {
                 val obj = JSONObject(raw)
                 val title = obj.optString("title").ifBlank { "YouTube Video ($videoId)" }
@@ -324,29 +287,16 @@ object YouTubeService {
      * Supports modern lockupViewModel playlists, classic playlistVideoRenderer, and playlistPanelVideoRenderer.
      */
     suspend fun fetchPlaylist(playlistId: String, maxVideos: Int = 200): YouTubePlaylistMetadata? = withContext(Dispatchers.IO) {
+        val webProfile = InnerTubeClientConfig_Antigravity.getClient("WEB")
         val browseId = if (playlistId.startsWith("VL")) playlistId else "VL$playlistId"
-        val webBody = JSONObject().apply {
+        val webBody = buildWebContextBody(webProfile) {
             put("browseId", browseId)
-            put(
-                "context",
-                JSONObject().apply {
-                    put(
-                        "client",
-                        JSONObject().apply {
-                            put("clientName", "WEB")
-                            put("clientVersion", "2.20240726.00.00")
-                            put("hl", "en")
-                            put("gl", "US")
-                        }
-                    )
-                }
-            )
         }
 
-        val responseStr = httpPostJson(
-            url = "https://www.youtube.com/youtubei/v1/browse?prettyPrint=false",
+        val responseStr = InnerTubeHttpClient_Antigravity.postJson(
+            url = INNERTUBE_BROWSE_URL,
             jsonBody = webBody.toString(),
-            userAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+            userAgent = webProfile.userAgent
         )
 
         var playlistTitle: String? = null
@@ -357,14 +307,14 @@ object YouTubeService {
         if (!responseStr.isNullOrBlank()) {
             runCatching {
                 val root = JSONObject(responseStr)
-                playlistTitle = extractPlaylistTitle(root)
-                playlistAuthor = extractPlaylistAuthor(root)
-                collectPlaylistVideosRecursive(
+                playlistTitle = YouTubePlaylistParser_Antigravity.extractPlaylistTitle(root)
+                playlistAuthor = YouTubePlaylistParser_Antigravity.extractPlaylistAuthor(root)
+                YouTubePlaylistParser_Antigravity.collectPlaylistVideosRecursive(
                     node = root,
                     defaultAuthor = playlistAuthor ?: "YouTube Playlist",
                     sink = videos
                 )
-                continuationToken = extractContinuationToken(root)
+                continuationToken = YouTubePlaylistParser_Antigravity.extractContinuationToken(root)
             }
         }
 
@@ -372,37 +322,23 @@ object YouTubeService {
         var pagesCount = 0
         while (!continuationToken.isNullOrBlank() && videos.size < maxVideos && pagesCount < 4) {
             pagesCount++
-            val contBody = JSONObject().apply {
+            val contBody = buildWebContextBody(webProfile) {
                 put("continuation", continuationToken)
-                put(
-                    "context",
-                    JSONObject().apply {
-                        put(
-                            "client",
-                            JSONObject().apply {
-                                put("clientName", "WEB")
-                                put("clientVersion", "2.20240726.00.00")
-                                put("hl", "en")
-                                put("gl", "US")
-                            }
-                        )
-                    }
-                )
             }
-            val contResponse = httpPostJson(
-                url = "https://www.youtube.com/youtubei/v1/browse?prettyPrint=false",
+            val contResponse = InnerTubeHttpClient_Antigravity.postJson(
+                url = INNERTUBE_BROWSE_URL,
                 jsonBody = contBody.toString(),
-                userAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+                userAgent = webProfile.userAgent
             )
             if (!contResponse.isNullOrBlank()) {
                 runCatching {
                     val contRoot = JSONObject(contResponse)
-                    collectPlaylistVideosRecursive(
+                    YouTubePlaylistParser_Antigravity.collectPlaylistVideosRecursive(
                         node = contRoot,
                         defaultAuthor = playlistAuthor ?: "YouTube Playlist",
                         sink = videos
                     )
-                    continuationToken = extractContinuationToken(contRoot)
+                    continuationToken = YouTubePlaylistParser_Antigravity.extractContinuationToken(contRoot)
                 }
             } else {
                 break
@@ -411,34 +347,20 @@ object YouTubeService {
 
         // Fallback to /youtubei/v1/next (watch playlist panel) if browse returned no items
         if (videos.isEmpty()) {
-            val nextBody = JSONObject().apply {
+            val nextBody = buildWebContextBody(webProfile) {
                 put("playlistId", playlistId)
-                put(
-                    "context",
-                    JSONObject().apply {
-                        put(
-                            "client",
-                            JSONObject().apply {
-                                put("clientName", "WEB")
-                                put("clientVersion", "2.20240726.00.00")
-                                put("hl", "en")
-                                put("gl", "US")
-                            }
-                        )
-                    }
-                )
             }
-            val nextStr = httpPostJson(
-                url = "https://www.youtube.com/youtubei/v1/next?prettyPrint=false",
+            val nextStr = InnerTubeHttpClient_Antigravity.postJson(
+                url = INNERTUBE_NEXT_URL,
                 jsonBody = nextBody.toString(),
-                userAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+                userAgent = webProfile.userAgent
             )
             if (!nextStr.isNullOrBlank()) {
                 runCatching {
                     val nextRoot = JSONObject(nextStr)
-                    if (playlistTitle == null) playlistTitle = extractPlaylistTitle(nextRoot)
-                    if (playlistAuthor == null) playlistAuthor = extractPlaylistAuthor(nextRoot)
-                    collectPlaylistVideosRecursive(
+                    if (playlistTitle == null) playlistTitle = YouTubePlaylistParser_Antigravity.extractPlaylistTitle(nextRoot)
+                    if (playlistAuthor == null) playlistAuthor = YouTubePlaylistParser_Antigravity.extractPlaylistAuthor(nextRoot)
+                    YouTubePlaylistParser_Antigravity.collectPlaylistVideosRecursive(
                         node = nextRoot,
                         defaultAuthor = playlistAuthor ?: "YouTube Playlist",
                         sink = videos
@@ -455,7 +377,7 @@ object YouTubeService {
             } else {
                 "https://www.youtube.com/feeds/videos.xml?playlist_id=$playlistId"
             }
-            val xml = httpGet(rssUrl)
+            val xml = InnerTubeHttpClient_Antigravity.getString(rssUrl)
             if (!xml.isNullOrBlank()) {
                 val feedTitle = Regex("""<feed[^>]*>[\s\S]*?<title>([^<]+)</title>""").find(xml)?.groupValues?.getOrNull(1)?.trim()
                 if (playlistTitle == null && !feedTitle.isNullOrBlank()) playlistTitle = feedTitle
@@ -524,6 +446,7 @@ object YouTubeService {
             else -> "https://www.youtube.com/@$trimmed"
         }
 
+        val webProfile = InnerTubeClientConfig_Antigravity.getClient("WEB")
         try {
             val payload = JSONObject().apply {
                 put(
@@ -532,7 +455,7 @@ object YouTubeService {
                         put(
                             "client",
                             JSONObject().apply {
-                                put("clientName", "WEB")
+                                put("clientName", webProfile.clientName)
                                 put("clientVersion", "2.20240410.01.00")
                                 put("hl", "en")
                                 put("gl", "US")
@@ -542,10 +465,10 @@ object YouTubeService {
                 )
                 put("url", cleanUrl)
             }
-            val response = httpPostJson(
-                url = "https://www.youtube.com/youtubei/v1/navigation/resolve_url?prettyPrint=false",
+            val response = InnerTubeHttpClient_Antigravity.postJson(
+                url = INNERTUBE_RESOLVE_URL,
                 jsonBody = payload.toString(),
-                userAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+                userAgent = webProfile.userAgent
             ) ?: return@withContext null
 
             val root = JSONObject(response)
@@ -590,115 +513,77 @@ object YouTubeService {
     }
 
     suspend fun fetchChannelPublicPlaylists(channelId: String): List<YouTubePlaylistMetadata> = withContext(Dispatchers.IO) {
+        val webProfile = InnerTubeClientConfig_Antigravity.getClient("WEB")
         val playlists = mutableListOf<YouTubePlaylistMetadata>()
         val browseId = if (channelId.startsWith("UC")) channelId else "UC$channelId"
-        val payload = JSONObject().apply {
+        val payload = buildWebContextBody(webProfile) {
             put("browseId", browseId)
             put("params", "EglwbGF5bGlzdHPyBgQKAkIA")
-            put(
-                "context",
-                JSONObject().apply {
-                    put(
-                        "client",
-                        JSONObject().apply {
-                            put("clientName", "WEB")
-                            put("clientVersion", "2.20240726.00.00")
-                            put("hl", "en")
-                            put("gl", "US")
-                        }
-                    )
-                }
-            )
         }
-        val response = httpPostJson(
-            url = "https://www.youtube.com/youtubei/v1/browse?prettyPrint=false",
+        val response = InnerTubeHttpClient_Antigravity.postJson(
+            url = INNERTUBE_BROWSE_URL,
             jsonBody = payload.toString(),
-            userAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+            userAgent = webProfile.userAgent
         )
         if (!response.isNullOrBlank()) {
             runCatching {
                 val root = JSONObject(response)
-                collectChannelPlaylistsRecursive(root, playlists)
+                YouTubePlaylistParser_Antigravity.collectChannelPlaylistsRecursive(root, playlists)
             }
         }
         playlists.distinctBy { it.playlistId }
     }
 
-    private fun collectChannelPlaylistsRecursive(
-        node: Any?,
-        sink: MutableList<YouTubePlaylistMetadata>
-    ) {
-        when (node) {
-            is JSONObject -> {
-                val gpr = node.optJSONObject("gridPlaylistRenderer")
-                    ?: node.optJSONObject("playlistRenderer")
-                if (gpr != null) {
-                    val plId = gpr.optString("playlistId")
-                    if (plId.length >= 12) {
-                        val title = gpr.optJSONObject("title")?.optString("simpleText")
-                            ?: gpr.optJSONObject("title")?.optJSONArray("runs")?.optJSONObject(0)?.optString("text")
-                            ?: "Playlist $plId"
-                        val thumb = gpr.optJSONObject("thumbnail")?.optJSONArray("thumbnails")
-                            ?.optJSONObject(0)?.optString("url") ?: ""
-                        sink.add(
-                            YouTubePlaylistMetadata(
-                                playlistId = plId,
-                                title = title,
-                                author = "",
-                                thumbnailUrl = thumb,
-                                videos = emptyList()
-                            )
-                        )
-                    }
-                }
-                val keys = node.keys()
-                while (keys.hasNext()) {
-                    collectChannelPlaylistsRecursive(node.opt(keys.next()), sink)
-                }
-            }
-            is JSONArray -> {
-                for (i in 0 until node.length()) {
-                    collectChannelPlaylistsRecursive(node.opt(i), sink)
-                }
-            }
-        }
-    }
-
-    private data class CachedStreamEntry(
-        val stream: ResolvedYouTubeStream,
-        val cachedAtMs: Long,
-        val fromGeneralFallback: Boolean = false
-    )
-
-    private val streamCache = ConcurrentHashMap<String, CachedStreamEntry>()
-    private const val STREAM_CACHE_TTL_MS = 15 * 60 * 1000L // 15 minutes
-    private val EXPIRE_PARAM_REGEX = Regex("""(?:[?&]expire=|/expire/)(\d+)""")
-
-    @Volatile
-    private var cachedVisitorData: String? = null
-
-    @Volatile
-    private var visitorDataFetchedAtMs: Long = 0L
-    private const val VISITOR_DATA_TTL_MS = 30 * 60 * 1000L // 30 minutes
-
-    fun extractExpireEpochSec(url: String?): Long? {
-        if (url.isNullOrBlank()) return null
-        return EXPIRE_PARAM_REGEX.find(url)?.groupValues?.getOrNull(1)?.toLongOrNull()
-    }
-
-    fun isStreamUrlExpired(
-        url: String?,
-        safetyMarginSec: Long = 120L,
-        nowEpochSec: Long = System.currentTimeMillis() / 1000L
-    ): Boolean {
-        val expireSec = extractExpireEpochSec(url) ?: return false
-        return (nowEpochSec + safetyMarginSec) >= expireSec
-    }
-
     fun invalidateStreamCache(videoId: String) {
         if (videoId.isNotBlank()) {
-            streamCache.remove(videoId)
+            synchronized(streamCacheLock) {
+                streamCache.remove(videoId)
+            }
         }
+    }
+
+    private fun getValidCachedStream(
+        videoId: String,
+        allowGeneralClientFallback: Boolean
+    ): ResolvedYouTubeStream? {
+        val now = System.currentTimeMillis()
+        val cached = synchronized(streamCacheLock) { streamCache[videoId] } ?: return null
+        val isFresh = (now - cached.cachedAtMs) < STREAM_CACHE_TTL_MS &&
+            (!cached.fromGeneralFallback || allowGeneralClientFallback) &&
+            cached.stream.hasDirectStream &&
+            !cached.stream.isExpired()
+        return if (isFresh) cached.stream else null
+    }
+
+    private fun putCachedStream(
+        videoId: String,
+        stream: ResolvedYouTubeStream,
+        fromGeneralFallback: Boolean
+    ) {
+        synchronized(streamCacheLock) {
+            streamCache[videoId] = CachedStreamEntry(
+                stream = stream,
+                cachedAtMs = System.currentTimeMillis(),
+                fromGeneralFallback = fromGeneralFallback
+            )
+        }
+    }
+
+    internal fun cacheSizeForTesting(): Int = synchronized(streamCacheLock) { streamCache.size }
+
+    internal fun containsCachedVideoForTesting(videoId: String): Boolean =
+        synchronized(streamCacheLock) { streamCache.containsKey(videoId) }
+
+    internal fun clearCacheForTesting() {
+        synchronized(streamCacheLock) { streamCache.clear() }
+    }
+
+    internal fun putCacheEntryForTesting(
+        videoId: String,
+        stream: ResolvedYouTubeStream,
+        fromGeneralFallback: Boolean = false
+    ) {
+        putCachedStream(videoId, stream, fromGeneralFallback)
     }
 
     suspend fun refreshStreamForPlayback(
@@ -709,7 +594,7 @@ object YouTubeService {
         return resolveStreamForPlayback(videoId, allowGeneralClientFallback = allowGeneralClientFallback)
     }
 
-    private fun getOrFetchVisitorData(): String? {
+    private suspend fun getOrFetchVisitorData(): String? {
         val now = System.currentTimeMillis()
         cachedVisitorData?.takeIf { it.isNotBlank() && (now - visitorDataFetchedAtMs) < VISITOR_DATA_TTL_MS }?.let {
             return it
@@ -728,10 +613,11 @@ object YouTubeService {
                 }
             )
         }
-        val resp = httpPostJson(
-            url = "https://www.youtube.com/youtubei/v1/visitor_id?prettyPrint=false",
+        val webProfile = InnerTubeClientConfig_Antigravity.getClient("WEB")
+        val resp = InnerTubeHttpClient_Antigravity.postJson(
+            url = INNERTUBE_VISITOR_URL,
             jsonBody = body.toString(),
-            userAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+            userAgent = webProfile.userAgent
         ) ?: return cachedVisitorData
 
         val parsed = runCatching {
@@ -753,14 +639,7 @@ object YouTubeService {
         allowGeneralClientFallback: Boolean = false
     ) {
         if (!SAFE_VIDEO_ID_REGEX.matches(videoId)) return
-        val existing = streamCache[videoId]
-        if (existing != null &&
-            (System.currentTimeMillis() - existing.cachedAtMs) < STREAM_CACHE_TTL_MS &&
-            (!existing.fromGeneralFallback || allowGeneralClientFallback) &&
-            !existing.stream.isExpired()
-        ) {
-            return
-        }
+        if (getValidCachedStream(videoId, allowGeneralClientFallback) != null) return
         runCatching {
             resolveStreamForPlayback(videoId, allowGeneralClientFallback = allowGeneralClientFallback)
         }
@@ -768,7 +647,7 @@ object YouTubeService {
 
     /**
      * Resolves direct playable video/audio/HLS streams for Media3 ExoPlayer.
-     * Uses parallel client racing + in-memory stream caching for sub-second startup.
+     * Uses cancellable OkHttp parallel client racing + bounded LRU stream caching.
      */
     suspend fun resolveStreamForPlayback(
         videoId: String,
@@ -777,78 +656,38 @@ object YouTubeService {
         if (!SAFE_VIDEO_ID_REGEX.matches(videoId)) {
             return@withContext ResolvedYouTubeStream(videoId = videoId)
         }
-        val now = System.currentTimeMillis()
-        streamCache[videoId]?.let { cached ->
-            if ((now - cached.cachedAtMs) < STREAM_CACHE_TTL_MS &&
-                (!cached.fromGeneralFallback || allowGeneralClientFallback) &&
-                cached.stream.hasDirectStream &&
-                !cached.stream.isExpired()
-            ) {
-                return@withContext cached.stream
-            }
-        }
+
+        getValidCachedStream(videoId, allowGeneralClientFallback)?.let { return@withContext it }
 
         // Wave 1: True first-to-finish parallel race between IOS_KIDS and ANDROID_KIDS (~300ms).
-        // Neither Kids client requires a poToken, so their 1080p adaptiveFormats & HLS streams
-        // always return HTTP 200/206 immediately without 403 Forbidden errors.
+        val kidsProfiles = listOf(
+            InnerTubeClientConfig_Antigravity.getClient("IOS_KIDS"),
+            InnerTubeClientConfig_Antigravity.getClient("ANDROID_KIDS")
+        )
         val wave1Winner = coroutineScope {
-            val resultChannel = Channel<ResolvedYouTubeStream?>(capacity = 2)
-
-            val iosKidsJob = launch {
-                val iosKidsUa = "com.google.ios.youtubekids/9.40.0 (iPad14,1; U; CPU iOS 18_1_0 like Mac OS X;)"
-                val json = callInnerTubePlayer(
-                    videoId = videoId,
-                    clientName = "IOS_KIDS",
-                    clientVersion = "9.40.0",
-                    userAgent = iosKidsUa,
-                    clientNameHeaderId = "6",
-                    extraClientFields = mapOf(
-                        "deviceMake" to "Apple",
-                        "deviceModel" to "iPad14,1",
-                        "osName" to "iOS",
-                        "osVersion" to "18.1.0.22B83"
-                    )
-                )
-                val parsed = parseStreamingData(videoId, json, iosKidsUa)?.takeIf { it.hasDirectStream }
-                resultChannel.trySend(parsed)
+            val resultChannel = Channel<ResolvedYouTubeStream?>(capacity = kidsProfiles.size)
+            val jobs = kidsProfiles.map { profile ->
+                launch {
+                    val resolved = resolveWithClientProfile(videoId, profile)
+                    resultChannel.trySend(resolved)
+                }
             }
 
-            val androidKidsJob = launch {
-                val androidKidsUa = "com.google.android.apps.youtube.kids/9.40.00 (Linux; U; Android 14) gzip"
-                val json = callInnerTubePlayer(
-                    videoId = videoId,
-                    clientName = "ANDROID_KIDS",
-                    clientVersion = "9.40.00",
-                    userAgent = androidKidsUa,
-                    extraClientFields = mapOf(
-                        "androidSdkVersion" to 34,
-                        "osName" to "Android",
-                        "osVersion" to "14"
-                    )
-                )
-                val parsed = parseStreamingData(videoId, json, androidKidsUa)?.takeIf { it.hasDirectStream }
-                resultChannel.trySend(parsed)
+            var winner: ResolvedYouTubeStream? = null
+            repeat(jobs.size) {
+                val candidate = resultChannel.receive()
+                if (candidate != null) {
+                    winner = candidate
+                    jobs.forEach { it.cancel() }
+                    return@coroutineScope winner
+                }
             }
-
-            val first = resultChannel.receive()
-            if (first != null) {
-                iosKidsJob.cancel()
-                androidKidsJob.cancel()
-                return@coroutineScope first
-            }
-
-            val second = resultChannel.receive()
-            iosKidsJob.cancel()
-            androidKidsJob.cancel()
-            second
+            jobs.forEach { it.cancel() }
+            null
         }
 
         if (wave1Winner != null) {
-            streamCache[videoId] = CachedStreamEntry(
-                stream = wave1Winner,
-                cachedAtMs = System.currentTimeMillis(),
-                fromGeneralFallback = false
-            )
+            putCachedStream(videoId, wave1Winner, fromGeneralFallback = false)
             return@withContext wave1Winner
         }
 
@@ -859,86 +698,35 @@ object YouTubeService {
             )
         }
 
-        // Wave 2 Fallback (for general non-Kids videos): Race ANDROID, IOS, and ANDROID_VR in parallel
-        // with X-YouTube-Client headers + visitorData, sanitizing any poToken-blocked adaptive streams
-        // while preferring the fastest client that delivers full HD/4K adaptive streams.
+        // Wave 2 Fallback (for general non-Kids videos): Race ANDROID, IOS, and ANDROID_VR in parallel.
         val visitorData = getOrFetchVisitorData()
+        val generalProfiles = listOf(
+            InnerTubeClientConfig_Antigravity.getClient("ANDROID"),
+            InnerTubeClientConfig_Antigravity.getClient("IOS"),
+            InnerTubeClientConfig_Antigravity.getClient("ANDROID_VR")
+        )
         val wave2Winner = coroutineScope {
-            val resultChannel = Channel<ResolvedYouTubeStream?>(capacity = 3)
-
-            val androidJob = launch {
-                val androidUa = "com.google.android.youtube/20.10.38 (Linux; U; Android 14) gzip"
-                val json = callInnerTubePlayer(
-                    videoId = videoId,
-                    clientName = "ANDROID",
-                    clientVersion = "20.10.38",
-                    userAgent = androidUa,
-                    clientNameHeaderId = "3",
-                    visitorData = visitorData,
-                    extraClientFields = mapOf(
-                        "androidSdkVersion" to 34,
-                        "osName" to "Android",
-                        "osVersion" to "14"
+            val resultChannel = Channel<ResolvedYouTubeStream?>(capacity = generalProfiles.size)
+            val jobs = generalProfiles.map { profile ->
+                launch {
+                    val resolved = resolveWithClientProfile(
+                        videoId = videoId,
+                        profile = profile,
+                        visitorData = visitorData,
+                        validateAdaptiveProbe = true
                     )
-                )
-                val parsed = parseStreamingData(videoId, json, androidUa)?.takeIf { it.hasDirectStream }
-                val clean = parsed?.let { sanitizeAdaptiveStreamIfForbidden(it) }?.takeIf { it.hasDirectStream }
-                resultChannel.trySend(clean)
-            }
-
-            val iosJob = launch {
-                val iosUa = "com.google.ios.youtube/20.10.4 (iPhone16,2; U; CPU iOS 18_3_1 like Mac OS X;)"
-                val json = callInnerTubePlayer(
-                    videoId = videoId,
-                    clientName = "IOS",
-                    clientVersion = "20.10.4",
-                    userAgent = iosUa,
-                    clientNameHeaderId = "5",
-                    visitorData = visitorData,
-                    extraClientFields = mapOf(
-                        "deviceMake" to "Apple",
-                        "deviceModel" to "iPhone16,2",
-                        "osName" to "iOS",
-                        "osVersion" to "18.3.1.22D72"
-                    )
-                )
-                val parsed = parseStreamingData(videoId, json, iosUa)?.takeIf { it.hasDirectStream }
-                val clean = parsed?.let { sanitizeAdaptiveStreamIfForbidden(it) }?.takeIf { it.hasDirectStream }
-                resultChannel.trySend(clean)
-            }
-
-            val androidVrJob = launch {
-                val vrUa = "com.google.android.apps.youtube.vr.oculus/1.62.27 (Linux; U; Android 12L; eureka-user Build/SQ3A.220605.009.A1) gzip"
-                val json = callInnerTubePlayer(
-                    videoId = videoId,
-                    clientName = "ANDROID_VR",
-                    clientVersion = "1.62.27",
-                    userAgent = vrUa,
-                    clientNameHeaderId = "28",
-                    visitorData = visitorData,
-                    extraClientFields = mapOf(
-                        "deviceMake" to "Oculus",
-                        "deviceModel" to "Quest 3",
-                        "androidSdkVersion" to 32,
-                        "osName" to "Android",
-                        "osVersion" to "12L"
-                    )
-                )
-                val parsed = parseStreamingData(videoId, json, vrUa)?.takeIf { it.hasDirectStream }
-                val clean = parsed?.let { sanitizeAdaptiveStreamIfForbidden(it) }?.takeIf { it.hasDirectStream }
-                resultChannel.trySend(clean)
+                    resultChannel.trySend(resolved)
+                }
             }
 
             var bestFallback: ResolvedYouTubeStream? = null
             var adaptiveWinner: ResolvedYouTubeStream? = null
-            repeat(3) {
+            repeat(jobs.size) {
                 val candidate = resultChannel.receive()
                 if (candidate != null) {
                     if (!candidate.videoStreamUrl.isNullOrBlank() && !candidate.audioStreamUrl.isNullOrBlank()) {
                         adaptiveWinner = candidate
-                        androidJob.cancel()
-                        iosJob.cancel()
-                        androidVrJob.cancel()
+                        jobs.forEach { it.cancel() }
                         return@coroutineScope candidate
                     }
                     if (bestFallback == null) {
@@ -946,22 +734,36 @@ object YouTubeService {
                     }
                 }
             }
-            androidJob.cancel()
-            iosJob.cancel()
-            androidVrJob.cancel()
+            jobs.forEach { it.cancel() }
             adaptiveWinner ?: bestFallback
         }
 
         if (wave2Winner != null) {
-            streamCache[videoId] = CachedStreamEntry(
-                stream = wave2Winner,
-                cachedAtMs = System.currentTimeMillis(),
-                fromGeneralFallback = true
-            )
+            putCachedStream(videoId, wave2Winner, fromGeneralFallback = true)
             return@withContext wave2Winner
         }
 
         ResolvedYouTubeStream(videoId = videoId)
+    }
+
+    private suspend fun resolveWithClientProfile(
+        videoId: String,
+        profile: InnerTubeClientProfile_Antigravity,
+        visitorData: String? = null,
+        validateAdaptiveProbe: Boolean = false
+    ): ResolvedYouTubeStream? {
+        val json = callInnerTubePlayer(
+            videoId = videoId,
+            profile = profile,
+            visitorData = visitorData
+        )
+        val parsed = parseStreamingData(videoId, json, profile.userAgent)?.takeIf { it.hasDirectStream }
+            ?: return null
+        return if (validateAdaptiveProbe) {
+            sanitizeAdaptiveStreamIfForbidden(parsed).takeIf { it.hasDirectStream }
+        } else {
+            parsed
+        }
     }
 
     /**
@@ -969,22 +771,10 @@ object YouTubeService {
      * If Google CDN returns 403 Forbidden (due to missing poToken on non-Kids clients),
      * strips the dead adaptive URLs so ExoPlayer plays the working progressive or HLS stream immediately.
      */
-    private fun sanitizeAdaptiveStreamIfForbidden(stream: ResolvedYouTubeStream): ResolvedYouTubeStream {
+    private suspend fun sanitizeAdaptiveStreamIfForbidden(stream: ResolvedYouTubeStream): ResolvedYouTubeStream {
         val adaptiveUrl = stream.videoStreamUrl
         if (adaptiveUrl.isNullOrBlank()) return stream
-        val probeOk = runCatching {
-            val sep = if (adaptiveUrl.contains('?')) '&' else '?'
-            val conn = (URL("${adaptiveUrl}${sep}range=0-1023").openConnection() as HttpURLConnection).apply {
-                requestMethod = "GET"
-                connectTimeout = 2_000
-                readTimeout = 2_000
-                setRequestProperty("User-Agent", stream.userAgent)
-            }
-            val code = conn.responseCode
-            conn.disconnect()
-            code in 200..299
-        }.getOrDefault(false)
-
+        val probeOk = InnerTubeHttpClient_Antigravity.probeRangeOk(adaptiveUrl, stream.userAgent)
         return if (probeOk) {
             stream
         } else {
@@ -997,48 +787,25 @@ object YouTubeService {
     }
 
     /**
-     * Searches YouTube by video title to find the official YouTube videoId for thumbnail generation.
+     * Searches YouTube by video title to find the official YouTube videoId.
      */
     suspend fun searchVideoIdByTitle(rawTitle: String): String? = withContext(Dispatchers.IO) {
         val cleanedQuery = cleanTitleForYouTubeSearch(rawTitle)
         if (cleanedQuery.length < 3) return@withContext null
 
-        val body = JSONObject().apply {
+        val webProfile = InnerTubeClientConfig_Antigravity.getClient("WEB")
+        val body = buildWebContextBody(webProfile) {
             put("query", cleanedQuery)
-            put(
-                "context",
-                JSONObject().apply {
-                    put(
-                        "client",
-                        JSONObject().apply {
-                            put("clientName", "WEB")
-                            put("clientVersion", "2.20240726.00.00")
-                        }
-                    )
-                }
-            )
         }
 
-        val response = httpPostJson(
-            url = "https://www.youtube.com/youtubei/v1/search?prettyPrint=false",
+        val response = InnerTubeHttpClient_Antigravity.postJson(
+            url = INNERTUBE_SEARCH_URL,
             jsonBody = body.toString(),
-            userAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+            userAgent = webProfile.userAgent
         ) ?: return@withContext null
 
-        // Fast regex scan for first videoRenderer -> videoId
         val match = Regex(""""videoRenderer"\s*:\s*\{\s*"videoId"\s*:\s*"([a-zA-Z0-9_-]{11})"""").find(response)
         match?.groupValues?.getOrNull(1)
-    }
-
-    fun cleanTitleForYouTubeSearch(rawTitle: String): String {
-        return rawTitle
-            .replace(Regex("""^\d{1,3}[\s._-]+"""), "") // Strip leading track numbers like "01-"
-            .replace('｜', ' ')
-            .replace('|', ' ')
-            .replace(Regex("""#\S+"""), "") // Strip hashtags
-            .replace(Regex("""\[[a-zA-Z0-9_-]{11}\]"""), "")
-            .replace(Regex("""\s+"""), " ")
-            .trim()
     }
 
     private fun parseStreamingData(
@@ -1091,7 +858,7 @@ object YouTubeService {
                     // Prefer H.264 (avc1) up to 1080p for guaranteed hardware decoding on all TVs
                     val isBetter = when {
                         bestVideoUrl == null -> h in 240..1080
-                        isAvc1 && !bestVideoIsAvc1 && h >= 480 && h <= 1080 -> true
+                        isAvc1 && !bestVideoIsAvc1 && h in 480..1080 -> true
                         !isAvc1 && bestVideoIsAvc1 -> false
                         else -> h in 360..1080 && (h > bestVideoHeight || (h == bestVideoHeight && isAvc1))
                     }
@@ -1216,24 +983,20 @@ object YouTubeService {
         return list
     }
 
-    private fun callInnerTubePlayer(
+    private suspend fun callInnerTubePlayer(
         videoId: String,
-        clientName: String,
-        clientVersion: String,
-        userAgent: String,
-        clientNameHeaderId: String? = null,
-        visitorData: String? = null,
-        extraClientFields: Map<String, Any> = emptyMap()
+        profile: InnerTubeClientProfile_Antigravity,
+        visitorData: String? = null
     ): JSONObject? {
         val clientObj = JSONObject().apply {
-            put("clientName", clientName)
-            put("clientVersion", clientVersion)
+            put("clientName", profile.clientName)
+            put("clientVersion", profile.clientVersion)
             put("hl", "en")
             put("gl", "US")
             if (!visitorData.isNullOrBlank()) {
                 put("visitorData", visitorData)
             }
-            for ((k, v) in extraClientFields) {
+            for ((k, v) in profile.extraClientFields) {
                 put(k, v)
             }
         }
@@ -1243,311 +1006,46 @@ object YouTubeService {
         }
 
         val extraHeaders = mutableMapOf<String, String>()
-        if (!clientNameHeaderId.isNullOrBlank()) {
-            extraHeaders["X-YouTube-Client-Name"] = clientNameHeaderId
-            extraHeaders["X-YouTube-Client-Version"] = clientVersion
+        if (!profile.clientNameHeaderId.isNullOrBlank()) {
+            extraHeaders["X-YouTube-Client-Name"] = profile.clientNameHeaderId
+            extraHeaders["X-YouTube-Client-Version"] = profile.clientVersion
         }
         if (!visitorData.isNullOrBlank()) {
             extraHeaders["X-Goog-Visitor-Id"] = visitorData
         }
 
-        val response = httpPostJson(
-            url = "https://www.youtube.com/youtubei/v1/player?prettyPrint=false",
+        val response = InnerTubeHttpClient_Antigravity.postJson(
+            url = INNERTUBE_PLAYER_URL,
             jsonBody = body.toString(),
-            userAgent = userAgent,
+            userAgent = profile.userAgent,
             extraHeaders = extraHeaders
         ) ?: return null
 
         return runCatching { JSONObject(response) }.getOrNull()
     }
 
-    private fun extractPlaylistTitle(root: JSONObject): String? {
-        root.optJSONObject("metadata")
-            ?.optJSONObject("playlistMetadataRenderer")
-            ?.optString("title")
-            ?.takeIf { it.isNotBlank() }
-            ?.let { return it }
-
-        root.optJSONObject("header")
-            ?.optJSONObject("pageHeaderRenderer")
-            ?.optString("pageTitle")
-            ?.takeIf { it.isNotBlank() }
-            ?.let { return it }
-
-        root.optJSONObject("header")
-            ?.optJSONObject("playlistHeaderRenderer")
-            ?.optJSONObject("title")
-            ?.optString("simpleText")
-            ?.takeIf { it.isNotBlank() }
-            ?.let { return it }
-
-        root.optJSONObject("contents")
-            ?.optJSONObject("twoColumnWatchNextResults")
-            ?.optJSONObject("playlist")
-            ?.optJSONObject("playlist")
-            ?.optString("title")
-            ?.takeIf { it.isNotBlank() }
-            ?.let { return it }
-
-        return null
-    }
-
-    private fun extractPlaylistAuthor(root: JSONObject): String? {
-        root.optJSONObject("header")
-            ?.optJSONObject("playlistHeaderRenderer")
-            ?.optJSONObject("ownerText")
-            ?.optJSONArray("runs")
-            ?.optJSONObject(0)
-            ?.optString("text")
-            ?.takeIf { it.isNotBlank() }
-            ?.let { return it }
-
-        val sidebarItems = root.optJSONObject("sidebar")
-            ?.optJSONObject("playlistSidebarRenderer")
-            ?.optJSONArray("items")
-        if (sidebarItems != null) {
-            for (i in 0 until sidebarItems.length()) {
-                val ownerText = sidebarItems.optJSONObject(i)
-                    ?.optJSONObject("playlistSidebarSecondaryInfoRenderer")
-                    ?.optJSONObject("videoOwner")
-                    ?.optJSONObject("videoOwnerRenderer")
-                    ?.optJSONObject("title")
-                    ?.optJSONArray("runs")
-                    ?.optJSONObject(0)
-                    ?.optString("text")
-                    ?.takeIf { it.isNotBlank() }
-                if (ownerText != null) return ownerText
-            }
-        }
-
-        return null
-    }
-
-    private fun collectPlaylistVideosRecursive(
-        node: Any?,
-        defaultAuthor: String,
-        sink: MutableList<YouTubeVideoMetadata>
-    ) {
-        when (node) {
-            is JSONObject -> {
-                // 1. Classic playlistVideoRenderer
-                val pvr = node.optJSONObject("playlistVideoRenderer")
-                if (pvr != null) {
-                    val vid = pvr.optString("videoId")
-                    if (vid.length == 11) {
-                        val title = pvr.optJSONObject("title")
-                            ?.optJSONArray("runs")
-                            ?.optJSONObject(0)
-                            ?.optString("text")
-                            ?: pvr.optJSONObject("title")?.optString("simpleText")
-                            ?: "Video $vid"
-                        val durationSec = pvr.optString("lengthSeconds").toLongOrNull()
-                        val durationMs = if (durationSec != null && durationSec > 0L) {
-                            durationSec * 1000L
-                        } else {
-                            parseDurationTextToMs(pvr.optJSONObject("lengthText")?.optString("simpleText"))
+    private inline fun buildWebContextBody(
+        webProfile: InnerTubeClientProfile_Antigravity,
+        configure: JSONObject.() -> Unit
+    ): JSONObject {
+        return JSONObject().apply {
+            configure()
+            put(
+                "context",
+                JSONObject().apply {
+                    put(
+                        "client",
+                        JSONObject().apply {
+                            put("clientName", webProfile.clientName)
+                            put("clientVersion", webProfile.clientVersion)
+                            put("hl", "en")
+                            put("gl", "US")
                         }
-                        val author = pvr.optJSONObject("shortBylineText")
-                            ?.optJSONArray("runs")
-                            ?.optJSONObject(0)
-                            ?.optString("text")
-                            ?: defaultAuthor
-                        sink.add(
-                            YouTubeVideoMetadata(
-                                videoId = vid,
-                                title = title,
-                                author = author,
-                                durationMs = durationMs,
-                                thumbnailUrl = YouTubeIdExtractor.buildYouTubeThumbnailUrl(vid)
-                            )
-                        )
-                    }
+                    )
                 }
-
-                // 2. Watch-next playlistPanelVideoRenderer
-                val ppvr = node.optJSONObject("playlistPanelVideoRenderer")
-                if (ppvr != null) {
-                    val vid = ppvr.optString("videoId")
-                    if (vid.length == 11) {
-                        val title = ppvr.optJSONObject("title")?.optString("simpleText")
-                            ?: ppvr.optJSONObject("title")?.optJSONArray("runs")?.optJSONObject(0)?.optString("text")
-                            ?: "Video $vid"
-                        val durationMs = parseDurationTextToMs(
-                            ppvr.optJSONObject("lengthText")?.optString("simpleText")
-                                ?: ppvr.optJSONObject("lengthText")?.optJSONArray("runs")?.optJSONObject(0)?.optString("text")
-                        )
-                        val author = ppvr.optJSONObject("shortBylineText")
-                            ?.optJSONArray("runs")
-                            ?.optJSONObject(0)
-                            ?.optString("text")
-                            ?: defaultAuthor
-                        sink.add(
-                            YouTubeVideoMetadata(
-                                videoId = vid,
-                                title = title,
-                                author = author,
-                                durationMs = durationMs,
-                                thumbnailUrl = YouTubeIdExtractor.buildYouTubeThumbnailUrl(vid)
-                            )
-                        )
-                    }
-                }
-
-                // 3. Modern YouTube 2025/2026 lockupViewModel (used by courses, music & modern playlists)
-                val lvm = node.optJSONObject("lockupViewModel")
-                if (lvm != null) {
-                    val vid = lvm.optString("contentId").takeIf { it.length == 11 }
-                        ?: lvm.optJSONObject("rendererContext")
-                            ?.optJSONObject("commandContext")
-                            ?.optJSONObject("onTap")
-                            ?.optJSONObject("innertubeCommand")
-                            ?.optJSONObject("watchEndpoint")
-                            ?.optString("videoId")
-                            ?.takeIf { it.length == 11 }
-                    if (vid != null) {
-                        val lockupMeta = lvm.optJSONObject("metadata")
-                            ?.optJSONObject("lockupMetadataViewModel")
-                        val title = lockupMeta?.optJSONObject("title")
-                            ?.optString("content")
-                            ?.takeIf { it.isNotBlank() }
-                            ?: "Video $vid"
-                        val author = lockupMeta?.optJSONObject("metadata")
-                            ?.optJSONObject("contentMetadataViewModel")
-                            ?.optJSONArray("metadataRows")
-                            ?.optJSONObject(0)
-                            ?.optJSONArray("metadataParts")
-                            ?.optJSONObject(0)
-                            ?.optJSONObject("text")
-                            ?.optString("content")
-                            ?.takeIf { it.isNotBlank() }
-                            ?: defaultAuthor
-                        val durationMs = extractDurationFromLockup(lvm)
-                        sink.add(
-                            YouTubeVideoMetadata(
-                                videoId = vid,
-                                title = title,
-                                author = author,
-                                durationMs = durationMs,
-                                thumbnailUrl = YouTubeIdExtractor.buildYouTubeThumbnailUrl(vid)
-                            )
-                        )
-                    }
-                }
-
-                val keys = node.keys()
-                while (keys.hasNext()) {
-                    val k = keys.next()
-                    if (k != "playlistVideoRenderer" && k != "playlistPanelVideoRenderer" && k != "lockupViewModel") {
-                        collectPlaylistVideosRecursive(node.opt(k), defaultAuthor, sink)
-                    }
-                }
-            }
-            is JSONArray -> {
-                for (i in 0 until node.length()) {
-                    collectPlaylistVideosRecursive(node.opt(i), defaultAuthor, sink)
-                }
-            }
+            )
         }
     }
 
-    private fun extractDurationFromLockup(lvm: JSONObject): Long {
-        val overlays = lvm.optJSONObject("contentImage")
-            ?.optJSONObject("thumbnailViewModel")
-            ?.optJSONArray("overlays") ?: return 0L
-        for (i in 0 until overlays.length()) {
-            val badges = overlays.optJSONObject(i)
-                ?.optJSONObject("thumbnailBottomOverlayViewModel")
-                ?.optJSONArray("badges") ?: continue
-            for (j in 0 until badges.length()) {
-                val text = badges.optJSONObject(j)
-                    ?.optJSONObject("thumbnailBadgeViewModel")
-                    ?.optString("text")
-                    ?.takeIf { it.isNotBlank() }
-                val parsed = parseDurationTextToMs(text)
-                if (parsed > 0L) return parsed
-            }
-        }
-        return 0L
-    }
-
-    private fun parseDurationTextToMs(raw: String?): Long {
-        if (raw.isNullOrBlank()) return 0L
-        val parts = raw.trim().split(":").mapNotNull { it.trim().toLongOrNull() }
-        val seconds = when (parts.size) {
-            3 -> parts[0] * 3600L + parts[1] * 60L + parts[2]
-            2 -> parts[0] * 60L + parts[1]
-            1 -> parts[0]
-            else -> 0L
-        }
-        return seconds * 1000L
-    }
-
-    private fun extractContinuationToken(node: Any?): String? {
-        if (node is JSONObject) {
-            val contCmd = node.optJSONObject("continuationCommand")
-            if (contCmd != null) {
-                val token = contCmd.optString("token")
-                if (token.isNotBlank()) return token
-            }
-            val keys = node.keys()
-            while (keys.hasNext()) {
-                val k = keys.next()
-                val res = extractContinuationToken(node.opt(k))
-                if (res != null) return res
-            }
-        } else if (node is JSONArray) {
-            for (i in 0 until node.length()) {
-                val res = extractContinuationToken(node.opt(i))
-                if (res != null) return res
-            }
-        }
-        return null
-    }
-
-    private fun httpPostJson(
-        url: String,
-        jsonBody: String,
-        userAgent: String,
-        extraHeaders: Map<String, String> = emptyMap()
-    ): String? {
-        return runCatching {
-            val conn = (URL(url).openConnection() as HttpURLConnection).apply {
-                requestMethod = "POST"
-                connectTimeout = 8_000
-                readTimeout = 10_000
-                doOutput = true
-                setRequestProperty("Content-Type", "application/json")
-                setRequestProperty("Accept", "application/json")
-                setRequestProperty("User-Agent", userAgent)
-                for ((k, v) in extraHeaders) {
-                    setRequestProperty(k, v)
-                }
-            }
-            OutputStreamWriter(conn.outputStream, Charsets.UTF_8).use { writer ->
-                writer.write(jsonBody)
-                writer.flush()
-            }
-            if (conn.responseCode in 200..299) {
-                BufferedReader(InputStreamReader(conn.inputStream, Charsets.UTF_8)).use { it.readText() }
-            } else {
-                null
-            }
-        }.getOrNull()
-    }
-
-    fun httpGet(url: String): String? {
-        return runCatching {
-            val conn = (URL(url).openConnection() as HttpURLConnection).apply {
-                requestMethod = "GET"
-                connectTimeout = 7_000
-                readTimeout = 8_000
-                setRequestProperty("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64)")
-            }
-            if (conn.responseCode in 200..299) {
-                BufferedReader(InputStreamReader(conn.inputStream, Charsets.UTF_8)).use { it.readText() }
-            } else {
-                null
-            }
-        }.getOrNull()
-    }
+    fun httpGet(url: String): String? = InnerTubeHttpClient_Antigravity.getStringBlocking(url)
 }

@@ -69,7 +69,7 @@ Master engineering checklist covering Tasks **T01–T18** across **Phases 0–3*
   - **Verification**:
     - `.\gradlew.bat :app:compileDebugKotlin`
 
-- [ ] **T07 — Watch-Time Timer & Break Enforcement**
+- [x] **T07 — Watch-Time Timer & Break Enforcement** *(Wave 2 MediaSessionService `JoudPlaybackService_Antigravity` + Manifest + `MainActivity` notification permission complete; WatchTimerManager/Dialog scheduled for Wave 3)*
   - **Goal**: Track active viewing duration against `watchTimeLimitMinutes`, display time's-up enforcement dialog (`watch_timer_times_up_title`, `watch_timer_times_up_message`), and allow parent-gated extensions (`watch_timer_extend_parent`).
   - **Target Files**:
     - `app/src/main/kotlin/com/joudjawadtube/player/data/settings/WatchTimerManager_Antigravity.kt`
@@ -77,7 +77,7 @@ Master engineering checklist covering Tasks **T01–T18** across **Phases 0–3*
   - **Verification**:
     - `.\gradlew.bat :app:testDebugUnitTest`
 
-- [ ] **T08 — Network Connectivity Monitor & Offline Banner**
+- [x] **T08 — Network Connectivity Monitor & Offline Banner** *(Wave 2 PiP mode + `MainActivity` `enterPipMode` + `PlaybackScreen` PiP overlay suppression complete; `NetworkMonitor_Antigravity` & offline banner also complete)*
   - **Goal**: Observe network connectivity via `ConnectivityManager` and render a localized `offline_banner_message` component when offline while preserving uninterrupted local/USB playback.
   - **Target Files**:
     - `app/src/main/kotlin/com/joudjawadtube/player/data/scanner/NetworkMonitor_Antigravity.kt`
@@ -85,7 +85,7 @@ Master engineering checklist covering Tasks **T01–T18** across **Phases 0–3*
   - **Verification**:
     - `.\gradlew.bat :app:compileDebugKotlin`
 
-- [ ] **T09 — Settings UI Integration & Async Cache Reporting**
+- [x] **T09 — Settings UI Integration & Async Cache Reporting** *(Wave 1 Settings UI + `getCacheSizeBytesAsync` & Wave 2 `NetworkMonitor_Antigravity` + `OfflineStatusBanner_Antigravity` complete)*
   - **Goal**: Add the Parental & Kid-Safety section (`settings_parental_section_title`, parental gate, background playback, general fallback, WebView fallback, watch timer) to Settings, guard sensitive actions/reset behind the Parental Gate, and load thumbnail cache size asynchronously via `getCacheSizeBytesAsync()`.
   - **Target Files**:
     - `app/src/main/kotlin/com/joudjawadtube/player/ui/catalog/SettingsScreen_Antigravity.kt`
@@ -96,7 +96,7 @@ Master engineering checklist covering Tasks **T01–T18** across **Phases 0–3*
 
 ## Phase 2 — Media3 Background Playback & Player UX
 
-- [ ] **T10 — Media3 `MediaSessionService` Implementation**
+- [x] **T10 — Media3 `MediaSessionService` Implementation** *(Wave 2 `JoudPlaybackService_Antigravity`, `AndroidManifest.xml`, and modular OkHttp InnerTube + 50-entry LRU cache + `InnerTubeResilienceTest_Antigravity` complete)*
   - **Goal**: Move ExoPlayer ownership into a Media3 `MediaSessionService` configured with `YouTubeChunkedHttpDataSource_Antigravity`, audio focus/becoming-noisy handling, and media notification metadata while keeping sideloading permissions intact.
   - **Target Files**:
     - `app/src/main/kotlin/com/joudjawadtube/player/playback/PlaybackService_Antigravity.kt`
@@ -104,7 +104,7 @@ Master engineering checklist covering Tasks **T01–T18** across **Phases 0–3*
   - **Verification**:
     - `.\gradlew.bat :app:compileDebugKotlin :app:processDebugMainManifest`
 
-- [ ] **T11 — PlaybackScreen & HUD Migration to `MediaController`**
+- [x] **T11 — PlaybackScreen & HUD Migration to `MediaController`** *(Wave 2 `MediaController` binding, lifecycle surface detach, `YouTubeChunkedHttpDataSource_Antigravity` precompiled regex + redirect hardening + chunk retry complete; Kid Lock & Watch Timer overlays scheduled for Wave 3)*
   - **Goal**: Bind `PlaybackScreen` to `PlaybackService_Antigravity` via `MediaController`, expose localized loading and categorized error UI (`player_loading_stream`, `player_error_local`, `player_error_youtube`, `player_error_kids_restricted`, `player_error_offline`, `player_retry`), and integrate Kid Lock + Watch Timer overlays.
   - **Target Files**:
     - `app/src/main/kotlin/com/joudjawadtube/player/ui/playback/PlaybackScreen.kt`

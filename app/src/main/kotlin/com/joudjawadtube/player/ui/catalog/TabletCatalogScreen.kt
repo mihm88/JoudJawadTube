@@ -327,6 +327,11 @@ fun TabletCatalogScreen(
 
                     Spacer(modifier = Modifier.height(12.dp))
 
+                    if (!uiState.isOnline) {
+                        OfflineStatusBanner_Antigravity()
+                        Spacer(modifier = Modifier.height(10.dp))
+                    }
+
                     if (uiState.searchQuery.isNotBlank()) {
                         InAppSearchResultsView_Antigravity(
                             query = uiState.searchQuery,

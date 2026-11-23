@@ -9,6 +9,7 @@ import com.joudjawadtube.player.data.local.SavedChannelEntity
 import com.joudjawadtube.player.data.local.SavedPlaylistEntity
 import com.joudjawadtube.player.data.local.VideoEntity
 import com.joudjawadtube.player.data.local.VideoItem
+import com.joudjawadtube.player.data.network.NetworkMonitor_Antigravity
 import com.joudjawadtube.player.data.repository.CatalogSnapshot
 import com.joudjawadtube.player.data.repository.CategoryRow
 import com.joudjawadtube.player.data.repository.KidsCatalogRepository_Antigravity
@@ -83,7 +84,8 @@ data class CatalogUiState(
     val isGeneratingThumbnails: Boolean = false,
     val thumbnailStatusMessage: String? = null,
     val thumbnailRevision: Int = 0,
-    val updateState: UpdateState_Antigravity = UpdateState_Antigravity.Idle
+    val updateState: UpdateState_Antigravity = UpdateState_Antigravity.Idle,
+    val isOnline: Boolean = true
 ) {
     val usbDriveCount: Int
         get() = mountedVolumes.count { it.isUsbOrRemovable }
@@ -109,6 +111,7 @@ class CatalogViewModel(application: Application) : AndroidViewModel(application)
     private val database = AppDatabase.getInstance(application)
     private val repository = VideoRepository(application.applicationContext, database.videoDao())
     private val settingsRepository = AppSettingsRepository.getInstance(application)
+    private val networkMonitor = NetworkMonitor_Antigravity(application)
 
     private val _selectedSection = MutableStateFlow(SidebarSection.HOME)
     private val _selectedTopCategory = MutableStateFlow("All")
@@ -129,9 +132,9 @@ class CatalogViewModel(application: Application) : AndroidViewModel(application)
             _selectedTopCategory,
             _searchQuery,
             _selectedFolderFilter,
-            _dialogState
-        ) { section, topCat, query, folder, dialog ->
-            FilterAndDialogBundle(section, topCat, query, folder, dialog.isTvModeOverride, dialog)
+            combine(_dialogState, networkMonitor.isOnline) { dlg, online -> dlg to online }
+        ) { section, topCat, query, folder, (dialog, online) ->
+            FilterAndDialogBundle(section, topCat, query, folder, dialog.isTvModeOverride, dialog, online)
         }
     ) { snapshot, isScanning, volumes, settings, bundle ->
         val section = bundle.selectedSection
@@ -343,7 +346,8 @@ class CatalogViewModel(application: Application) : AndroidViewModel(application)
             isGeneratingThumbnails = dlg.isGeneratingThumbnails,
             thumbnailStatusMessage = dlg.thumbnailStatusMessage,
             thumbnailRevision = dlg.thumbnailRevision,
-            updateState = dlg.updateState
+            updateState = dlg.updateState,
+            isOnline = bundle.isOnline
         )
     }.flowOn(Dispatchers.Default).stateIn(
         scope = viewModelScope,
@@ -357,7 +361,8 @@ class CatalogViewModel(application: Application) : AndroidViewModel(application)
         val searchQuery: String,
         val selectedFolderFilter: String?,
         val isTvModeOverride: Boolean?,
-        val dialogState: DialogAndThumbState
+        val dialogState: DialogAndThumbState,
+        val isOnline: Boolean
     )
 
     init {
@@ -954,5 +959,10 @@ class CatalogViewModel(application: Application) : AndroidViewModel(application)
             val hideBoot = settingsRepository.settingsFlow.value.hideBootUsbPartitions
             repository.removeSafFolder(uriString, hideBoot)
         }
+    }
+
+    override fun onCleared() {
+        super.onCleared()
+        networkMonitor.unregister()
     }
 }

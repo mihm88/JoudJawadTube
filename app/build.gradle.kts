@@ -101,6 +101,7 @@ dependencies {
     implementation(libs.androidx.activity.compose)
     implementation(libs.kotlinx.coroutines.android)
     implementation(libs.androidx.documentfile)
+    implementation(libs.okhttp)
 
     // Compose UI & Material3 (Tablet & Shared)
     implementation(libs.androidx.compose.ui)

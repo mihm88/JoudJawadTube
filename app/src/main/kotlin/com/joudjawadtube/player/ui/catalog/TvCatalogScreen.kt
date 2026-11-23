@@ -42,6 +42,7 @@ import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Usb
 import androidx.compose.material.icons.filled.VideoLibrary
+import androidx.compose.material.icons.filled.WifiOff
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -85,6 +86,7 @@ import com.joudjawadtube.player.ui.components.SearchIconBar_Antigravity
 import com.joudjawadtube.player.ui.components.SidebarSection
 import com.joudjawadtube.player.ui.components.SmartTubeSidebar
 import com.joudjawadtube.player.ui.components.VideoCard
+import com.joudjawadtube.player.ui.theme.LocalJoudColors
 import com.joudjawadtube.player.ui.theme.SmartTubeBackground
 import com.joudjawadtube.player.ui.theme.SmartTubeCardBg
 import com.joudjawadtube.player.ui.theme.SmartTubeCardFocusedBg
@@ -182,6 +184,11 @@ fun TvCatalogScreen(
             )
 
             Spacer(modifier = Modifier.height(12.dp))
+
+            if (!uiState.isOnline) {
+                OfflineStatusBanner_Antigravity()
+                Spacer(modifier = Modifier.height(10.dp))
+            }
 
             if (uiState.searchQuery.isNotBlank()) {
                 InAppSearchResultsView_Antigravity(
@@ -826,5 +833,36 @@ fun EmptyCatalogState(
                 )
             }
         }
+    }
+}
+
+@Composable
+internal fun OfflineStatusBanner_Antigravity(modifier: Modifier = Modifier) {
+    val colors = LocalJoudColors.current
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
+            .background(colors.cardBg)
+            .border(1.dp, colors.usbCyan.copy(alpha = 0.45f), RoundedCornerShape(12.dp))
+            .padding(horizontal = 14.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
+        Icon(
+            imageVector = Icons.Default.WifiOff,
+            contentDescription = null,
+            tint = colors.usbCyan,
+            modifier = Modifier.size(18.dp)
+        )
+        Text(
+            text = stringResource(R.string.offline_banner_message),
+            color = colors.textPrimary,
+            fontSize = 12.sp,
+            lineHeight = 16.sp,
+            fontWeight = FontWeight.SemiBold,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis
+        )
     }
 }

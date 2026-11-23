@@ -8,6 +8,7 @@ import androidx.media3.datasource.BaseDataSource
 import androidx.media3.datasource.DataSource
 import androidx.media3.datasource.DataSpec
 import androidx.media3.datasource.DefaultHttpDataSource
+import androidx.media3.datasource.HttpDataSource
 import kotlin.math.min
 
 /**
@@ -43,6 +44,10 @@ class YouTubeChunkedHttpDataSource_Antigravity(
         // Larger subsequent chunks (2.5 MB) to minimize HTTP round-trips during steady playback
         private const val SUBSEQUENT_VIDEO_CHUNK_BYTES = 2_560 * 1024L
         private const val SUBSEQUENT_AUDIO_CHUNK_BYTES = 1_024 * 1024L
+
+        private val CLEN_REGEX = Regex("""[?&]clen=(\d+)""")
+        private val RANGE_REGEX = Regex("""([?&])range=\d+-\d+&?""")
+        private val CHUNK_RETRY_DELAYS_MS = longArrayOf(250L, 600L)
     }
 
     private var delegate: DefaultHttpDataSource? = null
@@ -63,7 +68,7 @@ class YouTubeChunkedHttpDataSource_Antigravity(
             .setUserAgent(userAgent)
             .setConnectTimeoutMs(connectTimeoutMs)
             .setReadTimeoutMs(readTimeoutMs)
-            .setAllowCrossProtocolRedirects(true)
+            .setAllowCrossProtocolRedirects(false)
             .createDataSource()
 
         delegate = httpDelegate
@@ -138,12 +143,54 @@ class YouTubeChunkedHttpDataSource_Antigravity(
             .setLength(C.LENGTH_UNSET.toLong())
             .build()
 
-        val returnedLen = httpDelegate.open(chunkSpec)
-        currentUri = httpDelegate.uri ?: chunkUri
-        currentChunkBytesRemaining = if (returnedLen != C.LENGTH_UNSET.toLong() && returnedLen > 0L) {
-            min(returnedLen, chunkLength)
-        } else {
-            chunkLength
+        var attempt = 0
+        while (true) {
+            try {
+                httpDelegate.close()
+            } catch (_: Throwable) {}
+
+            try {
+                val returnedLen = httpDelegate.open(chunkSpec)
+                currentUri = httpDelegate.uri ?: chunkUri
+                currentChunkBytesRemaining = if (returnedLen != C.LENGTH_UNSET.toLong() && returnedLen > 0L) {
+                    min(returnedLen, chunkLength)
+                } else {
+                    chunkLength
+                }
+                return
+            } catch (e: HttpDataSource.InvalidResponseCodeException) {
+                try {
+                    httpDelegate.close()
+                } catch (_: Throwable) {}
+                if (e.responseCode == 403 ||
+                    e.responseCode == 404 ||
+                    e.responseCode == 410 ||
+                    attempt >= CHUNK_RETRY_DELAYS_MS.size
+                ) {
+                    throw e
+                }
+                try {
+                    Thread.sleep(CHUNK_RETRY_DELAYS_MS[attempt])
+                } catch (_: InterruptedException) {
+                    Thread.currentThread().interrupt()
+                    throw e
+                }
+                attempt++
+            } catch (e: HttpDataSource.HttpDataSourceException) {
+                try {
+                    httpDelegate.close()
+                } catch (_: Throwable) {}
+                if (attempt >= CHUNK_RETRY_DELAYS_MS.size) {
+                    throw e
+                }
+                try {
+                    Thread.sleep(CHUNK_RETRY_DELAYS_MS[attempt])
+                } catch (_: InterruptedException) {
+                    Thread.currentThread().interrupt()
+                    throw e
+                }
+                attempt++
+            }
         }
     }
 
@@ -220,12 +267,12 @@ class YouTubeChunkedHttpDataSource_Antigravity(
 
     private fun extractClenFromUri(uri: Uri, rawUriStr: String): Long {
         uri.getQueryParameter("clen")?.toLongOrNull()?.let { if (it > 0L) return it }
-        val match = Regex("""[?&]clen=(\d+)""").find(rawUriStr)
+        val match = CLEN_REGEX.find(rawUriStr)
         return match?.groupValues?.getOrNull(1)?.toLongOrNull() ?: -1L
     }
 
     private fun appendOrReplaceRangeParam(uri: Uri, start: Long, end: Long): Uri {
-        val raw = uri.toString().replace(Regex("""([?&])range=\d+-\d+&?""")) { match ->
+        val raw = uri.toString().replace(RANGE_REGEX) { match ->
             if (match.value.endsWith("&")) match.groupValues[1] else ""
         }.trimEnd('&', '?')
         val sep = if (raw.contains('?')) '&' else '?'

@@ -1,6 +1,7 @@
 package com.joudjawadtube.player
 
 import android.Manifest
+import android.app.PictureInPictureParams
 import android.app.UiModeManager
 import android.content.Context
 import android.content.Intent
@@ -11,6 +12,7 @@ import android.os.Build
 import android.os.Bundle
 import android.os.Environment
 import android.provider.Settings
+import android.util.Rational
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
@@ -67,6 +69,7 @@ class MainActivity : AppCompatActivity() {
     private val viewModel: CatalogViewModel by viewModels()
     private var pendingIncomingUri by mutableStateOf<Uri?>(null)
     private var pendingIncomingShareText by mutableStateOf<String?>(null)
+    private var isInPipMode by mutableStateOf(false)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -163,6 +166,27 @@ class MainActivity : AppCompatActivity() {
                     ) {
                         hasReadPermission = checkReadVideoPermission(context)
                         viewModel.rescanStorage()
+                    }
+
+                    var requestedNotificationPermission by rememberSaveable { mutableStateOf(false) }
+                    val notificationPermissionLauncher = rememberLauncherForActivityResult(
+                        contract = ActivityResultContracts.RequestPermission()
+                    ) { }
+
+                    LaunchedEffect(uiState.settings.backgroundPlaybackEnabled) {
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+                            uiState.settings.backgroundPlaybackEnabled &&
+                            !requestedNotificationPermission
+                        ) {
+                            val granted = ContextCompat.checkSelfPermission(
+                                context,
+                                Manifest.permission.POST_NOTIFICATIONS
+                            ) == PackageManager.PERMISSION_GRANTED
+                            if (!granted) {
+                                requestedNotificationPermission = true
+                                notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                            }
+                        }
                     }
 
                     val safFolderLauncher = rememberLauncherForActivityResult(
@@ -358,6 +382,16 @@ class MainActivity : AppCompatActivity() {
                             PlaybackScreen(
                                 session = currentSession,
                                 settings = uiState.settings,
+                                isInPictureInPictureMode = isInPipMode,
+                                onEnterPictureInPicture = if (
+                                    Build.VERSION.SDK_INT >= Build.VERSION_CODES.O &&
+                                    layoutInfo.isTouchDevice &&
+                                    packageManager.hasSystemFeature(PackageManager.FEATURE_PICTURE_IN_PICTURE)
+                                ) {
+                                    { enterPipMode() }
+                                } else {
+                                    null
+                                },
                                 onSaveProgress = { videoKey, posMs, durMs ->
                                     viewModel.savePlaybackProgress(videoKey, posMs, durMs)
                                 },
@@ -499,6 +533,27 @@ class MainActivity : AppCompatActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         handleIncomingVideoIntent(intent)
+    }
+
+    override fun onPictureInPictureModeChanged(
+        isInPictureInPictureMode: Boolean,
+        newConfig: Configuration
+    ) {
+        super.onPictureInPictureModeChanged(isInPictureInPictureMode, newConfig)
+        isInPipMode = isInPictureInPictureMode
+    }
+
+    private fun enterPipMode() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O &&
+            packageManager.hasSystemFeature(PackageManager.FEATURE_PICTURE_IN_PICTURE)
+        ) {
+            runCatching {
+                val params = PictureInPictureParams.Builder()
+                    .setAspectRatio(Rational(16, 9))
+                    .build()
+                enterPictureInPictureMode(params)
+            }
+        }
     }
 
     private fun handleIncomingVideoIntent(intent: Intent?) {
