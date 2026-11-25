@@ -20,14 +20,18 @@ import com.joudjawadtube.player.data.repository.VideoRepository
 import com.joudjawadtube.player.data.settings.AppLanguage
 import com.joudjawadtube.player.data.settings.AppSettingsRepository
 import com.joudjawadtube.player.data.updater.AppUpdater_Antigravity
+import com.joudjawadtube.player.data.updater.UpdateInfo_Antigravity
+import com.joudjawadtube.player.data.updater.UpdateState_Antigravity
 import com.joudjawadtube.player.ui.catalog.CatalogAction
 import com.joudjawadtube.player.ui.catalog.CatalogUiState
 import com.joudjawadtube.player.ui.catalog.CatalogViewModel
 import com.joudjawadtube.player.ui.components.SidebarSection
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.resetMain
@@ -424,7 +428,11 @@ class CatalogViewModelTest_Antigravity {
     }
 
     private fun createViewModel(
-        kidsLoader: suspend (AppLanguage) -> List<KidsChannelItem> = { sampleKidsChannels }
+        kidsLoader: suspend (AppLanguage) -> List<KidsChannelItem> = { sampleKidsChannels },
+        autoCheckUpdatesOnInit: Boolean = false,
+        onlineStateFlow: StateFlow<Boolean> = networkMonitor.isOnline,
+        updateChecker: suspend (String) -> Result<UpdateInfo_Antigravity?> = { Result.success(null) },
+        autoUpdateCheckDelayMs: Long = 0L
     ): CatalogViewModel {
         val factory = object : ViewModelProvider.Factory {
             @Suppress("UNCHECKED_CAST")
@@ -436,11 +444,14 @@ class CatalogViewModelTest_Antigravity {
                     networkMonitor = networkMonitor,
                     kidsChannelsLoader = kidsLoader,
                     isBuiltInChannelCheck = { cid, _ -> sampleKidsChannels.any { it.channelId == cid } },
-                    currentVersionProvider = { "1.2.3" },
+                    currentVersionProvider = { "1.3.0" },
                     observeUsbEvents = false,
                     videoCountProvider = { fakeDao.getVideoCount() },
-                    autoCheckUpdatesOnInit = false,
-                    autoScanOnInit = false
+                    autoCheckUpdatesOnInit = autoCheckUpdatesOnInit,
+                    autoScanOnInit = false,
+                    onlineStateFlow = onlineStateFlow,
+                    updateChecker = updateChecker,
+                    autoUpdateCheckDelayMs = autoUpdateCheckDelayMs
                 ) as T
             }
         }
@@ -575,5 +586,151 @@ class CatalogViewModelTest_Antigravity {
         assertFalse(updated.settings.parentalGateEnabled)
         assertEquals(30, updated.settings.watchTimeLimitMinutes)
         assertFalse(updated.settings.backgroundPlaybackEnabled)
+    }
+
+    @Test
+    fun dismissHomeUpdateBanner_hidesBannerWithoutClearingUpdateAvailableState() = runTest {
+        val availableInfo = UpdateInfo_Antigravity(
+            tagName = "v1.4.0",
+            releaseTitle = "Kid Safe Update",
+            releaseNotes = "New playback fixes",
+            downloadUrl = "https://example.com/JoudJawadTube-v1.4.0.apk",
+            fileName = "JoudJawadTube-v1.4.0.apk",
+            fileSize = 3_879_731L,
+            isNewer = true
+        )
+        val viewModel = createViewModel(
+            updateChecker = { Result.success(availableInfo) }
+        )
+
+        viewModel.onAction(CatalogAction.CheckForUpdates)
+        val availableState = awaitState(viewModel) {
+            it.updateState is UpdateState_Antigravity.UpdateAvailable
+        }
+        assertFalse(availableState.isHomeUpdateBannerDismissed)
+        assertEquals(availableInfo, (availableState.updateState as UpdateState_Antigravity.UpdateAvailable).info)
+
+        viewModel.onAction(CatalogAction.DismissHomeUpdateBanner)
+        val dismissedState = awaitState(viewModel) { it.isHomeUpdateBannerDismissed }
+        assertTrue(dismissedState.isHomeUpdateBannerDismissed)
+        assertEquals(
+            UpdateState_Antigravity.UpdateAvailable(availableInfo),
+            dismissedState.updateState
+        )
+
+        // Subsequent update discovery resets banner dismissal
+        viewModel.onAction(CatalogAction.CheckForUpdates)
+        val reappearedState = awaitState(viewModel) {
+            !it.isHomeUpdateBannerDismissed && it.updateState is UpdateState_Antigravity.UpdateAvailable
+        }
+        assertFalse(reappearedState.isHomeUpdateBannerDismissed)
+    }
+
+    @Test
+    fun autoCheckUpdatesOnInit_waitsForOnlineTransitionAndChecksOnce() = runTest {
+        val availableInfo = UpdateInfo_Antigravity(
+            tagName = "v1.4.0",
+            releaseTitle = "Late WiFi Update",
+            releaseNotes = "",
+            downloadUrl = "https://example.com/JoudJawadTube-v1.4.0.apk",
+            fileName = "JoudJawadTube-v1.4.0.apk",
+            fileSize = 4_000_000L,
+            isNewer = true
+        )
+        val onlineFlow = MutableStateFlow(false)
+        var checkCalls = 0
+        val viewModel = createViewModel(
+            autoCheckUpdatesOnInit = true,
+            onlineStateFlow = onlineFlow,
+            updateChecker = {
+                checkCalls++
+                Result.success(availableInfo)
+            },
+            autoUpdateCheckDelayMs = 10L
+        )
+
+        val offlineState = awaitState(viewModel) { !it.isOnline }
+        assertEquals(UpdateState_Antigravity.Idle, offlineState.updateState)
+        assertEquals(0, checkCalls)
+
+        // Late Wi-Fi connection after TV boot triggers exactly one silent auto-check
+        onlineFlow.value = true
+        val onlineAvailable = awaitState(viewModel) {
+            it.isOnline && it.updateState is UpdateState_Antigravity.UpdateAvailable
+        }
+        assertEquals(1, checkCalls)
+        assertFalse(onlineAvailable.isHomeUpdateBannerDismissed)
+
+        // Subsequent offline/online flapping does not trigger a second auto-check
+        onlineFlow.value = false
+        awaitState(viewModel) { !it.isOnline }
+        onlineFlow.value = true
+        awaitState(viewModel) { it.isOnline }
+        withContext(Dispatchers.Default) { delay(50L) }
+        assertEquals(1, checkCalls)
+    }
+
+    @Test
+    fun silentAutoCheck_keepsIdleWhenUpToDateOrFailed_andRetriesIfOfflineFailure() = runTest {
+        val onlineFlow = MutableStateFlow(true)
+        var shouldFail = true
+        var checkCalls = 0
+        val newerInfo = UpdateInfo_Antigravity(
+            tagName = "v1.5.0",
+            releaseTitle = "Recovered Update",
+            releaseNotes = "",
+            downloadUrl = "https://example.com/JoudJawadTube-v1.5.0.apk",
+            fileName = "JoudJawadTube-v1.5.0.apk",
+            fileSize = 2_000_000L,
+            isNewer = true
+        )
+
+        // 1. Failure while offline does NOT mark auto-check complete and keeps Idle
+        val retryVm = createViewModel(
+            autoCheckUpdatesOnInit = true,
+            onlineStateFlow = onlineFlow,
+            updateChecker = {
+                checkCalls++
+                if (shouldFail) {
+                    onlineFlow.value = false
+                    Result.failure(IllegalStateException("Network lost"))
+                } else {
+                    Result.success(newerInfo)
+                }
+            },
+            autoUpdateCheckDelayMs = 10L
+        )
+        awaitState(retryVm) { !it.isOnline }
+        assertEquals(1, checkCalls)
+        assertEquals(UpdateState_Antigravity.Idle, retryVm.uiState.value.updateState)
+
+        // Network returns -> auto-check retries and surfaces UpdateAvailable
+        shouldFail = false
+        onlineFlow.value = true
+        val recovered = awaitState(retryVm) {
+            it.updateState is UpdateState_Antigravity.UpdateAvailable
+        }
+        assertEquals(2, checkCalls)
+        assertEquals(newerInfo, (recovered.updateState as UpdateState_Antigravity.UpdateAvailable).info)
+
+        // 2. Manual check surfaces Error when offline/failing, whereas silent UpToDate stays Idle
+        viewModelStore.clear()
+        var manualFail = false
+        val upToDateVm = createViewModel(
+            autoCheckUpdatesOnInit = false,
+            onlineStateFlow = MutableStateFlow(true),
+            updateChecker = {
+                if (manualFail) Result.failure(IllegalStateException("Timeout"))
+                else Result.success(null)
+            }
+        )
+        upToDateVm.checkForAppUpdates(isManual = false)
+        withContext(Dispatchers.Default) { delay(30L) }
+        assertEquals(UpdateState_Antigravity.Idle, upToDateVm.uiState.value.updateState)
+
+        manualFail = true
+        upToDateVm.onAction(CatalogAction.CheckForUpdates)
+        val errorState = awaitState(upToDateVm) { it.updateState is UpdateState_Antigravity.Error }
+        assertEquals("Timeout", (errorState.updateState as UpdateState_Antigravity.Error).message)
     }
 }

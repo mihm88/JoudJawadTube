@@ -71,12 +71,12 @@ import com.joudjawadtube.player.data.local.VideoItem
 import com.joudjawadtube.player.data.settings.AppSettingsState
 import com.joudjawadtube.player.ui.components.CompactBottomNav_Antigravity
 import com.joudjawadtube.player.ui.components.LocalWindowLayoutInfo
-import com.joudjawadtube.player.ui.components.PermissionBanner
 import com.joudjawadtube.player.ui.components.QuickChannelsPlaylistsDialog_Antigravity
 import com.joudjawadtube.player.ui.components.QuickCollectionTarget_Antigravity
 import com.joudjawadtube.player.ui.components.SearchIconBar_Antigravity
 import com.joudjawadtube.player.ui.components.SidebarSection
 import com.joudjawadtube.player.ui.components.SmartTubeSidebar
+import com.joudjawadtube.player.ui.components.UpdateNotificationBanner_Antigravity
 import com.joudjawadtube.player.ui.components.VideoCard
 import com.joudjawadtube.player.ui.theme.LocalJoudColors
 import com.joudjawadtube.player.ui.theme.SmartTubeBackground
@@ -346,7 +346,11 @@ fun TabletCatalogScreen(
                             onCheckForUpdates = { onAction(CatalogAction.CheckForUpdates) },
                             onDownloadAndInstallUpdate = { onAction(CatalogAction.DownloadAndInstallUpdate(it)) },
                             onInstallDownloadedApk = { onAction(CatalogAction.InstallDownloadedApk(it)) },
-                            onDismissUpdateStatus = { onAction(CatalogAction.DismissUpdateStatus) }
+                            onDismissUpdateStatus = { onAction(CatalogAction.DismissUpdateStatus) },
+                            hasReadVideoPermission = hasReadVideoPermission,
+                            hasAllFilesAccess = hasAllFilesAccess,
+                            onRequestReadPermission = { onAction(CatalogAction.RequestReadPermission) },
+                            onRequestAllFilesAccess = { onAction(CatalogAction.RequestAllFilesAccess) }
                         )
                     } else if (uiState.selectedSection == SidebarSection.KIDS_PICKS) {
                         KidsPicksScreen_Antigravity(
@@ -405,13 +409,15 @@ fun TabletCatalogScreen(
                             onChangePlaylistCategory = { playlistId, cat -> onAction(CatalogAction.ChangePlaylistCategory(playlistId, cat)) }
                         )
                     } else {
-                        PermissionBanner(
-                            hasReadVideoPermission = hasReadVideoPermission,
-                            hasAllFilesAccess = hasAllFilesAccess,
-                            onRequestReadPermission = { onAction(CatalogAction.RequestReadPermission) },
-                            onRequestAllFilesAccess = { onAction(CatalogAction.RequestAllFilesAccess) },
-                            onPickSafFolder = { onAction(CatalogAction.PickSafFolder) }
-                        )
+                        if (uiState.selectedSection == SidebarSection.HOME) {
+                            UpdateNotificationBanner_Antigravity(
+                                updateState = uiState.updateState,
+                                isDismissed = uiState.isHomeUpdateBannerDismissed,
+                                onDownloadAndInstall = { onAction(CatalogAction.DownloadAndInstallUpdate(it)) },
+                                onInstallApk = { onAction(CatalogAction.InstallDownloadedApk(it)) },
+                                onDismiss = { onAction(CatalogAction.DismissHomeUpdateBanner) }
+                            )
+                        }
 
                         if (uiState.snapshot.folderNames.isNotEmpty()) {
                             Spacer(modifier = Modifier.height(8.dp))

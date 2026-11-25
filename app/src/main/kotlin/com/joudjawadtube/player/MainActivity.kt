@@ -220,21 +220,19 @@ class MainActivity : AppCompatActivity() {
                     }
 
                     val requestAllFilesAccessAction: () -> Unit = {
-                        runWithParentalGate {
-                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-                                val perAppIntent = Intent(
-                                    Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION,
-                                    Uri.parse("package:$packageName")
-                                )
-                                val genericIntent = Intent(Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION)
-                                runCatching {
-                                    startActivity(perAppIntent)
-                                }.onFailure {
-                                    runCatching { startActivity(genericIntent) }
-                                }
-                            } else {
-                                requestReadPermissionAction()
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                            val perAppIntent = Intent(
+                                Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION,
+                                Uri.parse("package:$packageName")
+                            )
+                            val genericIntent = Intent(Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION)
+                            runCatching {
+                                startActivity(perAppIntent)
+                            }.onFailure {
+                                runCatching { startActivity(genericIntent) }
                             }
+                        } else {
+                            requestReadPermissionAction()
                         }
                     }
 

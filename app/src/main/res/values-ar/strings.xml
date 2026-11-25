@@ -353,4 +353,20 @@
     <string name="settings_update_available_detail">تحديث جديد متاح: %1$s (%2$s)</string>
     <string name="settings_download_complete_msg">اكتمل التنزيل! جاري فتح مثبّت الحزمة...</string>
     <string name="settings_launch_installer">تشغيل المثبّت</string>
+
+    <!-- Home Update Notification Banner -->
+    <string name="home_update_banner_title">تحديث جديد متاح للتطبيق: %1$s</string>
+    <string name="home_update_banner_desc">الإصدار %1$s جاهز للتنزيل والتثبيت</string>
+    <string name="home_update_banner_desc_size">الإصدار %1$s (%2$s ميجابايت) جاهز للتنزيل</string>
+    <string name="home_update_action_now">تحديث الآن</string>
+    <string name="home_update_install_now">تثبيت الآن</string>
+    <string name="home_update_later">لاحقاً</string>
+
+    <!-- Settings: Storage Permissions (Section 4) -->
+    <string name="settings_permission_media_title">إذن الوصول للفيديوهات المحلية</string>
+    <string name="settings_permission_media_sub">السماح بفحص وتشغيل الفيديوهات المخزنة في ذاكرة الجهاز الداخلية</string>
+    <string name="settings_permission_all_files_title">إذن الوصول الشامل للملفات ووحدات USB</string>
+    <string name="settings_permission_all_files_sub">مطلوب في أندرويد 11 فأحدث لاكتشاف وحدات USB الخارجية ومجلدات الذاكرة</string>
+    <string name="settings_permission_granted">مُفعّل ✓</string>
+    <string name="settings_permission_enable">تفعيل</string>
 </resources>

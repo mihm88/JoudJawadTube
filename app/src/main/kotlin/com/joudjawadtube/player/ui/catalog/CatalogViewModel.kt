@@ -86,6 +86,7 @@ data class CatalogUiState(
     val thumbnailStatusMessage: String? = null,
     val thumbnailRevision: Int = 0,
     val updateState: UpdateState_Antigravity = UpdateState_Antigravity.Idle,
+    val isHomeUpdateBannerDismissed: Boolean = false,
     val isOnline: Boolean = true,
     val kidsChannels: List<KidsChannelItem> = emptyList()
 ) {
@@ -104,6 +105,7 @@ private data class DialogAndThumbState(
     val thumbnailStatusMessage: String? = null,
     val thumbnailRevision: Int = 0,
     val updateState: UpdateState_Antigravity = UpdateState_Antigravity.Idle,
+    val isHomeUpdateBannerDismissed: Boolean = false,
     val isTvModeOverride: Boolean? = null
 )
 
@@ -122,7 +124,12 @@ class CatalogViewModel(
     private val observeUsbEvents: Boolean = true,
     private val videoCountProvider: suspend () -> Int = { repository.catalogFlow.first().allVideos.size },
     private val autoCheckUpdatesOnInit: Boolean = true,
-    private val autoScanOnInit: Boolean = true
+    private val autoScanOnInit: Boolean = true,
+    private val onlineStateFlow: StateFlow<Boolean> = networkMonitor.isOnline,
+    private val updateChecker: suspend (String) -> Result<UpdateInfo_Antigravity?> = { currentVersion ->
+        appUpdater.checkForUpdate(currentVersion)
+    },
+    private val autoUpdateCheckDelayMs: Long = 2_500L
 ) : ViewModel() {
 
     private val _selectedSection = MutableStateFlow(SidebarSection.HOME)
@@ -132,6 +139,9 @@ class CatalogViewModel(
     private val _dialogState = MutableStateFlow(DialogAndThumbState())
     private val _kidsChannels = MutableStateFlow<List<KidsChannelItem>>(emptyList())
     private val inFlightThumbnails: MutableSet<String> = Collections.synchronizedSet(mutableSetOf())
+
+    @Volatile
+    private var hasCompletedAutoUpdateCheck = false
 
     private val _activePlaybackSession = MutableStateFlow<PlaybackSession?>(null)
     val activePlaybackSession: StateFlow<PlaybackSession?> = _activePlaybackSession.asStateFlow()
@@ -146,7 +156,7 @@ class CatalogViewModel(
             _selectedTopCategory,
             _searchQuery,
             _selectedFolderFilter,
-            combine(_dialogState, networkMonitor.isOnline, _kidsChannels) { dlg, online, kids ->
+            combine(_dialogState, onlineStateFlow, _kidsChannels) { dlg, online, kids ->
                 Triple(dlg, online, kids)
             }
         ) { section, topCat, query, folder, (dialog, online, kids) ->
@@ -372,6 +382,7 @@ class CatalogViewModel(
             thumbnailStatusMessage = dlg.thumbnailStatusMessage,
             thumbnailRevision = dlg.thumbnailRevision,
             updateState = dlg.updateState,
+            isHomeUpdateBannerDismissed = dlg.isHomeUpdateBannerDismissed,
             isOnline = bundle.isOnline,
             kidsChannels = bundle.kidsChannels
         )
@@ -478,8 +489,14 @@ class CatalogViewModel(
 
         if (autoCheckUpdatesOnInit) {
             viewModelScope.launch {
-                delay(3500)
-                checkForAppUpdates(isManual = false)
+                onlineStateFlow.collectLatest { online ->
+                    if (online && !hasCompletedAutoUpdateCheck) {
+                        delay(autoUpdateCheckDelayMs)
+                        if (onlineStateFlow.value && !hasCompletedAutoUpdateCheck) {
+                            checkForAppUpdates(isManual = false)
+                        }
+                    }
+                }
             }
         }
     }
@@ -517,39 +534,46 @@ class CatalogViewModel(
             is CatalogAction.DownloadAndInstallUpdate -> downloadAndInstallUpdate(action.info)
             is CatalogAction.InstallDownloadedApk -> installDownloadedApk(action.apkFile)
             CatalogAction.DismissUpdateStatus -> dismissUpdateStatus()
+            CatalogAction.DismissHomeUpdateBanner -> dismissHomeUpdateBanner()
             is CatalogAction.ResolveVideoThumbnail -> resolveVideoThumbnail(action.video)
         }
     }
 
     fun checkForAppUpdates(isManual: Boolean = false) {
         viewModelScope.launch {
-            _dialogState.update { it.copy(updateState = UpdateState_Antigravity.Checking) }
+            if (isManual) {
+                _dialogState.update { it.copy(updateState = UpdateState_Antigravity.Checking) }
+            }
             val currentVersion = currentVersionProvider()
 
-            val result = appUpdater.checkForUpdate(currentVersion)
+            val result = updateChecker(currentVersion)
             result.onSuccess { info ->
-                if (info == null) {
+                hasCompletedAutoUpdateCheck = true
+                if (info != null && info.isNewer) {
+                    _dialogState.update {
+                        it.copy(
+                            updateState = UpdateState_Antigravity.UpdateAvailable(info),
+                            isHomeUpdateBannerDismissed = false
+                        )
+                    }
+                } else if (isManual) {
                     _dialogState.update {
                         it.copy(updateState = UpdateState_Antigravity.UpToDate(currentVersion))
-                    }
-                } else if (info.isNewer) {
-                    _dialogState.update {
-                        it.copy(updateState = UpdateState_Antigravity.UpdateAvailable(info))
                     }
                 } else {
-                    _dialogState.update {
-                        it.copy(updateState = UpdateState_Antigravity.UpToDate(currentVersion))
+                    _dialogState.update { state ->
+                        if (state.updateState is UpdateState_Antigravity.Idle) state
+                        else state.copy(updateState = UpdateState_Antigravity.Idle)
                     }
                 }
             }.onFailure { err ->
                 if (isManual) {
+                    hasCompletedAutoUpdateCheck = true
                     _dialogState.update {
                         it.copy(updateState = UpdateState_Antigravity.Error(err.message ?: "Failed to check for updates"))
                     }
-                } else {
-                    _dialogState.update {
-                        it.copy(updateState = UpdateState_Antigravity.Idle)
-                    }
+                } else if (onlineStateFlow.value) {
+                    hasCompletedAutoUpdateCheck = true
                 }
             }
         }
@@ -594,6 +618,10 @@ class CatalogViewModel(
 
     fun dismissUpdateStatus() {
         _dialogState.update { it.copy(updateState = UpdateState_Antigravity.Idle) }
+    }
+
+    fun dismissHomeUpdateBanner() {
+        _dialogState.update { it.copy(isHomeUpdateBannerDismissed = true) }
     }
 
     fun rescanStorage() {

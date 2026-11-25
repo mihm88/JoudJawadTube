@@ -1,5 +1,6 @@
 package com.joudjawadtube.player.ui.catalog
 
+import android.os.Build
 import com.joudjawadtube.player.data.updater.UpdateInfo_Antigravity
 import com.joudjawadtube.player.data.updater.UpdateState_Antigravity
 
@@ -142,7 +143,11 @@ fun SettingsScreen(
     onCheckForUpdates: () -> Unit = {},
     onDownloadAndInstallUpdate: (UpdateInfo_Antigravity) -> Unit = {},
     onInstallDownloadedApk: (java.io.File) -> Unit = {},
-    onDismissUpdateStatus: () -> Unit = {}
+    onDismissUpdateStatus: () -> Unit = {},
+    hasReadVideoPermission: Boolean = true,
+    hasAllFilesAccess: Boolean = true,
+    onRequestReadPermission: () -> Unit = {},
+    onRequestAllFilesAccess: () -> Unit = {}
 ) {
     val context = LocalContext.current
     val layoutInfo = LocalWindowLayoutInfo.current
@@ -598,6 +603,32 @@ fun SettingsScreen(
                 title = stringResource(R.string.settings_section_storage_numbered),
                 subtitle = stringResource(R.string.settings_storage_sub)
             ) {
+                SettingsCycleOptionRow(
+                    icon = Icons.Default.Security,
+                    title = stringResource(R.string.settings_permission_media_title),
+                    subtitle = stringResource(R.string.settings_permission_media_sub),
+                    valueLabel = stringResource(
+                        if (hasReadVideoPermission) R.string.settings_permission_granted
+                        else R.string.settings_permission_enable
+                    ),
+                    isAccent = !hasReadVideoPermission,
+                    onClick = onRequestReadPermission
+                )
+
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                    SettingsCycleOptionRow(
+                        icon = Icons.Default.Usb,
+                        title = stringResource(R.string.settings_permission_all_files_title),
+                        subtitle = stringResource(R.string.settings_permission_all_files_sub),
+                        valueLabel = stringResource(
+                            if (hasAllFilesAccess) R.string.settings_permission_granted
+                            else R.string.settings_permission_enable
+                        ),
+                        isAccent = !hasAllFilesAccess,
+                        onClick = onRequestAllFilesAccess
+                    )
+                }
+
                 SettingsCycleOptionRow(
                     icon = Icons.Default.Storage,
                     title = stringResource(R.string.settings_auto_scan_startup),

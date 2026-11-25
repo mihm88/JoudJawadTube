@@ -353,4 +353,20 @@
     <string name="settings_update_available_detail">New Update Available: %1$s (%2$s)</string>
     <string name="settings_download_complete_msg">Download complete! Opening package installer...</string>
     <string name="settings_launch_installer">Launch Installer</string>
+
+    <!-- Home Update Notification Banner -->
+    <string name="home_update_banner_title">New App Update Available: %1$s</string>
+    <string name="home_update_banner_desc">%1$s is ready to download and install</string>
+    <string name="home_update_banner_desc_size">%1$s (%2$s MB) is ready to download</string>
+    <string name="home_update_action_now">Update Now</string>
+    <string name="home_update_install_now">Install Now</string>
+    <string name="home_update_later">Later</string>
+
+    <!-- Settings: Storage Permissions (Section 4) -->
+    <string name="settings_permission_media_title">Local Videos Access Permission</string>
+    <string name="settings_permission_media_sub">Allow scanning and playing videos stored on internal device memory</string>
+    <string name="settings_permission_all_files_title">All Files &amp; USB Storage Permission</string>
+    <string name="settings_permission_all_files_sub">Required on Android 11+ to detect external USB OTG drives and SD card folders</string>
+    <string name="settings_permission_granted">Enabled ✓</string>
+    <string name="settings_permission_enable">Enable</string>
 </resources>

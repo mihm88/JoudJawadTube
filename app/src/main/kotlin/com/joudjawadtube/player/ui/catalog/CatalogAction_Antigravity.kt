@@ -42,5 +42,6 @@ sealed interface CatalogAction {
     data class DownloadAndInstallUpdate(val info: UpdateInfo_Antigravity) : CatalogAction
     data class InstallDownloadedApk(val apkFile: File) : CatalogAction
     data object DismissUpdateStatus : CatalogAction
+    data object DismissHomeUpdateBanner : CatalogAction
     data class ResolveVideoThumbnail(val video: VideoItem) : CatalogAction
 }
